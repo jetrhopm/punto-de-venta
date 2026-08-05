@@ -29,7 +29,7 @@ public partial class LoginWindow : Window
             SessionContext.AccessToken = result?.AccessToken;
             SessionContext.DisplayName = result?.DisplayName;
             var mainWindow = new MainWindow();
-            Application.Current.MainWindow = mainWindow;
+            System.Windows.Application.Current.MainWindow = mainWindow;
             mainWindow.Show();
             Close();
         }
