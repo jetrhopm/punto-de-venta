@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Collections.ObjectModel;
 using System.Net.Http;
 using System.Text.Json;
 using System.Net.Http.Json;
@@ -12,14 +13,17 @@ public partial class MainWindow : Window
 {
     private static readonly HttpClient Client = new() { BaseAddress = new Uri("http://127.0.0.1:5000") };
     private CancellationTokenSource? _searchCancellation;
+    private readonly ObservableCollection<CartLineView> _cart = [];
     public MainWindow()
     {
         InitializeComponent();
+        CartList.ItemsSource = _cart;
         Loaded += (_, _) => ApplyNavigationPermissions();
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        if (!string.IsNullOrWhiteSpace(SessionContext.AccessToken)) Client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", SessionContext.AccessToken);
         try
         {
             using var response = await Client.GetAsync("/api/setup/status");
@@ -113,14 +117,44 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnProductSelected(object sender, MouseButtonEventArgs e)
+    {
+        if (ProductResultsList.SelectedItem is not ProductSearchRow row) return;
+        var existing = _cart.FirstOrDefault(item => item.ProductId == row.Product.Id);
+        if (existing is null) _cart.Add(new CartLineView(row.Product.Id, row.Product.Description, row.Product.Price, 1));
+        else { existing.Quantity++; CartList.Items.Refresh(); }
+        ProductSearchTextBox.Clear(); ProductResultsList.Visibility = Visibility.Collapsed;
+        StatusText.Text = "Producto agregado a la venta.";
+    }
+
     private sealed record ProductSearchResult(Guid Id, string Code, string Description, decimal Price);
     private sealed record ProductSearchRow(ProductSearchResult Product)
     {
         public string DisplayText => $"{Product.Code} | {Product.Description} | ${Product.Price:0.00}";
     }
 
-    private void OnChargeClick(object sender, RoutedEventArgs e) =>
-        ShowPendingFeature("Cobro");
+    private sealed class CartLineView(Guid productId, string description, decimal unitPrice, decimal quantity)
+    {
+        public Guid ProductId { get; } = productId; public string Description { get; } = description; public decimal UnitPrice { get; } = unitPrice; public decimal Quantity { get; set; } = quantity; public decimal Total => decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Description} x {Quantity:0.###} = ${Total:0.00}";
+    }
+
+    private sealed record SaleResponse(decimal Total, decimal Change);
+
+    private async void OnChargeClick(object sender, RoutedEventArgs e)
+    {
+        if (_cart.Count == 0) { StatusText.Text = "Agrega al menos un producto antes de cobrar."; return; }
+        var cashWindow = new CashWindow(_cart.Sum(item => item.Total)) { Owner = this };
+        if (cashWindow.ShowDialog() != true || cashWindow.Received is null) return;
+        try
+        {
+            var command = new { operationId = Guid.NewGuid(), lines = _cart.Select(item => new { productId = item.ProductId, quantity = item.Quantity }).ToArray(), cashReceived = cashWindow.Received.Value };
+            using var response = await Client.PostAsJsonAsync("/api/sales/complete", command);
+            if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
+            var result = await response.Content.ReadFromJsonAsync<SaleResponse>();
+            _cart.Clear(); CartList.Items.Refresh(); StatusText.Text = result is null ? "Venta confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
+        }
+        catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API para confirmar la venta."; }
+    }
 
     private void OnMinimizeClick(object sender, RoutedEventArgs e) =>
         WindowState = WindowState.Minimized;

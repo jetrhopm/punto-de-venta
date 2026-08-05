@@ -109,7 +109,9 @@
                         <Image Source="Assets/Icons/sales-icon-128.png" Width="96" Height="96" HorizontalAlignment="Center" Margin="0,0,0,18" />
                         <TextBlock x:Name="WorkspaceTitleText" Text="Listo para una venta" FontSize="24" FontWeight="SemiBold" TextAlignment="Center" Foreground="#17324D" />
                         <TextBox x:Name="ProductSearchTextBox" Width="520" Height="40" Margin="0,18,0,0" FontSize="18" Padding="10,5" TextChanged="OnProductSearchTextChanged" KeyDown="OnProductSearchKeyDown" ToolTip="Codigo de barras o descripcion" />
-                        <ListBox x:Name="ProductResultsList" Width="520" Height="180" Margin="0,8,0,0" DisplayMemberPath="DisplayText" Visibility="Collapsed" />
+                        <ListBox x:Name="ProductResultsList" Width="520" Height="150" Margin="0,8,0,0" DisplayMemberPath="DisplayText" Visibility="Collapsed" MouseDoubleClick="OnProductSelected" />
+                        <TextBlock Text="Partidas de la venta" Margin="0,12,0,0" FontWeight="SemiBold" Foreground="#17324D" />
+                        <ListBox x:Name="CartList" Width="520" Height="120" Margin="0,4,0,0" DisplayMemberPath="DisplayText" />
                         <TextBlock x:Name="WorkspaceDetailText" Text="Escribe un codigo o descripcion. Un lector de barras puede capturar el codigo directamente en este campo." Margin="0,10,0,0" TextWrapping="Wrap" TextAlignment="Center" Foreground="#526577" />
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,24,0,0">
                             <Button Click="OnSalesActionClick">F9  Verificar precio</Button>
