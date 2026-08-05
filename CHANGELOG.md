@@ -15,3 +15,4 @@
 - Se agrega autenticacion inicial con sesiones expirables almacenadas como hash.
 - Se documenta el plan completo y el estado por fases.
 - Se agregan permisos persistentes y apertura de turno autorizada.
+- Se cierran los pendientes de Fase 0 con CI, pruebas PostgreSQL y paquete portable.

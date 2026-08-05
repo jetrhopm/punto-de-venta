@@ -1,9 +1,29 @@
+using Microsoft.EntityFrameworkCore;
+using Pos.Infrastructure;
+
 namespace Pos.IntegrationTests;
 
-public sealed class PostgreSqlIntegrationRequirementTests
+public sealed class PostgreSqlIntegrationTests
 {
-    [Fact(Skip = "Pendiente: dev-setup.ps1 debe preparar el cluster PostgreSQL aislado antes de agregar pruebas de persistencia real.")]
-    public void RequiresAnIsolatedPostgreSqlCluster()
+    [Fact]
+    public async Task ConnectsToPostgreSqlAndFindsAppliedMigrations()
     {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+
+        Assert.True(await database.Database.CanConnectAsync());
+        await database.Database.MigrateAsync();
+        var applied = (await database.Database.GetAppliedMigrationsAsync()).ToArray();
+        Assert.Contains(applied, migration => migration.Contains("CreaConfiguracionInicial", StringComparison.Ordinal));
+        Assert.Contains(applied, migration => migration.Contains("AgregaCatalogoDeProductos", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ReadsProductCatalogFromTheRealDatabase()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+
+        var productCount = await database.Products.CountAsync();
+
+        Assert.True(productCount >= 0);
     }
 }

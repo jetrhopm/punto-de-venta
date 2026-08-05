@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Net.Http;
 using System.Text.Json;
 using System.Net.Http.Json;
@@ -14,6 +15,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        Loaded += (_, _) => ApplyNavigationPermissions();
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -48,6 +50,7 @@ public partial class MainWindow : Window
     {
         if (sender is Button { Tag: string section })
         {
+            if (!HasPermissionFor(section)) { StatusText.Text = "No tienes permiso para abrir este modulo."; return; }
             NavigateTo(section);
         }
     }
@@ -65,6 +68,7 @@ public partial class MainWindow : Window
 
         if (section is not null)
         {
+            if (!HasPermissionFor(section)) { StatusText.Text = "No tienes permiso para abrir este modulo."; e.Handled = true; return; }
             NavigateTo(section);
             e.Handled = true;
             return;
@@ -134,5 +138,34 @@ public partial class MainWindow : Window
     private void ShowPendingFeature(string feature)
     {
         StatusText.Text = $"{feature} requiere configuracion de tienda, usuario, turno y PostgreSQL. Aun no esta habilitado.";
+    }
+
+    private bool HasPermissionFor(string section) => section switch
+    {
+        "Ventas" => SessionContext.HasPermission("Sell"),
+        "Clientes" => SessionContext.HasPermission("ManageCustomersAndCredit"),
+        "Productos" => SessionContext.HasPermission("ViewProducts"),
+        "Inventario" => SessionContext.HasPermission("ViewInventory"),
+        "Corte" => SessionContext.HasPermission("CloseShift"),
+        "Configuracion" => SessionContext.HasPermission("ConfigureStore"),
+        _ => false
+    };
+
+    private void ApplyNavigationPermissions()
+    {
+        foreach (var button in FindVisualChildren<Button>(this))
+        {
+            if (button.Tag is string section) button.IsEnabled = HasPermissionFor(section);
+        }
+    }
+
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            if (child is T typedChild) yield return typedChild;
+            foreach (var descendant in FindVisualChildren<T>(child)) yield return descendant;
+        }
     }
 }

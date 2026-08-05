@@ -28,6 +28,8 @@ public partial class LoginWindow : Window
             var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
             SessionContext.AccessToken = result?.AccessToken;
             SessionContext.DisplayName = result?.DisplayName;
+            SessionContext.Permissions.Clear();
+            if (result?.Permissions is not null) SessionContext.Permissions.UnionWith(result.Permissions);
             var mainWindow = new MainWindow();
             System.Windows.Application.Current.MainWindow = mainWindow;
             mainWindow.Show();
@@ -36,5 +38,5 @@ public partial class LoginWindow : Window
         catch (HttpRequestException) { MessageText.Text = "La API local no esta disponible."; }
     }
 
-    private sealed record LoginResponse(Guid SessionId, string AccessToken, Guid UserId, string DisplayName, bool IsAdministrator, DateTimeOffset ExpiresAtUtc);
+    private sealed record LoginResponse(Guid SessionId, string AccessToken, Guid UserId, string DisplayName, bool IsAdministrator, DateTimeOffset ExpiresAtUtc, List<string> Permissions);
 }

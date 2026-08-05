@@ -6,7 +6,7 @@ using System.Text;
 namespace Pos.Infrastructure;
 
 public sealed record LoginCommand(string UserName, string Password);
-public sealed record LoginResult(Guid SessionId, string AccessToken, Guid UserId, string DisplayName, bool IsAdministrator, DateTimeOffset ExpiresAtUtc);
+public sealed record LoginResult(Guid SessionId, string AccessToken, Guid UserId, string DisplayName, bool IsAdministrator, DateTimeOffset ExpiresAtUtc, IReadOnlyList<string> Permissions);
 
 public sealed class AuthenticationService(PosDbContext database, PasswordHasher<UserRecord> passwordHasher)
 {
@@ -21,7 +21,10 @@ public sealed class AuthenticationService(PosDbContext database, PasswordHasher<
         var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, TokenHash = Hash(accessToken), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddHours(8) };
         database.Sessions.Add(session);
         await database.SaveChangesAsync(cancellationToken);
-        return new LoginResult(session.Id, accessToken, user.Id, user.DisplayName, user.IsAdministrator, session.ExpiresAtUtc);
+        IReadOnlyList<string> permissions = user.IsAdministrator
+            ? Enum.GetNames<Pos.Domain.Permission>()
+            : await database.Permissions.Where(item => item.UserId == user.Id).Select(item => item.Code).ToListAsync(cancellationToken);
+        return new LoginResult(session.Id, accessToken, user.Id, user.DisplayName, user.IsAdministrator, session.ExpiresAtUtc, permissions);
     }
 
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));

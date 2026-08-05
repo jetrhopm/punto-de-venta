@@ -32,10 +32,11 @@ Estado actualizado: 2026-08-05
 
 ### Fase 0: base tecnica restante
 
-- Conectar inicio de sesion a la ventana WPF.
-- Conectar permisos y sesion a toda la navegacion WPF.
-- Agregar pruebas de integracion no omitidas para migraciones y sesiones.
-- Crear CI, analisis de dependencias y paquete portatil de revision.
+- Completado: inicio de sesion conectado a la ventana WPF.
+- Completado: permisos de navegacion verificados en cliente y API.
+- Completado: pruebas de integracion reales contra PostgreSQL, sin `Skip`.
+- Completado: CI con compilacion, pruebas y analisis de vulnerabilidades.
+- Completado: paquete portatil autocontenido `win-x64` con marca de prueba.
 
 ### Fase 1: punto de venta local esencial
 

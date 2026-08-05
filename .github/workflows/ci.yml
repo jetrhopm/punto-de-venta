@@ -1,0 +1,42 @@
+name: Compilacion y pruebas
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  windows-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore PuntoDeVenta.slnx
+      - run: dotnet build PuntoDeVenta.slnx --no-restore --configuration Release
+      - run: dotnet test tests/Pos.UnitTests/Pos.UnitTests.csproj --no-build --configuration Release
+      - run: dotnet list PuntoDeVenta.slnx package --vulnerable --include-transitive
+
+  postgresql-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_USER: pos_dev
+          POSTGRES_DB: punto_venta_dev
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U pos_dev -d punto_venta_dev"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore src/Pos.Infrastructure/Pos.Infrastructure.csproj
+      - run: dotnet test tests/Pos.IntegrationTests/Pos.IntegrationTests.csproj --no-restore
+        env:
+          POS_CONNECTION_STRING: Host=127.0.0.1;Port=5432;Database=punto_venta_dev;Username=pos_dev;Password=ci_password
