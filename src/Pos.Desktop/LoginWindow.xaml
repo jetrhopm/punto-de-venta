@@ -1,0 +1,17 @@
+<Window x:Class="Pos.Desktop.LoginWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Iniciar sesion - Punto de Venta" Width="420" Height="360" WindowStartupLocation="CenterScreen" ResizeMode="NoResize">
+    <Grid Background="#F8FAFC" Margin="32">
+        <StackPanel>
+            <TextBlock Text="Punto de Venta" FontSize="24" FontWeight="Bold" Foreground="#17324D" />
+            <TextBlock Text="Iniciar sesion" Margin="0,6,0,20" FontSize="16" Foreground="#526577" />
+            <TextBlock Text="Usuario" />
+            <TextBox x:Name="UserNameTextBox" Height="34" Margin="0,4,0,12" Text="admin" FontSize="16" />
+            <TextBlock Text="Contraseña" />
+            <PasswordBox x:Name="PasswordBox" Height="34" Margin="0,4,0,16" FontSize="16" />
+            <Button Height="38" Background="#146CB0" Foreground="White" FontWeight="Bold" Click="OnLoginClick">Iniciar sesion</Button>
+            <TextBlock x:Name="MessageText" Margin="0,12,0,0" Foreground="#B42318" TextWrapping="Wrap" />
+        </StackPanel>
+    </Grid>
+</Window>

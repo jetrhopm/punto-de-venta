@@ -14,6 +14,7 @@ Fase 0 iniciada:
 - Cascaron WPF navegable con atajos F1 a F4 y F12.
 
 El avance verificable de esta fase se registra en `docs/FASE_0.md`.
+El estado completo y los pendientes se mantienen en `docs/PLAN_PROYECTO.md`.
 
 ## Compilar
 
