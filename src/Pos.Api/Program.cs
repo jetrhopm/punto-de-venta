@@ -21,6 +21,12 @@ app.MapGet("/health", () =>
 })
 .WithName("Health");
 
+app.MapGet("/api/setup/status", async (PosDbContext database, CancellationToken cancellationToken) =>
+{
+    var store = await database.Stores.AsNoTracking().OrderBy(store => store.CreatedAtUtc).FirstOrDefaultAsync(cancellationToken);
+    return Results.Ok(new { configured = store is not null, storeName = store?.Name });
+});
+
 app.MapPost("/api/setup/initial", async (InitialSetupCommand command, InitialSetupService setup, CancellationToken cancellationToken) =>
 {
     try { return Results.Created("/api/setup/initial", await setup.ExecuteAsync(command, cancellationToken)); }

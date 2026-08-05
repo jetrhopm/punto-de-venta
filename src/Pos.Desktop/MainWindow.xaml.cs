@@ -1,14 +1,45 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Net.Http;
+using System.Text.Json;
 
 namespace Pos.Desktop;
 
 public partial class MainWindow : Window
 {
+    private static readonly HttpClient Client = new() { BaseAddress = new Uri("http://127.0.0.1:5000") };
     public MainWindow()
     {
         InitializeComponent();
+    }
+
+    private async void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            using var response = await Client.GetAsync("/api/setup/status");
+            response.EnsureSuccessStatusCode();
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var configured = document.RootElement.GetProperty("configured").GetBoolean();
+            if (configured)
+            {
+                var storeName = document.RootElement.GetProperty("storeName").GetString();
+                StoreNameText.Text = storeName;
+                RegisterStatusText.Text = "Caja: configuracion inicial completada";
+                StatusText.Text = "API y base de datos locales conectadas.";
+            }
+            else
+            {
+                StoreNameText.Text = "Tienda sin configurar";
+                StatusText.Text = "Se requiere completar la configuracion inicial.";
+            }
+        }
+        catch (HttpRequestException)
+        {
+            StoreNameText.Text = "API local no disponible";
+            StatusText.Text = "Inicia scripts/dev-up.ps1 para conectar la aplicacion a PostgreSQL.";
+        }
     }
 
     private void OnNavigateClick(object sender, RoutedEventArgs e)

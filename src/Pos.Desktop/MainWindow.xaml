@@ -7,7 +7,8 @@
         MinWidth="1024"
         MinHeight="640"
         WindowStartupLocation="CenterScreen"
-        PreviewKeyDown="OnPreviewKeyDown">
+        PreviewKeyDown="OnPreviewKeyDown"
+        Loaded="OnLoaded">
     <Window.Resources>
         <SolidColorBrush x:Key="PrimaryBrush" Color="#146CB0" />
         <SolidColorBrush x:Key="PrimaryDarkBrush" Color="#0D4D80" />
@@ -52,7 +53,7 @@
                     <Image Source="Assets/Icons/app-icon-48.png" Width="38" Height="38" Margin="0,0,10,0" />
                     <StackPanel>
                         <TextBlock Text="Punto de Venta" FontSize="20" FontWeight="Bold" Foreground="#17324D" />
-                        <TextBlock Text="Modo desarrollo" FontSize="12" Foreground="#607080" />
+                        <TextBlock x:Name="StoreNameText" Text="Comprobando tienda local..." FontSize="12" Foreground="#607080" />
                     </StackPanel>
                 </StackPanel>
                 <TextBlock Grid.Column="1" x:Name="CurrentSectionText" Text="Ventas" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="#17324D" />
@@ -121,7 +122,7 @@
         <Border Grid.Row="2" Background="#17324D" Padding="16,0">
             <DockPanel>
                 <TextBlock x:Name="StatusText" Text="Base tecnica lista. PostgreSQL local pendiente de preparar." Foreground="White" VerticalAlignment="Center" />
-                <TextBlock DockPanel.Dock="Right" Text="Caja: sin configurar" Foreground="#DDEAF2" VerticalAlignment="Center" />
+                <TextBlock DockPanel.Dock="Right" x:Name="RegisterStatusText" Text="Caja: sin configurar" Foreground="#DDEAF2" VerticalAlignment="Center" />
             </DockPanel>
         </Border>
     </Grid>
