@@ -13,7 +13,7 @@ public sealed class PosDbContextFactory : IDesignTimeDbContextFactory<PosDbConte
         return new PosDbContext(options);
     }
 
-    private static string ReadDevelopmentConnectionString()
+    public static string ReadDevelopmentConnectionString()
     {
         var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
         string? path = null;
