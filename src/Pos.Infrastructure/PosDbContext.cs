@@ -8,6 +8,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     public DbSet<UserRecord> Users => Set<UserRecord>();
     public DbSet<RegisterRecord> Registers => Set<RegisterRecord>();
     public DbSet<ProductRecord> Products => Set<ProductRecord>();
+    public DbSet<SessionRecord> Sessions => Set<SessionRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -49,6 +50,15 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             entity.Property(product => product.Price).HasPrecision(18, 2);
             entity.HasIndex(product => product.NormalizedCode).IsUnique();
         });
+        modelBuilder.Entity<SessionRecord>(entity =>
+        {
+            entity.ToTable("session");
+            entity.HasKey(session => session.Id);
+            entity.Property(session => session.TokenHash).HasMaxLength(64).IsRequired();
+            entity.HasIndex(session => session.TokenHash).IsUnique();
+            entity.Property(session => session.ExpiresAtUtc).HasColumnType("timestamp with time zone");
+            entity.HasOne<UserRecord>().WithMany().HasForeignKey(session => session.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
     }
 }
 
@@ -56,3 +66,4 @@ public sealed class StoreRecord { public Guid Id { get; set; } public string Nam
 public sealed class UserRecord { public Guid Id { get; set; } public string NormalizedUserName { get; set; } = string.Empty; public string PasswordHash { get; set; } = string.Empty; public string DisplayName { get; set; } = string.Empty; public bool IsAdministrator { get; set; } public bool IsActive { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class RegisterRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public string Name { get; set; } = string.Empty; public bool IsActive { get; set; } }
 public sealed class ProductRecord { public Guid Id { get; set; } public string Code { get; set; } = string.Empty; public string NormalizedCode { get; set; } = string.Empty; public string Description { get; set; } = string.Empty; public decimal Price { get; set; } public bool IsActive { get; set; } }
+public sealed class SessionRecord { public Guid Id { get; set; } public Guid UserId { get; set; } public string TokenHash { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset ExpiresAtUtc { get; set; } public DateTimeOffset? RevokedAtUtc { get; set; } }

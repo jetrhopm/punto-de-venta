@@ -7,6 +7,7 @@ var connectionString = Environment.GetEnvironmentVariable("POS_CONNECTION_STRING
 builder.Services.AddDbContext<PosDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddScoped<PasswordHasher<UserRecord>>();
 builder.Services.AddScoped<InitialSetupService>();
+builder.Services.AddScoped<AuthenticationService>();
 
 var app = builder.Build();
 
@@ -45,6 +46,12 @@ app.MapPost("/api/setup/initial", async (InitialSetupCommand command, InitialSet
     try { return Results.Created("/api/setup/initial", await setup.ExecuteAsync(command, cancellationToken)); }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["setup"] = [exception.Message] }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+
+app.MapPost("/api/auth/login", async (LoginCommand command, AuthenticationService authentication, CancellationToken cancellationToken) =>
+{
+    var result = await authentication.LoginAsync(command, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
 
 app.Run();

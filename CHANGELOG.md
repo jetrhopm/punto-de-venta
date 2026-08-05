@@ -12,3 +12,4 @@
 - Se agrega la primera migracion PostgreSQL para tienda, usuario y caja.
 - Se agrega el flujo transaccional de primera configuracion.
 - Se conecta la vista WPF al estado real de configuracion local.
+- Se agrega autenticacion inicial con sesiones expirables almacenadas como hash.
