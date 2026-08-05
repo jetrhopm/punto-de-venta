@@ -27,6 +27,19 @@ app.MapGet("/api/setup/status", async (PosDbContext database, CancellationToken 
     return Results.Ok(new { configured = store is not null, storeName = store?.Name });
 });
 
+app.MapGet("/api/products/search", async (string? q, PosDbContext database, CancellationToken cancellationToken) =>
+{
+    var search = (q ?? string.Empty).Trim();
+    if (search.Length == 0) return Results.Ok(Array.Empty<object>());
+    var normalized = search.ToUpperInvariant();
+    var products = await database.Products.AsNoTracking()
+        .Where(product => product.IsActive && (product.NormalizedCode.Contains(normalized) || product.Description.ToUpper().Contains(normalized)))
+        .OrderBy(product => product.Description).Take(30)
+        .Select(product => new { product.Id, product.Code, product.Description, product.Price })
+        .ToListAsync(cancellationToken);
+    return Results.Ok(products);
+});
+
 app.MapPost("/api/setup/initial", async (InitialSetupCommand command, InitialSetupService setup, CancellationToken cancellationToken) =>
 {
     try { return Results.Created("/api/setup/initial", await setup.ExecuteAsync(command, cancellationToken)); }

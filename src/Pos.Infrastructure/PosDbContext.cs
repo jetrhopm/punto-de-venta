@@ -7,6 +7,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     public DbSet<StoreRecord> Stores => Set<StoreRecord>();
     public DbSet<UserRecord> Users => Set<UserRecord>();
     public DbSet<RegisterRecord> Registers => Set<RegisterRecord>();
+    public DbSet<ProductRecord> Products => Set<ProductRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -38,9 +39,20 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             entity.HasIndex(register => new { register.StoreId, register.Name }).IsUnique();
             entity.HasOne<StoreRecord>().WithMany().HasForeignKey(register => register.StoreId).OnDelete(DeleteBehavior.Restrict);
         });
+        modelBuilder.Entity<ProductRecord>(entity =>
+        {
+            entity.ToTable("product");
+            entity.HasKey(product => product.Id);
+            entity.Property(product => product.Code).HasMaxLength(80).IsRequired();
+            entity.Property(product => product.NormalizedCode).HasMaxLength(80).IsRequired();
+            entity.Property(product => product.Description).HasMaxLength(200).IsRequired();
+            entity.Property(product => product.Price).HasPrecision(18, 2);
+            entity.HasIndex(product => product.NormalizedCode).IsUnique();
+        });
     }
 }
 
 public sealed class StoreRecord { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string BusinessType { get; set; } = string.Empty; public string TimeZoneId { get; set; } = "America/Mexico_City"; public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class UserRecord { public Guid Id { get; set; } public string NormalizedUserName { get; set; } = string.Empty; public string PasswordHash { get; set; } = string.Empty; public string DisplayName { get; set; } = string.Empty; public bool IsAdministrator { get; set; } public bool IsActive { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class RegisterRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public string Name { get; set; } = string.Empty; public bool IsActive { get; set; } }
+public sealed class ProductRecord { public Guid Id { get; set; } public string Code { get; set; } = string.Empty; public string NormalizedCode { get; set; } = string.Empty; public string Description { get; set; } = string.Empty; public decimal Price { get; set; } public bool IsActive { get; set; } }
