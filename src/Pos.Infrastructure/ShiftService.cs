@@ -16,7 +16,8 @@ public sealed class ShiftService(PosDbContext database)
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(accessToken)));
         var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
         if (session is null) return null;
-        var allowed = await database.Permissions.AnyAsync(item => item.UserId == session.UserId && item.Code == nameof(Pos.Domain.Permission.OpenShift), cancellationToken);
+        var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
+        var allowed = user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == session.UserId && item.Code == nameof(Pos.Domain.Permission.OpenShift), cancellationToken);
         if (!allowed) return null;
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         if (await database.Shifts.AnyAsync(item => item.RegisterId == command.RegisterId && item.Status == "Open", cancellationToken)) throw new InvalidOperationException("La caja ya tiene un turno abierto.");

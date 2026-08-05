@@ -10,6 +10,7 @@ builder.Services.AddScoped<InitialSetupService>();
 builder.Services.AddScoped<AuthenticationService>();
 builder.Services.AddScoped<ShiftService>();
 builder.Services.AddScoped<ProductCatalogService>();
+builder.Services.AddScoped<SaleService>();
 
 var app = builder.Build();
 
@@ -63,6 +64,13 @@ app.MapPut("/api/products/{id:guid}", async (Guid id, HttpRequest request, Produ
     }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["product"] = [exception.Message] }); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+
+app.MapPost("/api/sales/complete", async (HttpRequest request, CompleteSaleCommand command, SaleService sales, CancellationToken cancellationToken) =>
+{
+    try { var result = await sales.CompleteAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["sale"] = [exception.Message] }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 

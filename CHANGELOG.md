@@ -17,3 +17,5 @@
 - Se agregan permisos persistentes y apertura de turno autorizada.
 - Se cierran los pendientes de Fase 0 con CI, pruebas PostgreSQL y paquete portable.
 - Se inicia Fase 1 con alta y edicion de productos protegidas por permiso.
+- Se agrega venta idempotente con efectivo, cambio e inventario transaccional.
+- Se verifica doble envio de venta sin duplicar operacion.
