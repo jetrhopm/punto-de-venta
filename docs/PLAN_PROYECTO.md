@@ -45,6 +45,7 @@ Estado actualizado: 2026-08-05
 - Turnos: entradas, salidas y corte; la apertura autorizada ya esta implementada.
 - Alta y edicion de productos protegidas por permiso; pendiente importacion CSV.
 - Venta finalizada con `operation_id` idempotente, efectivo y cambio.
+- Cliente WPF con carrito, seleccion de resultados y ventana de cobro en efectivo.
 - Descuento de existencia y movimiento de inventario por venta; pendiente kardex completo.
 - Cobro en efectivo transaccional; pendiente movimiento detallado de caja y corte.
 - Cola transaccional de impresion y ticket termico.
