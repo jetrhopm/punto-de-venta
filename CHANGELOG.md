@@ -6,3 +6,5 @@
 - Se documentan requisitos de desarrollo.
 - Se crea estructura inicial de solucion .NET.
 - Se preparan iconos iniciales de la aplicacion.
+- Se agrega el nucleo inicial de dinero, permisos y borradores de venta.
+- Se documentan la paridad operativa y el modelo de datos inicial.

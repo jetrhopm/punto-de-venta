@@ -19,3 +19,21 @@ Decision: las pruebas de integracion transaccional usaran PostgreSQL real. SQLit
 Motivo: concurrencia, bloqueos, restricciones, WAL e idempotencia deben verificarse contra el motor real.
 
 Riesgo: requiere preparar PostgreSQL local o portable en desarrollo.
+
+## ADR-0003: Redondeo monetario centralizado
+
+Fecha: 2026-08-05
+
+Decision: el dominio usa `decimal` y redondea a dos decimales con `MidpointRounding.AwayFromZero` en cada importe monetario creado.
+
+Motivo: evita diferencias por `float` o `double` y deja una regla uniforme para venta, cambio, descuentos e impuestos. Las reglas fiscales de redondeo por partida se confirmaran antes de habilitar impuestos configurables.
+
+Riesgo: operaciones futuras con divisas o impuestos por linea requieren documentar si redondean por partida o por total.
+
+## ADR-0004: Borrador separado de venta finalizada
+
+Fecha: 2026-08-05
+
+Decision: un borrador no afecta inventario, caja, credito ni auditoria financiera. La venta finalizada se creara por un comando idempotente y una sola transaccion.
+
+Motivo: protege la operacion ante cierres inesperados y permite varias ventas en atencion sin medias ventas contables.
