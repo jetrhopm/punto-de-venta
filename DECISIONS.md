@@ -37,3 +37,13 @@ Fecha: 2026-08-05
 Decision: un borrador no afecta inventario, caja, credito ni auditoria financiera. La venta finalizada se creara por un comando idempotente y una sola transaccion.
 
 Motivo: protege la operacion ante cierres inesperados y permite varias ventas en atencion sin medias ventas contables.
+
+## ADR-0005: PostgreSQL portable para desarrollo
+
+Fecha: 2026-08-05
+
+Decision: el entorno descarga binarios oficiales EDB PostgreSQL 18.4 en `.tools/postgresql-18.4` y crea un cluster aislado en `.postgres`.
+
+Motivo: permite pruebas reales sin privilegios de administrador, Docker ni interferencia con otras instalaciones.
+
+Controles: escucha solo en `127.0.0.1:55432`, usa SCRAM, checksums, `fsync`, `synchronous_commit` y `full_page_writes`.

@@ -20,7 +20,7 @@ En la ventana, F1, F2, F3 y F4 cambian de modulo. F12 informa que el cobro todav
 
 ## Pendientes inmediatos
 
-- Preparar PostgreSQL 18 portable y aislado con `dev-setup.ps1`.
+- Preparar las primeras migraciones EF Core sobre PostgreSQL 18 portable.
 - Agregar el primer esquema EF Core y migraciones versionadas.
 - Crear el asistente transaccional de primera configuracion.
 - Implementar autenticacion, usuarios, permisos y turno antes de habilitar una venta finalizada.

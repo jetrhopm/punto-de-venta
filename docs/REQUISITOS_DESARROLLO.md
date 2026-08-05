@@ -8,7 +8,7 @@ Este documento registra las herramientas necesarias para editar, compilar, proba
 | --- | --- | --- | --- |
 | Git | 2.54 o superior | Control de versiones y publicacion en GitHub | Instalado: `git version 2.54.0.windows.1` |
 | .NET SDK | .NET 10 LTS x64 | Compilar WPF, API ASP.NET Core, librerias y pruebas | Instalado localmente en `.tools/dotnet`, version `10.0.302` |
-| PostgreSQL | 18.x x64 para desarrollo inicial | Base de datos transaccional real para pruebas de integracion | Pendiente de instalacion global; `psql` no esta en PATH |
+| PostgreSQL | 18.4 x64 para desarrollo inicial | Base de datos transaccional real para pruebas de integracion | Binario portable aislado por `scripts/dev-setup.ps1` |
 | PowerShell | 5.1 o 7.x | Scripts de desarrollo | Disponible por Windows |
 | Visual Studio 2026 o Rider | Compatible con .NET 10 y WPF | Edicion visual y depuracion de escritorio | Opcional para este arranque |
 
@@ -32,11 +32,15 @@ Para compilar sin instalar .NET global:
 
 Para desarrollo se usara PostgreSQL real, no SQLite ni base en memoria, en pruebas de integracion transaccionales.
 
-Estado actual:
+Preparacion automatica:
 
-- `psql` no esta disponible en PATH.
-- El intento de instalacion silenciosa con `winget install --id PostgreSQL.PostgreSQL.18` no termino dentro de la sesion.
-- La estrategia preferida del proyecto sera descargar binarios ZIP oficiales de PostgreSQL para una instancia aislada en `.postgres/`, iniciada por scripts `dev-setup.ps1` y `dev-up.ps1`, sin mezclar datos de desarrollo y produccion.
+```powershell
+.\scripts\dev-setup.ps1
+```
+
+Descarga el ZIP oficial de EDB PostgreSQL 18.4, registra el SHA-256 obtenido, crea la base `punto_venta_dev` y escucha solo en `127.0.0.1:55432`. Los datos y secretos viven en `.postgres/`, ignorada por Git.
+
+Para detenerlo usa `.\scripts\dev-down.ps1`.
 
 Instalacion manual alternativa si se requiere de inmediato:
 
@@ -71,3 +75,5 @@ Fuentes:
 - https://dotnet.microsoft.com/en-us/download/dotnet/10.0
 - https://www.postgresql.org/download/windows/
 - https://www.postgresql.org/docs/current/install-binaries.html
+- https://www.enterprisedb.com/download-postgresql-binaries
+- https://www.postgresql.org/docs/current/app-initdb.html
