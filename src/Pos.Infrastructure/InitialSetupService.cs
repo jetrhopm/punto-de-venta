@@ -30,6 +30,7 @@ public sealed class InitialSetupService(PosDbContext database, PasswordHasher<Us
         var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = command.RegisterName.Trim(), IsActive = true };
 
         database.AddRange(store, user, register);
+        database.Permissions.AddRange(Enum.GetNames<Pos.Domain.Permission>().Select(code => new PermissionRecord { Id = Guid.NewGuid(), UserId = user.Id, Code = code }));
         await database.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new InitialSetupResult(store.Id, user.Id, register.Id);

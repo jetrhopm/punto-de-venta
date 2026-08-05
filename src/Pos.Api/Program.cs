@@ -8,6 +8,7 @@ builder.Services.AddDbContext<PosDbContext>(options => options.UseNpgsql(connect
 builder.Services.AddScoped<PasswordHasher<UserRecord>>();
 builder.Services.AddScoped<InitialSetupService>();
 builder.Services.AddScoped<AuthenticationService>();
+builder.Services.AddScoped<ShiftService>();
 
 var app = builder.Build();
 
@@ -52,6 +53,17 @@ app.MapPost("/api/auth/login", async (LoginCommand command, AuthenticationServic
 {
     var result = await authentication.LoginAsync(command, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+
+app.MapPost("/api/shifts/open", async (HttpRequest request, OpenShiftCommand command, ShiftService shifts, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    try
+    {
+        var result = await shifts.OpenAsync(token, command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 
 app.Run();

@@ -14,3 +14,4 @@
 - Se conecta la vista WPF al estado real de configuracion local.
 - Se agrega autenticacion inicial con sesiones expirables almacenadas como hash.
 - Se documenta el plan completo y el estado por fases.
+- Se agregan permisos persistentes y apertura de turno autorizada.

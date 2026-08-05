@@ -9,6 +9,8 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     public DbSet<RegisterRecord> Registers => Set<RegisterRecord>();
     public DbSet<ProductRecord> Products => Set<ProductRecord>();
     public DbSet<SessionRecord> Sessions => Set<SessionRecord>();
+    public DbSet<PermissionRecord> Permissions => Set<PermissionRecord>();
+    public DbSet<ShiftRecord> Shifts => Set<ShiftRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -59,6 +61,23 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             entity.Property(session => session.ExpiresAtUtc).HasColumnType("timestamp with time zone");
             entity.HasOne<UserRecord>().WithMany().HasForeignKey(session => session.UserId).OnDelete(DeleteBehavior.Cascade);
         });
+        modelBuilder.Entity<PermissionRecord>(entity =>
+        {
+            entity.ToTable("permission_assignment");
+            entity.HasKey(permission => permission.Id);
+            entity.Property(permission => permission.Code).HasMaxLength(80).IsRequired();
+            entity.HasIndex(permission => new { permission.UserId, permission.Code }).IsUnique();
+            entity.HasOne<UserRecord>().WithMany().HasForeignKey(permission => permission.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<ShiftRecord>(entity =>
+        {
+            entity.ToTable("shift");
+            entity.HasKey(shift => shift.Id);
+            entity.Property(shift => shift.InitialCash).HasPrecision(18, 2);
+            entity.Property(shift => shift.Status).HasMaxLength(20).IsRequired();
+            entity.Property(shift => shift.OpenedAtUtc).HasColumnType("timestamp with time zone");
+            entity.HasIndex(shift => new { shift.RegisterId, shift.Status }).IsUnique();
+        });
     }
 }
 
@@ -67,3 +86,5 @@ public sealed class UserRecord { public Guid Id { get; set; } public string Norm
 public sealed class RegisterRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public string Name { get; set; } = string.Empty; public bool IsActive { get; set; } }
 public sealed class ProductRecord { public Guid Id { get; set; } public string Code { get; set; } = string.Empty; public string NormalizedCode { get; set; } = string.Empty; public string Description { get; set; } = string.Empty; public decimal Price { get; set; } public bool IsActive { get; set; } }
 public sealed class SessionRecord { public Guid Id { get; set; } public Guid UserId { get; set; } public string TokenHash { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset ExpiresAtUtc { get; set; } public DateTimeOffset? RevokedAtUtc { get; set; } }
+public sealed class PermissionRecord { public Guid Id { get; set; } public Guid UserId { get; set; } public string Code { get; set; } = string.Empty; }
+public sealed class ShiftRecord { public Guid Id { get; set; } public Guid RegisterId { get; set; } public Guid UserId { get; set; } public decimal InitialCash { get; set; } public string Status { get; set; } = "Open"; public DateTimeOffset OpenedAtUtc { get; set; } }
