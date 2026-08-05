@@ -33,15 +33,15 @@ Estado actualizado: 2026-08-05
 ### Fase 0: base tecnica restante
 
 - Conectar inicio de sesion a la ventana WPF.
-- Implementar manejo de permisos desde API y cliente.
+- Conectar permisos y sesion a toda la navegacion WPF.
 - Agregar pruebas de integracion no omitidas para migraciones y sesiones.
 - Crear CI, analisis de dependencias y paquete portatil de revision.
 
 ### Fase 1: punto de venta local esencial
 
 - Asistente WPF completo de primera configuracion.
-- Administracion de usuarios, permisos granulares y bloqueo progresivo.
-- Turnos: apertura, fondo inicial, entradas, salidas y corte.
+- Administracion completa de usuarios, bloqueo progresivo y permisos en cliente.
+- Turnos: entradas, salidas y corte; la apertura autorizada ya esta implementada.
 - Alta, edicion e importacion de productos.
 - Venta finalizada con `operation_id` idempotente.
 - Inventario y kardex inmutable.
