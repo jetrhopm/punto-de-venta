@@ -9,6 +9,7 @@ builder.Services.AddScoped<PasswordHasher<UserRecord>>();
 builder.Services.AddScoped<InitialSetupService>();
 builder.Services.AddScoped<AuthenticationService>();
 builder.Services.AddScoped<ShiftService>();
+builder.Services.AddScoped<ProductCatalogService>();
 
 var app = builder.Build();
 
@@ -40,6 +41,29 @@ app.MapGet("/api/products/search", async (string? q, PosDbContext database, Canc
         .Select(product => new { product.Id, product.Code, product.Description, product.Price })
         .ToListAsync(cancellationToken);
     return Results.Ok(products);
+});
+
+app.MapPost("/api/products", async (HttpRequest request, ProductCommand command, ProductCatalogService catalog, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await catalog.CreateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Created($"/api/products/{result.Id}", result);
+    }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["product"] = [exception.Message] }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+
+app.MapPut("/api/products/{id:guid}", async (Guid id, HttpRequest request, ProductCommand command, ProductCatalogService catalog, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await catalog.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), id, command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["product"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 
 app.MapPost("/api/setup/initial", async (InitialSetupCommand command, InitialSetupService setup, CancellationToken cancellationToken) =>

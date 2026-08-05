@@ -16,3 +16,4 @@
 - Se documenta el plan completo y el estado por fases.
 - Se agregan permisos persistentes y apertura de turno autorizada.
 - Se cierran los pendientes de Fase 0 con CI, pruebas PostgreSQL y paquete portable.
+- Se inicia Fase 1 con alta y edicion de productos protegidas por permiso.
