@@ -43,7 +43,7 @@ Estado actualizado: 2026-08-05
 - Asistente WPF completo de primera configuracion.
 - Administracion completa de usuarios, bloqueo progresivo y permisos en cliente.
 - Turnos: entradas, salidas y corte; la apertura autorizada ya esta implementada.
-- Alta, edicion e importacion de productos.
+- Alta y edicion de productos protegidas por permiso; pendiente importacion CSV.
 - Venta finalizada con `operation_id` idempotente.
 - Inventario y kardex inmutable.
 - Cobro en efectivo, cambio y movimiento de caja.
