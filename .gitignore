@@ -1,0 +1,35 @@
+# Herramientas locales regenerables
+.tools/
+
+# .NET
+bin/
+obj/
+TestResults/
+*.user
+*.suo
+*.rsuser
+
+# Publicaciones y paquetes locales
+artifacts/
+publish/
+*.nupkg
+
+# Datos locales de desarrollo
+.local/
+.postgres/
+*.db
+*.db-shm
+*.db-wal
+
+# Secretos y configuracion local
+.env
+*.secret.json
+appsettings.*.Local.json
+
+# Logs
+logs/
+*.log
+
+# Windows
+Thumbs.db
+Desktop.ini

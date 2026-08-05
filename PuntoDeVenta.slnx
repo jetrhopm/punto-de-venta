@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Pos.Api/Pos.Api.csproj" />
+    <Project Path="src/Pos.Application/Pos.Application.csproj" />
+    <Project Path="src/Pos.Desktop/Pos.Desktop.csproj" />
+    <Project Path="src/Pos.Domain/Pos.Domain.csproj" />
+    <Project Path="src/Pos.Infrastructure/Pos.Infrastructure.csproj" />
+    <Project Path="src/Pos.Integrations.MercadoPago/Pos.Integrations.MercadoPago.csproj" />
+    <Project Path="src/Pos.Integrations.Taecel/Pos.Integrations.Taecel.csproj" />
+    <Project Path="src/Pos.Printing/Pos.Printing.csproj" />
+    <Project Path="src/Pos.Worker/Pos.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Pos.IntegrationTests/Pos.IntegrationTests.csproj" />
+    <Project Path="tests/Pos.UnitTests/Pos.UnitTests.csproj" />
+  </Folder>
+</Solution>
