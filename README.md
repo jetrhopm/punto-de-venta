@@ -16,6 +16,8 @@ Fase 0 iniciada:
 El avance verificable de esta fase se registra en `docs/FASE_0.md`.
 El estado completo y los pendientes se mantienen en `docs/PLAN_PROYECTO.md`.
 
+El respaldo, restauracion de prueba y diagnostico estan documentados en `docs/RESPALDO_RESTAURACION_DIAGNOSTICO.md`.
+
 ## Compilar
 
 Usa el SDK local instalado en `.tools/dotnet`:

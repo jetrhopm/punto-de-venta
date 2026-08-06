@@ -6,6 +6,8 @@ using System.Collections.ObjectModel;
 using System.Net.Http;
 using System.Text.Json;
 using System.Net.Http.Json;
+using Microsoft.Win32;
+using System.IO;
 
 namespace Pos.Desktop;
 
@@ -56,6 +58,7 @@ public partial class MainWindow : Window
         {
             if (!HasPermissionFor(section)) { StatusText.Text = "No tienes permiso para abrir este modulo."; return; }
             if (section == "Corte") { OnCloseShiftClick(sender, e); return; }
+            if (section == "Inventario") { var window = new InventoryAdjustmentWindow { Owner = this }; window.ShowDialog(); return; }
             NavigateTo(section);
         }
     }
@@ -81,7 +84,7 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.F12)
         {
-            ShowPendingFeature("Cobro");
+            OnChargeClick(sender, e);
             e.Handled = true;
         }
     }
@@ -182,7 +185,7 @@ public partial class MainWindow : Window
         public Guid ProductId { get; } = productId; public string Description { get; } = description; public decimal UnitPrice { get; } = unitPrice; public decimal Quantity { get; set; } = quantity; public decimal Total => decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Description} x {Quantity:0.###} = ${Total:0.00}";
     }
 
-    private sealed record SaleResponse(decimal Total, decimal Change);
+    private sealed record SaleResponse(Guid SaleId, decimal Total, decimal Change);
     private sealed record RegisterResponse(Guid Id, string Name);
     private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
 
@@ -198,8 +201,18 @@ public partial class MainWindow : Window
             if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
             var result = await response.Content.ReadFromJsonAsync<SaleResponse>();
             _cart.Clear(); CartList.Items.Refresh(); StatusText.Text = result is null ? "Venta confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
+            if (result is not null) await SaveTicketPdfAsync(result.SaleId);
         }
         catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API para confirmar la venta."; }
+    }
+
+    private static async Task SaveTicketPdfAsync(Guid saleId)
+    {
+        using var response = await Client.GetAsync($"/api/sales/{saleId}/ticket.pdf");
+        if (!response.IsSuccessStatusCode) return;
+        var dialog = new SaveFileDialog { Title = "Guardar ticket PDF", Filter = "Documento PDF (*.pdf)|*.pdf", FileName = $"Ticket-{saleId:N}.pdf", AddExtension = true };
+        if (dialog.ShowDialog() != true) return;
+        await File.WriteAllBytesAsync(dialog.FileName, await response.Content.ReadAsByteArrayAsync());
     }
 
     private void OnMinimizeClick(object sender, RoutedEventArgs e) =>

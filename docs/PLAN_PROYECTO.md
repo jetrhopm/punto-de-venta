@@ -1,6 +1,6 @@
 # Plan completo del punto de venta
 
-Estado actualizado: 2026-08-05
+Estado actualizado: 2026-08-06
 
 ## Terminado
 
@@ -41,16 +41,16 @@ Estado actualizado: 2026-08-05
 ### Fase 1: punto de venta local esencial
 
 - Asistente WPF completo de primera configuracion.
-- Administracion completa de usuarios, bloqueo progresivo y permisos en cliente.
-- Turnos: entradas, salidas y corte; la apertura autorizada ya esta implementada.
+- Administracion de usuarios y permisos en API; bloqueo progresivo y recuperacion administrada quedan para el siguiente incremento de seguridad.
+- Turnos: apertura, entradas, salidas y corte conectados en WPF.
 - Alta y edicion de productos protegidas por permiso; pendiente importacion CSV.
 - Venta finalizada con `operation_id` idempotente, efectivo y cambio.
 - Cliente WPF con carrito, seleccion de resultados y ventana de cobro en efectivo.
-- Descuento de existencia y movimiento de inventario por venta; pendiente kardex completo.
-- Cobro en efectivo transaccional con recibido/cambio; movimientos detallados, apertura y cierre de turno conectados en WPF; pendientes reportes y corte imprimible.
-- Cola transaccional de impresion y ticket termico.
-- Respaldo, restauracion y diagnostico.
-- Importador CSV real cuando se reciba el archivo de productos.
+- Descuento de existencia y kardex con ajustes autorizados, existencias anterior/posterior y auditoria de operacion.
+- Cobro en efectivo transaccional con recibido/cambio y movimientos detallados de caja.
+- Ticket PDF guardable mediante dialogo de Windows y cola transaccional; ESC/POS fisico queda posterior.
+- Respaldo con checksum, restauracion de prueba y diagnostico local documentados; restauracion requiere credenciales administrativas PostgreSQL.
+- Importador CSV real bloqueado hasta recibir el archivo de productos.
 
 ### Fase 2: operacion comercial completa
 

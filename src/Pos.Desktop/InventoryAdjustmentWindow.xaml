@@ -1,0 +1,12 @@
+<Window x:Class="Pos.Desktop.InventoryAdjustmentWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Ajustar inventario" Width="520" Height="430" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <Grid Margin="24"><StackPanel>
+        <TextBlock Text="Ajustar inventario" FontSize="22" FontWeight="SemiBold" Foreground="#17324D" />
+        <TextBlock Text="Producto" Margin="0,14,0,4" /><TextBox x:Name="SearchTextBox" Height="34" TextChanged="OnSearchChanged" />
+        <ListBox x:Name="ResultsList" Height="90" Margin="0,6,0,10" DisplayMemberPath="DisplayText" MouseDoubleClick="OnProductSelected" Visibility="Collapsed" />
+        <TextBlock x:Name="SelectedProductText" Text="Selecciona un producto de la lista." Foreground="#526577" />
+        <TextBlock Text="Cantidad a ajustar (+ entrada, - salida)" Margin="0,12,0,4" /><TextBox x:Name="QuantityTextBox" Height="34" />
+        <TextBlock Text="Motivo" Margin="0,10,0,4" /><TextBox x:Name="ReasonTextBox" Height="34" />
+        <Button Margin="0,16,0,0" Height="38" Background="#146CB0" Foreground="White" FontWeight="Bold" Click="OnAdjustClick">Registrar ajuste</Button>
+        <TextBlock x:Name="MessageText" Margin="0,10,0,0" Foreground="#B42318" TextWrapping="Wrap" />
+    </StackPanel></Grid>
+</Window>

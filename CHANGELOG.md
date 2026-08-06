@@ -21,3 +21,7 @@
 - Se verifica doble envio de venta sin duplicar operacion.
 - Se agrega registro de movimientos de efectivo y cierre de turno con diferencia.
 - Se conectan en WPF la apertura de turno, movimientos de efectivo y cierre con diferencia.
+- Se implementa kardex transaccional con ajustes autorizados y existencias anterior/posterior.
+- Se agrega cola de impresion y ticket PDF guardable como impresora virtual.
+- Se agregan scripts de respaldo, restauracion de prueba y diagnostico PostgreSQL.
+- Se agregan endpoints administrativos para usuarios, contrasenas, estados y permisos con proteccion del ultimo administrador.

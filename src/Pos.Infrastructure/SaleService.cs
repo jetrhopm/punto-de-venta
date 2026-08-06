@@ -32,16 +32,18 @@ public sealed class SaleService(PosDbContext database)
             if (line.Quantity <= 0m) throw new ArgumentException("La cantidad debe ser mayor que cero.");
             var product = products[line.ProductId];
             if (product.Stock < line.Quantity) throw new InvalidOperationException($"Existencia insuficiente para {product.Description}.");
+            var stockBefore = product.Stock;
             var total = decimal.Round(product.Price * line.Quantity, 2, MidpointRounding.AwayFromZero);
             product.Stock -= line.Quantity;
-            lines.Add(new SaleLineRecord { Id = Guid.NewGuid(), ProductId = product.Id, Quantity = line.Quantity, UnitPrice = product.Price, LineTotal = total });
+            lines.Add(new SaleLineRecord { Id = Guid.NewGuid(), ProductId = product.Id, Quantity = line.Quantity, UnitPrice = product.Price, LineTotal = total, StockBefore = stockBefore, StockAfter = product.Stock });
         }
         var totalSale = decimal.Round(lines.Sum(line => line.LineTotal), 2, MidpointRounding.AwayFromZero);
         if (command.CashReceived < totalSale) throw new InvalidOperationException("El efectivo recibido es insuficiente.");
         var sale = new SaleRecord { Id = Guid.NewGuid(), OperationId = command.OperationId, ShiftId = shift.Id, Total = totalSale, CreatedAtUtc = DateTimeOffset.UtcNow };
-        foreach (var line in lines) { line.SaleId = sale.Id; database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = line.ProductId, SaleId = sale.Id, Quantity = -line.Quantity, CreatedAtUtc = sale.CreatedAtUtc }); }
+        foreach (var line in lines) { line.SaleId = sale.Id; database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = line.ProductId, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -line.Quantity, StockBefore = line.StockBefore, StockAfter = line.StockAfter, CreatedAtUtc = sale.CreatedAtUtc }); }
         var change = decimal.Round(command.CashReceived - totalSale, 2, MidpointRounding.AwayFromZero);
         database.Sales.Add(sale); database.SaleLines.AddRange(lines); database.Payments.Add(new PaymentRecord { Id = Guid.NewGuid(), SaleId = sale.Id, Amount = totalSale, Received = command.CashReceived, Change = change });
+        database.PrintJobs.Add(new PrintJobRecord { Id = Guid.NewGuid(), SaleId = sale.Id, CreatedAtUtc = sale.CreatedAtUtc });
         await database.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
         return new CompleteSaleResult(sale.Id, sale.OperationId, totalSale, command.CashReceived, change, false);
     }
