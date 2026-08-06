@@ -100,7 +100,12 @@
                             <TextBlock Text="Venta en atencion" FontSize="17" FontWeight="SemiBold" Foreground="#17324D" />
                             <TextBlock Text="Escanea un codigo o busca un producto para iniciar." Margin="0,4,0,0" Foreground="#526577" />
                         </StackPanel>
-                        <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Click="OnChargeClick">F12  Cobrar</Button>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button Click="OnOpenShiftClick">Abrir turno</Button>
+                            <Button Click="OnCashMovementClick">Efectivo</Button>
+                            <Button Click="OnCloseShiftClick">Corte</Button>
+                            <Button Style="{StaticResource PrimaryButton}" Click="OnChargeClick">F12  Cobrar</Button>
+                        </StackPanel>
                     </Grid>
                 </Border>
 

@@ -111,4 +111,10 @@ app.MapPost("/api/shifts/open", async (HttpRequest request, OpenShiftCommand com
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 
+app.MapGet("/api/shifts/register", async (PosDbContext database, CancellationToken cancellationToken) =>
+{
+    var register = await database.Registers.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.Name).Select(item => new { item.Id, item.Name }).FirstOrDefaultAsync(cancellationToken);
+    return register is null ? Results.NotFound() : Results.Ok(register);
+});
+
 app.Run();

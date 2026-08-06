@@ -47,7 +47,7 @@ Estado actualizado: 2026-08-05
 - Venta finalizada con `operation_id` idempotente, efectivo y cambio.
 - Cliente WPF con carrito, seleccion de resultados y ventana de cobro en efectivo.
 - Descuento de existencia y movimiento de inventario por venta; pendiente kardex completo.
-- Cobro en efectivo transaccional con recibido/cambio; movimientos detallados de caja y cierre de turno implementados en API; pendiente UI de caja y reportes.
+- Cobro en efectivo transaccional con recibido/cambio; movimientos detallados, apertura y cierre de turno conectados en WPF; pendientes reportes y corte imprimible.
 - Cola transaccional de impresion y ticket termico.
 - Respaldo, restauracion y diagnostico.
 - Importador CSV real cuando se reciba el archivo de productos.

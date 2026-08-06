@@ -55,6 +55,7 @@ public partial class MainWindow : Window
         if (sender is Button { Tag: string section })
         {
             if (!HasPermissionFor(section)) { StatusText.Text = "No tienes permiso para abrir este modulo."; return; }
+            if (section == "Corte") { OnCloseShiftClick(sender, e); return; }
             NavigateTo(section);
         }
     }
@@ -87,6 +88,49 @@ public partial class MainWindow : Window
 
     private void OnSalesActionClick(object sender, RoutedEventArgs e) =>
         ShowPendingFeature("Accion de ventas");
+
+    private async void OnOpenShiftClick(object sender, RoutedEventArgs e)
+    {
+        if (!SessionContext.HasPermission("OpenShift")) { StatusText.Text = "No tienes permiso para abrir turnos."; return; }
+        var window = new ShiftWindow { Owner = this };
+        if (window.ShowDialog() != true || window.InitialCash is null) return;
+        try
+        {
+            var register = await Client.GetFromJsonAsync<RegisterResponse>("/api/shifts/register");
+            if (register is null) { StatusText.Text = "No hay una caja activa configurada."; return; }
+            using var response = await Client.PostAsJsonAsync("/api/shifts/open", new { registerId = register.Id, initialCash = window.InitialCash.Value });
+            StatusText.Text = response.IsSuccessStatusCode ? "Turno abierto correctamente." : await response.Content.ReadAsStringAsync();
+        }
+        catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API."; }
+    }
+
+    private async void OnCashMovementClick(object sender, RoutedEventArgs e)
+    {
+        if (!SessionContext.HasPermission("RecordCashMovements")) { StatusText.Text = "No tienes permiso para registrar movimientos de efectivo."; return; }
+        var window = new CashMovementWindow { Owner = this };
+        if (window.ShowDialog() != true || window.Amount is null) return;
+        try
+        {
+            using var response = await Client.PostAsJsonAsync("/api/shifts/cash-movements", new { type = window.Type, amount = window.Amount.Value, reason = window.Reason });
+            StatusText.Text = response.IsSuccessStatusCode ? "Movimiento de efectivo registrado." : await response.Content.ReadAsStringAsync();
+        }
+        catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API."; }
+    }
+
+    private async void OnCloseShiftClick(object sender, RoutedEventArgs e)
+    {
+        if (!SessionContext.HasPermission("CloseShift")) { StatusText.Text = "No tienes permiso para cerrar turnos."; return; }
+        var window = new CloseShiftWindow { Owner = this };
+        if (window.ShowDialog() != true || window.CountedCash is null) return;
+        try
+        {
+            using var response = await Client.PostAsJsonAsync("/api/shifts/close", new { countedCash = window.CountedCash.Value });
+            if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
+            var result = await response.Content.ReadFromJsonAsync<ShiftSummaryResponse>();
+            StatusText.Text = result is null ? "Turno cerrado." : $"Turno cerrado. Diferencia: ${result.Difference:0.00}";
+        }
+        catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API."; }
+    }
 
     private async void OnProductSearchTextChanged(object sender, TextChangedEventArgs e)
     {
@@ -139,6 +183,8 @@ public partial class MainWindow : Window
     }
 
     private sealed record SaleResponse(decimal Total, decimal Change);
+    private sealed record RegisterResponse(Guid Id, string Name);
+    private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
 
     private async void OnChargeClick(object sender, RoutedEventArgs e)
     {

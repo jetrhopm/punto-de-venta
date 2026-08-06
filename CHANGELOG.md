@@ -20,3 +20,4 @@
 - Se agrega venta idempotente con efectivo, cambio e inventario transaccional.
 - Se verifica doble envio de venta sin duplicar operacion.
 - Se agrega registro de movimientos de efectivo y cierre de turno con diferencia.
+- Se conectan en WPF la apertura de turno, movimientos de efectivo y cierre con diferencia.
