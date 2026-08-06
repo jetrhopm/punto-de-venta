@@ -1,0 +1,3 @@
+<Window x:Class="Pos.Desktop.CancelSaleWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Cancelar venta" Width="420" Height="260" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <Grid Margin="24"><StackPanel><TextBlock Text="Cancelar venta" FontSize="22" FontWeight="SemiBold" Foreground="#17324D"/><TextBlock Text="Motivo obligatorio" Margin="0,16,0,4"/><TextBox x:Name="ReasonTextBox" Height="38"/><Button Margin="0,16,0,0" Height="38" Background="#B42318" Foreground="White" FontWeight="Bold" Click="OnConfirmClick">Confirmar cancelacion</Button><TextBlock x:Name="MessageText" Margin="0,10,0,0" Foreground="#B42318"/></StackPanel></Grid>
+</Window>

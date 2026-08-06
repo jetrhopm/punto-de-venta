@@ -17,6 +17,8 @@ public sealed class PostgreSqlIntegrationTests
         Assert.Contains(applied, migration => migration.Contains("AgregaCatalogoDeProductos", StringComparison.Ordinal));
         Assert.Contains(applied, migration => migration.Contains("AgregaRecibidoYCambioEnPagos", StringComparison.Ordinal));
         Assert.Contains(applied, migration => migration.Contains("AgregaColaDeImpresion", StringComparison.Ordinal));
+        Assert.Contains(applied, migration => migration.Contains("AgregaClientesYCredito", StringComparison.Ordinal));
+        Assert.Contains(applied, migration => migration.Contains("AgregaReversionesDeVenta", StringComparison.Ordinal));
     }
 
     [Fact]

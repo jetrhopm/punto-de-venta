@@ -17,6 +17,7 @@ builder.Services.AddScoped<TicketService>();
 builder.Services.AddScoped<UserAdministrationService>();
 builder.Services.AddScoped<CustomerCreditService>();
 builder.Services.AddScoped<SupplierPurchaseService>();
+builder.Services.AddScoped<SaleReversalService>();
 
 var app = builder.Build();
 
@@ -154,6 +155,14 @@ app.MapPost("/api/sales/complete", async (HttpRequest request, CompleteSaleComma
 {
     try { var result = await sales.CompleteAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["sale"] = [exception.Message] }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+
+app.MapPost("/api/sales/cancel", async (HttpRequest request, CancelSaleCommand command, SaleReversalService reversals, CancellationToken cancellationToken) =>
+{
+    try { var result = await reversals.CancelAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["sale"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 

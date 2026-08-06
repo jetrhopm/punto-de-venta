@@ -105,6 +105,7 @@
                             <Button Click="OnOpenShiftClick">Abrir turno</Button>
                             <Button Click="OnCashMovementClick">Efectivo</Button>
                             <Button Click="OnCloseShiftClick">Corte</Button>
+                            <Button Click="OnCancelLastSaleClick">Cancelar ultima</Button>
                             <Button Style="{StaticResource PrimaryButton}" Click="OnChargeClick">F12  Cobrar</Button>
                         </StackPanel>
                     </Grid>

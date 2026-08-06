@@ -15,6 +15,7 @@ public partial class MainWindow : Window
 {
     private static readonly HttpClient Client = new() { BaseAddress = new Uri("http://127.0.0.1:5000") };
     private CancellationTokenSource? _searchCancellation;
+    private Guid? _lastSaleId;
     private readonly ObservableCollection<CartLineView> _cart = [];
     public MainWindow()
     {
@@ -203,10 +204,26 @@ public partial class MainWindow : Window
             using var response = await Client.PostAsJsonAsync("/api/sales/complete", command);
             if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
             var result = await response.Content.ReadFromJsonAsync<SaleResponse>();
+            _lastSaleId = result?.SaleId;
             _cart.Clear(); CartList.Items.Refresh(); StatusText.Text = result is null ? "Venta confirmada." : cashWindow.CreditRequested ? "Venta a credito confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
             if (result is not null) await SaveTicketPdfAsync(result.SaleId);
         }
         catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API para confirmar la venta."; }
+    }
+
+    private async void OnCancelLastSaleClick(object sender, RoutedEventArgs e)
+    {
+        if (!SessionContext.HasPermission("CancelSales")) { StatusText.Text = "No tienes permiso para cancelar ventas."; return; }
+        if (_lastSaleId is null) { StatusText.Text = "No hay una venta reciente para cancelar."; return; }
+        var window = new CancelSaleWindow { Owner = this };
+        if (window.ShowDialog() != true) return;
+        try
+        {
+            using var response = await Client.PostAsJsonAsync("/api/sales/cancel", new { operationId = Guid.NewGuid(), saleId = _lastSaleId.Value, reason = window.Reason });
+            StatusText.Text = response.IsSuccessStatusCode ? "Venta cancelada e inventario revertido." : await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode) _lastSaleId = null;
+        }
+        catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API."; }
     }
 
     private static async Task SaveTicketPdfAsync(Guid saleId)
