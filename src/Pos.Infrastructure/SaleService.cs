@@ -40,8 +40,9 @@ public sealed class SaleService(PosDbContext database)
         if (command.CashReceived < totalSale) throw new InvalidOperationException("El efectivo recibido es insuficiente.");
         var sale = new SaleRecord { Id = Guid.NewGuid(), OperationId = command.OperationId, ShiftId = shift.Id, Total = totalSale, CreatedAtUtc = DateTimeOffset.UtcNow };
         foreach (var line in lines) { line.SaleId = sale.Id; database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = line.ProductId, SaleId = sale.Id, Quantity = -line.Quantity, CreatedAtUtc = sale.CreatedAtUtc }); }
-        database.Sales.Add(sale); database.SaleLines.AddRange(lines); database.Payments.Add(new PaymentRecord { Id = Guid.NewGuid(), SaleId = sale.Id, Amount = command.CashReceived });
+        var change = decimal.Round(command.CashReceived - totalSale, 2, MidpointRounding.AwayFromZero);
+        database.Sales.Add(sale); database.SaleLines.AddRange(lines); database.Payments.Add(new PaymentRecord { Id = Guid.NewGuid(), SaleId = sale.Id, Amount = totalSale, Received = command.CashReceived, Change = change });
         await database.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
-        return new CompleteSaleResult(sale.Id, sale.OperationId, totalSale, command.CashReceived, command.CashReceived - totalSale, false);
+        return new CompleteSaleResult(sale.Id, sale.OperationId, totalSale, command.CashReceived, change, false);
     }
 }

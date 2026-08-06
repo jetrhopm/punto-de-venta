@@ -11,6 +11,7 @@ builder.Services.AddScoped<AuthenticationService>();
 builder.Services.AddScoped<ShiftService>();
 builder.Services.AddScoped<ProductCatalogService>();
 builder.Services.AddScoped<SaleService>();
+builder.Services.AddScoped<CashRegisterService>();
 
 var app = builder.Build();
 
@@ -72,6 +73,18 @@ app.MapPost("/api/sales/complete", async (HttpRequest request, CompleteSaleComma
     try { var result = await sales.CompleteAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["sale"] = [exception.Message] }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+
+app.MapPost("/api/shifts/cash-movements", async (HttpRequest request, CashMovementCommand command, CashRegisterService cash, CancellationToken cancellationToken) =>
+{
+    try { var result = await cash.AddMovementAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["cash"] = [exception.Message] }); }
+});
+
+app.MapPost("/api/shifts/close", async (HttpRequest request, CloseShiftCommand command, CashRegisterService cash, CancellationToken cancellationToken) =>
+{
+    try { var result = await cash.CloseAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["cash"] = [exception.Message] }); }
 });
 
 app.MapPost("/api/setup/initial", async (InitialSetupCommand command, InitialSetupService setup, CancellationToken cancellationToken) =>

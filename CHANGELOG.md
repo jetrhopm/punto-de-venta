@@ -19,3 +19,4 @@
 - Se inicia Fase 1 con alta y edicion de productos protegidas por permiso.
 - Se agrega venta idempotente con efectivo, cambio e inventario transaccional.
 - Se verifica doble envio de venta sin duplicar operacion.
+- Se agrega registro de movimientos de efectivo y cierre de turno con diferencia.
