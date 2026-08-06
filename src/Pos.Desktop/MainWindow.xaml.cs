@@ -59,6 +59,7 @@ public partial class MainWindow : Window
             if (!HasPermissionFor(section)) { StatusText.Text = "No tienes permiso para abrir este modulo."; return; }
             if (section == "Corte") { OnCloseShiftClick(sender, e); return; }
             if (section == "Inventario") { var window = new InventoryAdjustmentWindow { Owner = this }; window.ShowDialog(); return; }
+            if (section == "Clientes") { OpenCustomers(); return; }
             NavigateTo(section);
         }
     }
@@ -77,6 +78,7 @@ public partial class MainWindow : Window
         if (section is not null)
         {
             if (!HasPermissionFor(section)) { StatusText.Text = "No tienes permiso para abrir este modulo."; e.Handled = true; return; }
+            if (section == "Clientes") { OpenCustomers(); e.Handled = true; return; }
             NavigateTo(section);
             e.Handled = true;
             return;
@@ -196,11 +198,11 @@ public partial class MainWindow : Window
         if (cashWindow.ShowDialog() != true || cashWindow.Received is null) return;
         try
         {
-            var command = new { operationId = Guid.NewGuid(), lines = _cart.Select(item => new { productId = item.ProductId, quantity = item.Quantity }).ToArray(), cashReceived = cashWindow.Received.Value };
+            var command = new { operationId = Guid.NewGuid(), lines = _cart.Select(item => new { productId = item.ProductId, quantity = item.Quantity }).ToArray(), cashReceived = cashWindow.CreditRequested ? 0m : cashWindow.Received.Value, customerId = cashWindow.CustomerId, paymentMethod = cashWindow.CreditRequested ? "Credit" : "Cash" };
             using var response = await Client.PostAsJsonAsync("/api/sales/complete", command);
             if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
             var result = await response.Content.ReadFromJsonAsync<SaleResponse>();
-            _cart.Clear(); CartList.Items.Refresh(); StatusText.Text = result is null ? "Venta confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
+            _cart.Clear(); CartList.Items.Refresh(); StatusText.Text = result is null ? "Venta confirmada." : cashWindow.CreditRequested ? "Venta a credito confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
             if (result is not null) await SaveTicketPdfAsync(result.SaleId);
         }
         catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API para confirmar la venta."; }
@@ -226,6 +228,13 @@ public partial class MainWindow : Window
         WorkspaceTitleText.Text = section;
         WorkspaceDetailText.Text = $"El modulo {section.ToLowerInvariant()} se implementara en un incremento posterior de la Fase 1.";
         StatusText.Text = $"Navegacion activa: {section}.";
+    }
+
+    private void OpenCustomers()
+    {
+        var window = new CustomerWindow { Owner = this };
+        window.ShowDialog();
+        CurrentSectionText.Text = "Ventas";
     }
 
     private void ShowPendingFeature(string feature)

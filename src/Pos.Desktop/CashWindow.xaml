@@ -3,7 +3,7 @@
         <TextBlock Text="Cobro en efectivo" FontSize="22" FontWeight="SemiBold" Foreground="#17324D" />
         <TextBlock x:Name="TotalText" Margin="0,16,0,8" FontSize="18" />
         <TextBlock Text="Recibido" /><TextBox x:Name="ReceivedTextBox" Margin="0,4,0,12" Height="36" FontSize="18" />
-        <Button Height="38" Background="#146CB0" Foreground="White" FontWeight="Bold" Click="OnConfirmClick">Confirmar cobro</Button>
+        <StackPanel Orientation="Horizontal"><Button Width="165" Height="38" Background="#146CB0" Foreground="White" FontWeight="Bold" Click="OnConfirmClick">Confirmar cobro</Button><Button Width="165" Height="38" Margin="8,0,0,0" Click="OnCreditClick">Cobrar a credito</Button></StackPanel>
         <TextBlock x:Name="MessageText" Margin="0,12,0,0" Foreground="#B42318" TextWrapping="Wrap" />
     </StackPanel></Grid>
 </Window>

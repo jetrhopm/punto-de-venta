@@ -15,6 +15,7 @@ builder.Services.AddScoped<CashRegisterService>();
 builder.Services.AddScoped<InventoryService>();
 builder.Services.AddScoped<TicketService>();
 builder.Services.AddScoped<UserAdministrationService>();
+builder.Services.AddScoped<CustomerCreditService>();
 
 var app = builder.Build();
 
@@ -63,6 +64,36 @@ app.MapPut("/api/users/{userId:guid}/permissions", async (Guid userId, HttpReque
     try { var result = await users.SetPermissionsAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), userId, command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["permissions"] = [exception.Message] }); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+});
+
+app.MapGet("/api/customers", async (string? q, HttpRequest request, CustomerCreditService customers, CancellationToken cancellationToken) =>
+{
+    var result = await customers.ListAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), q, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapPost("/api/customers", async (HttpRequest request, CustomerCommand command, CustomerCreditService customers, CancellationToken cancellationToken) =>
+{
+    try { var result = await customers.CreateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Created($"/api/customers/{result.Id}", result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["customer"] = [exception.Message] }); }
+});
+app.MapPut("/api/customers/{customerId:guid}", async (Guid customerId, HttpRequest request, CustomerCommand command, CustomerCreditService customers, CancellationToken cancellationToken) =>
+{
+    try { var result = await customers.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), customerId, command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["customer"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+app.MapPost("/api/customers/credit-payments", async (HttpRequest request, CreditPaymentCommand command, CustomerCreditService customers, CancellationToken cancellationToken) =>
+{
+    try { var result = await customers.ApplyPaymentAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["credit"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+app.MapGet("/api/customers/{customerId:guid}/statement", async (Guid customerId, HttpRequest request, CustomerCreditService customers, CancellationToken cancellationToken) =>
+{
+    var result = await customers.StatementAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), customerId, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
 
 app.MapGet("/api/products/search", async (string? q, PosDbContext database, CancellationToken cancellationToken) =>
