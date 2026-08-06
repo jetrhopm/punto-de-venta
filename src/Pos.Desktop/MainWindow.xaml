@@ -79,6 +79,7 @@
                         <Button Style="{StaticResource NavigationButton}" Tag="Inventario" Click="OnNavigateClick">F4  Inventario</Button>
                     </StackPanel>
                     <StackPanel DockPanel.Dock="Bottom">
+                        <Button Style="{StaticResource NavigationButton}" Tag="Compras" Click="OnNavigateClick">Compras</Button>
                         <Button Style="{StaticResource NavigationButton}" Tag="Corte" Click="OnNavigateClick">Corte</Button>
                         <Button Style="{StaticResource NavigationButton}" Tag="Configuracion" Click="OnNavigateClick">Configuracion</Button>
                     </StackPanel>

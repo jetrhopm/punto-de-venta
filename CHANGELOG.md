@@ -26,3 +26,4 @@
 - Se agregan scripts de respaldo, restauracion de prueba y diagnostico PostgreSQL.
 - Se agregan endpoints administrativos para usuarios, contrasenas, estados y permisos con proteccion del ultimo administrador.
 - Se inicia Fase 2 con clientes, ventas a credito, abonos idempotentes y estado de cuenta.
+- Se agregan proveedores, recepcion de compras, costo promedio ponderado y pantalla WPF de compras.

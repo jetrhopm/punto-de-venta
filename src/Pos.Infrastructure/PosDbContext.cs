@@ -19,6 +19,9 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     public DbSet<PrintJobRecord> PrintJobs => Set<PrintJobRecord>();
     public DbSet<CustomerRecord> Customers => Set<CustomerRecord>();
     public DbSet<CreditTransactionRecord> CreditTransactions => Set<CreditTransactionRecord>();
+    public DbSet<SupplierRecord> Suppliers => Set<SupplierRecord>();
+    public DbSet<PurchaseRecord> Purchases => Set<PurchaseRecord>();
+    public DbSet<PurchaseLineRecord> PurchaseLines => Set<PurchaseLineRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -125,13 +128,25 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
         {
             entity.ToTable("credit_transaction"); entity.HasKey(item => item.Id); entity.Property(item => item.Type).HasMaxLength(20).IsRequired(); entity.Property(item => item.Amount).HasPrecision(18, 2); entity.Property(item => item.BalanceBefore).HasPrecision(18, 2); entity.Property(item => item.BalanceAfter).HasPrecision(18, 2); entity.Property(item => item.Reason).HasMaxLength(200).IsRequired(); entity.Property(item => item.CreatedAtUtc).HasColumnType("timestamp with time zone"); entity.HasIndex(item => item.OperationId).IsUnique(); entity.HasOne<CustomerRecord>().WithMany().HasForeignKey(item => item.CustomerId).OnDelete(DeleteBehavior.Restrict); entity.HasOne<SaleRecord>().WithMany().HasForeignKey(item => item.SaleId).OnDelete(DeleteBehavior.Restrict);
         });
+        modelBuilder.Entity<SupplierRecord>(entity =>
+        {
+            entity.ToTable("supplier"); entity.HasKey(item => item.Id); entity.Property(item => item.Name).HasMaxLength(160).IsRequired(); entity.Property(item => item.Phone).HasMaxLength(40); entity.Property(item => item.Email).HasMaxLength(160); entity.Property(item => item.CreatedAtUtc).HasColumnType("timestamp with time zone"); entity.HasIndex(item => item.Name);
+        });
+        modelBuilder.Entity<PurchaseRecord>(entity =>
+        {
+            entity.ToTable("purchase"); entity.HasKey(item => item.Id); entity.Property(item => item.OperationId).IsRequired(); entity.HasIndex(item => item.OperationId).IsUnique(); entity.Property(item => item.Total).HasPrecision(18, 2); entity.Property(item => item.Status).HasMaxLength(20).IsRequired(); entity.Property(item => item.CreatedAtUtc).HasColumnType("timestamp with time zone"); entity.HasOne<SupplierRecord>().WithMany().HasForeignKey(item => item.SupplierId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<PurchaseLineRecord>(entity =>
+        {
+            entity.ToTable("purchase_line"); entity.HasKey(item => item.Id); entity.Property(item => item.Quantity).HasPrecision(18, 3); entity.Property(item => item.UnitCost).HasPrecision(18, 2); entity.Property(item => item.LineTotal).HasPrecision(18, 2); entity.HasOne<PurchaseRecord>().WithMany().HasForeignKey(item => item.PurchaseId).OnDelete(DeleteBehavior.Restrict); entity.HasOne<ProductRecord>().WithMany().HasForeignKey(item => item.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
     }
 }
 
 public sealed class StoreRecord { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string BusinessType { get; set; } = string.Empty; public string TimeZoneId { get; set; } = "America/Mexico_City"; public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class UserRecord { public Guid Id { get; set; } public string NormalizedUserName { get; set; } = string.Empty; public string PasswordHash { get; set; } = string.Empty; public string DisplayName { get; set; } = string.Empty; public bool IsAdministrator { get; set; } public bool IsActive { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class RegisterRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public string Name { get; set; } = string.Empty; public bool IsActive { get; set; } }
-public sealed class ProductRecord { public Guid Id { get; set; } public string Code { get; set; } = string.Empty; public string NormalizedCode { get; set; } = string.Empty; public string Description { get; set; } = string.Empty; public decimal Price { get; set; } public decimal Stock { get; set; } public bool IsActive { get; set; } }
+public sealed class ProductRecord { public Guid Id { get; set; } public string Code { get; set; } = string.Empty; public string NormalizedCode { get; set; } = string.Empty; public string Description { get; set; } = string.Empty; public decimal Price { get; set; } public decimal Cost { get; set; } public decimal Stock { get; set; } public bool IsActive { get; set; } }
 public sealed class SessionRecord { public Guid Id { get; set; } public Guid UserId { get; set; } public string TokenHash { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset ExpiresAtUtc { get; set; } public DateTimeOffset? RevokedAtUtc { get; set; } }
 public sealed class PermissionRecord { public Guid Id { get; set; } public Guid UserId { get; set; } public string Code { get; set; } = string.Empty; }
 public sealed class ShiftRecord { public Guid Id { get; set; } public Guid RegisterId { get; set; } public Guid UserId { get; set; } public decimal InitialCash { get; set; } public string Status { get; set; } = "Open"; public DateTimeOffset OpenedAtUtc { get; set; } public DateTimeOffset? ClosedAtUtc { get; set; } public decimal? CountedCash { get; set; } public decimal? Difference { get; set; } }
@@ -143,3 +158,6 @@ public sealed class CashMovementRecord { public Guid Id { get; set; } public Gui
 public sealed class PrintJobRecord { public Guid Id { get; set; } public Guid SaleId { get; set; } public string Status { get; set; } = "Pending"; public int Attempts { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset? CompletedAtUtc { get; set; } }
 public sealed class CustomerRecord { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string? Phone { get; set; } public string? Email { get; set; } public string? TaxId { get; set; } public decimal CreditLimit { get; set; } public bool CreditEnabled { get; set; } public bool IsActive { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class CreditTransactionRecord { public Guid Id { get; set; } public Guid CustomerId { get; set; } public Guid? SaleId { get; set; } public Guid UserId { get; set; } public Guid OperationId { get; set; } public string Type { get; set; } = string.Empty; public decimal Amount { get; set; } public decimal BalanceBefore { get; set; } public decimal BalanceAfter { get; set; } public string Reason { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } }
+public sealed class SupplierRecord { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string? Phone { get; set; } public string? Email { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } }
+public sealed class PurchaseRecord { public Guid Id { get; set; } public Guid OperationId { get; set; } public Guid SupplierId { get; set; } public Guid UserId { get; set; } public decimal Total { get; set; } public string Status { get; set; } = "Received"; public DateTimeOffset CreatedAtUtc { get; set; } }
+public sealed class PurchaseLineRecord { public Guid Id { get; set; } public Guid PurchaseId { get; set; } public Guid ProductId { get; set; } public decimal Quantity { get; set; } public decimal UnitCost { get; set; } public decimal LineTotal { get; set; } }

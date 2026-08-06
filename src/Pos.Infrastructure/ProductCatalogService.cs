@@ -4,8 +4,8 @@ using System.Text;
 
 namespace Pos.Infrastructure;
 
-public sealed record ProductCommand(string Code, string Description, decimal Price);
-public sealed record ProductResult(Guid Id, string Code, string Description, decimal Price, bool IsActive);
+public sealed record ProductCommand(string Code, string Description, decimal Price, decimal Cost = 0m);
+public sealed record ProductResult(Guid Id, string Code, string Description, decimal Price, decimal Cost, bool IsActive);
 
 public sealed class ProductCatalogService(PosDbContext database)
 {
@@ -16,7 +16,7 @@ public sealed class ProductCatalogService(PosDbContext database)
         if (userId is null) return null;
         var normalizedCode = NormalizeCode(command.Code);
         if (await database.Products.AnyAsync(product => product.NormalizedCode == normalizedCode, cancellationToken)) throw new InvalidOperationException("El codigo del producto ya existe.");
-        var product = new ProductRecord { Id = Guid.NewGuid(), Code = command.Code.Trim(), NormalizedCode = normalizedCode, Description = command.Description.Trim(), Price = decimal.Round(command.Price, 2), IsActive = true };
+        var product = new ProductRecord { Id = Guid.NewGuid(), Code = command.Code.Trim(), NormalizedCode = normalizedCode, Description = command.Description.Trim(), Price = decimal.Round(command.Price, 2), Cost = decimal.Round(command.Cost, 2), IsActive = true };
         database.Products.Add(product);
         await database.SaveChangesAsync(cancellationToken);
         return ToResult(product);
@@ -30,13 +30,13 @@ public sealed class ProductCatalogService(PosDbContext database)
         var product = await database.Products.SingleOrDefaultAsync(item => item.Id == id, cancellationToken) ?? throw new KeyNotFoundException("Producto no encontrado.");
         var normalizedCode = NormalizeCode(command.Code);
         if (await database.Products.AnyAsync(item => item.Id != id && item.NormalizedCode == normalizedCode, cancellationToken)) throw new InvalidOperationException("El codigo del producto ya existe.");
-        product.Code = command.Code.Trim(); product.NormalizedCode = normalizedCode; product.Description = command.Description.Trim(); product.Price = decimal.Round(command.Price, 2);
+        product.Code = command.Code.Trim(); product.NormalizedCode = normalizedCode; product.Description = command.Description.Trim(); product.Price = decimal.Round(command.Price, 2); product.Cost = decimal.Round(command.Cost, 2);
         await database.SaveChangesAsync(cancellationToken);
         return ToResult(product);
     }
 
     public static string NormalizeCode(string code) => code.Trim().ToUpperInvariant();
-    private static ProductResult ToResult(ProductRecord product) => new(product.Id, product.Code, product.Description, product.Price, product.IsActive);
+    private static ProductResult ToResult(ProductRecord product) => new(product.Id, product.Code, product.Description, product.Price, product.Cost, product.IsActive);
 
     private async Task<Guid?> GetAuthorizedUserAsync(string accessToken, string permission, CancellationToken cancellationToken)
     {
@@ -53,6 +53,6 @@ public sealed class ProductCatalogService(PosDbContext database)
     {
         if (string.IsNullOrWhiteSpace(command.Code) || command.Code.Trim().Length > 80) throw new ArgumentException("El codigo es obligatorio y debe tener maximo 80 caracteres.");
         if (string.IsNullOrWhiteSpace(command.Description) || command.Description.Trim().Length > 200) throw new ArgumentException("La descripcion es obligatoria y debe tener maximo 200 caracteres.");
-        if (command.Price < 0m || command.Price > 9999999999999999.99m) throw new ArgumentException("El precio debe ser positivo y valido.");
+        if (command.Price < 0m || command.Price > 9999999999999999.99m || command.Cost < 0m || command.Cost > 9999999999999999.99m) throw new ArgumentException("El precio y costo deben ser positivos y validos.");
     }
 }

@@ -16,6 +16,7 @@ builder.Services.AddScoped<InventoryService>();
 builder.Services.AddScoped<TicketService>();
 builder.Services.AddScoped<UserAdministrationService>();
 builder.Services.AddScoped<CustomerCreditService>();
+builder.Services.AddScoped<SupplierPurchaseService>();
 
 var app = builder.Build();
 
@@ -94,6 +95,23 @@ app.MapGet("/api/customers/{customerId:guid}/statement", async (Guid customerId,
 {
     var result = await customers.StatementAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), customerId, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+
+app.MapGet("/api/suppliers", async (string? q, HttpRequest request, SupplierPurchaseService suppliers, CancellationToken cancellationToken) =>
+{
+    var result = await suppliers.ListSuppliersAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), q, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapPost("/api/suppliers", async (HttpRequest request, SupplierCommand command, SupplierPurchaseService suppliers, CancellationToken cancellationToken) =>
+{
+    try { var result = await suppliers.CreateSupplierAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Created($"/api/suppliers/{result.Id}", result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["supplier"] = [exception.Message] }); }
+});
+app.MapPost("/api/purchases/receive", async (HttpRequest request, ReceivePurchaseCommand command, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
+{
+    try { var result = await purchases.ReceiveAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["purchase"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
 
 app.MapGet("/api/products/search", async (string? q, PosDbContext database, CancellationToken cancellationToken) =>

@@ -60,6 +60,7 @@ public partial class MainWindow : Window
             if (section == "Corte") { OnCloseShiftClick(sender, e); return; }
             if (section == "Inventario") { var window = new InventoryAdjustmentWindow { Owner = this }; window.ShowDialog(); return; }
             if (section == "Clientes") { OpenCustomers(); return; }
+            if (section == "Compras") { var window = new PurchaseWindow { Owner = this }; window.ShowDialog(); return; }
             NavigateTo(section);
         }
     }
@@ -250,6 +251,7 @@ public partial class MainWindow : Window
         "Inventario" => SessionContext.HasPermission("ViewInventory"),
         "Corte" => SessionContext.HasPermission("CloseShift"),
         "Configuracion" => SessionContext.HasPermission("ConfigureStore"),
+        "Compras" => SessionContext.HasPermission("ManageSuppliersAndPurchases"),
         _ => false
     };
 
