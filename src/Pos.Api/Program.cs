@@ -1,10 +1,11 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Pos.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 var connectionString = Environment.GetEnvironmentVariable("POS_CONNECTION_STRING") ?? PosDbContextFactory.ReadDevelopmentConnectionString();
-builder.Services.AddDbContext<PosDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.AddDbContext<PosDbContext>(options => options.UseNpgsql(connectionString).ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning)));
 builder.Services.AddScoped<PasswordHasher<UserRecord>>();
 builder.Services.AddScoped<InitialSetupService>();
 builder.Services.AddScoped<AuthenticationService>();
@@ -22,6 +23,12 @@ builder.Services.AddScoped<SaleReturnService>();
 builder.Services.AddScoped<ReportService>();
 
 var app = builder.Build();
+
+await using (var migrationScope = app.Services.CreateAsyncScope())
+{
+    var database = migrationScope.ServiceProvider.GetRequiredService<PosDbContext>();
+    await database.Database.MigrateAsync();
+}
 
 app.MapGet("/health", () =>
 {

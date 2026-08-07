@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Pos.Infrastructure;
 
-public sealed record SaleLineCommand(Guid ProductId, decimal Quantity);
+public sealed record SaleLineCommand(Guid ProductId, decimal Quantity, bool UseWholesale = false);
 public sealed record CompleteSaleCommand(Guid OperationId, IReadOnlyList<SaleLineCommand> Lines, decimal CashReceived, Guid? CustomerId = null, string PaymentMethod = "Cash");
 public sealed record CompleteSaleResult(Guid SaleId, Guid OperationId, decimal Total, decimal CashReceived, decimal Change, bool Existing);
 
@@ -33,9 +33,10 @@ public sealed class SaleService(PosDbContext database)
             var product = products[line.ProductId];
             if (product.Stock < line.Quantity) throw new InvalidOperationException($"Existencia insuficiente para {product.Description}.");
             var stockBefore = product.Stock;
-            var total = decimal.Round(product.Price * line.Quantity, 2, MidpointRounding.AwayFromZero);
+            var unitPrice = line.UseWholesale && product.WholesalePrice > 0m && line.Quantity >= product.WholesaleMinimumQuantity ? product.WholesalePrice : product.Price;
+            var total = decimal.Round(unitPrice * line.Quantity, 2, MidpointRounding.AwayFromZero);
             product.Stock -= line.Quantity;
-            lines.Add(new SaleLineRecord { Id = Guid.NewGuid(), ProductId = product.Id, Quantity = line.Quantity, UnitPrice = product.Price, LineTotal = total, StockBefore = stockBefore, StockAfter = product.Stock });
+            lines.Add(new SaleLineRecord { Id = Guid.NewGuid(), ProductId = product.Id, Quantity = line.Quantity, UnitPrice = unitPrice, LineTotal = total, StockBefore = stockBefore, StockAfter = product.Stock });
         }
         var totalSale = decimal.Round(lines.Sum(line => line.LineTotal), 2, MidpointRounding.AwayFromZero);
         CustomerRecord? customer = null;

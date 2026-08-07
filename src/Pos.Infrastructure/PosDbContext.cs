@@ -64,6 +64,8 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             entity.Property(product => product.NormalizedCode).HasMaxLength(80).IsRequired();
             entity.Property(product => product.Description).HasMaxLength(200).IsRequired();
             entity.Property(product => product.Price).HasPrecision(18, 2);
+            entity.Property(product => product.WholesalePrice).HasPrecision(18, 2);
+            entity.Property(product => product.WholesaleMinimumQuantity).HasPrecision(18, 3);
             entity.HasIndex(product => product.NormalizedCode).IsUnique();
         });
         modelBuilder.Entity<SessionRecord>(entity =>
@@ -161,7 +163,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
 public sealed class StoreRecord { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string BusinessType { get; set; } = string.Empty; public string TimeZoneId { get; set; } = "America/Mexico_City"; public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class UserRecord { public Guid Id { get; set; } public string NormalizedUserName { get; set; } = string.Empty; public string PasswordHash { get; set; } = string.Empty; public string DisplayName { get; set; } = string.Empty; public bool IsAdministrator { get; set; } public bool IsActive { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class RegisterRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public string Name { get; set; } = string.Empty; public bool IsActive { get; set; } }
-public sealed class ProductRecord { public Guid Id { get; set; } public string Code { get; set; } = string.Empty; public string NormalizedCode { get; set; } = string.Empty; public string Description { get; set; } = string.Empty; public decimal Price { get; set; } public decimal Cost { get; set; } public decimal Stock { get; set; } public bool IsActive { get; set; } }
+public sealed class ProductRecord { public Guid Id { get; set; } public string Code { get; set; } = string.Empty; public string NormalizedCode { get; set; } = string.Empty; public string Description { get; set; } = string.Empty; public decimal Price { get; set; } public decimal Cost { get; set; } public decimal WholesalePrice { get; set; } public decimal WholesaleMinimumQuantity { get; set; } public decimal Stock { get; set; } public bool IsActive { get; set; } }
 public sealed class SessionRecord { public Guid Id { get; set; } public Guid UserId { get; set; } public string TokenHash { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset ExpiresAtUtc { get; set; } public DateTimeOffset? RevokedAtUtc { get; set; } }
 public sealed class PermissionRecord { public Guid Id { get; set; } public Guid UserId { get; set; } public string Code { get; set; } = string.Empty; }
 public sealed class ShiftRecord { public Guid Id { get; set; } public Guid RegisterId { get; set; } public Guid UserId { get; set; } public decimal InitialCash { get; set; } public string Status { get; set; } = "Open"; public DateTimeOffset OpenedAtUtc { get; set; } public DateTimeOffset? ClosedAtUtc { get; set; } public decimal? CountedCash { get; set; } public decimal? Difference { get; set; } }
