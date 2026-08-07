@@ -1,0 +1,9 @@
+<Window x:Class="Pos.Desktop.TicketSettingsWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Configuracion de ticket" Width="560" Height="380" WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="20">
+        <TextBlock Text="Configuracion de ticket" FontSize="21" FontWeight="SemiBold" Foreground="#17324D"/>
+        <TextBlock Text="Encabezado" Margin="0,18,0,4"/><TextBox x:Name="HeaderBox" Height="55" TextWrapping="Wrap" AcceptsReturn="True"/>
+        <TextBlock Text="Mensaje final" Margin="0,12,0,4"/><TextBox x:Name="FooterBox" Height="45"/>
+        <StackPanel Orientation="Horizontal" Margin="0,12,0,0"><TextBlock Text="Ancho" VerticalAlignment="Center"/><ComboBox x:Name="WidthBox" Width="100" Margin="10,0"><ComboBoxItem>58</ComboBoxItem><ComboBoxItem>80</ComboBoxItem></ComboBox><Button Click="OnSaveClick" Padding="18,6">Guardar</Button></StackPanel>
+        <TextBlock x:Name="StatusText" Margin="0,12,0,0" Foreground="#526577" TextWrapping="Wrap"/>
+    </StackPanel>
+</Window>

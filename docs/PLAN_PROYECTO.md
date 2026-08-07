@@ -58,7 +58,8 @@ Estado actualizado: 2026-08-06
 - Completado adicional: precio de mayoreo y cantidad minima persistidos y aplicables en la venta.
 - Completado adicional: promociones porcentuales por producto con vigencia.
 - Completado adicional: pantalla WPF de promociones y preparación local de publicación de producción con WiX.
-- Pendiente de Fase 2: kits, editor avanzado de ticket y Bundle Setup.exe con instalación de PostgreSQL, reparación y actualización probadas.
+- Completado adicional: kits con componentes y reversos, configuración WPF de ticket y MSI de producción con actualización mayor/reparación.
+- Pendiente técnico: generar y probar el Bundle `Setup.exe` cuando WiX Bal quede reparado; integrar PostgreSQL/servicio Windows en el Bundle y validar en Windows 10/11 limpios.
 - Proveedores, compras y recepciones.
 - Mayoreo, promociones, kits, devoluciones y reportes.
 - Editor completo de ticket.

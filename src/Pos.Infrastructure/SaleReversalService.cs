@@ -8,7 +8,7 @@ namespace Pos.Infrastructure;
 public sealed record CancelSaleCommand(Guid OperationId, Guid SaleId, string Reason);
 public sealed record CancelSaleResult(Guid SaleId, Guid OperationId, decimal Amount, bool Existing);
 
-public sealed class SaleReversalService(PosDbContext database)
+public sealed class SaleReversalService(PosDbContext database, KitService kits)
 {
     public async Task<CancelSaleResult?> CancelAsync(string token, CancelSaleCommand command, CancellationToken cancellationToken)
     {
@@ -25,9 +25,8 @@ public sealed class SaleReversalService(PosDbContext database)
         var lines = await database.SaleLines.Where(item => item.SaleId == sale.Id).ToListAsync(cancellationToken);
         foreach (var line in lines)
         {
-            var product = await database.Products.SingleAsync(item => item.Id == line.ProductId, cancellationToken);
-            var before = product.Stock; product.Stock = decimal.Round(before + line.Quantity, 3, MidpointRounding.AwayFromZero);
-            database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = line.Quantity, StockBefore = before, StockAfter = product.Stock, Reason = "SaleCancellation", CreatedAtUtc = DateTimeOffset.UtcNow });
+            var parts = await kits.ExpandAsync(line.ProductId, line.Quantity, cancellationToken) ?? throw new KeyNotFoundException("Producto de la venta no encontrado.");
+            foreach (var part in parts) { var product = await database.Products.SingleAsync(item => item.Id == part.ProductId, cancellationToken); var before = product.Stock; product.Stock = decimal.Round(before + part.Quantity, 3, MidpointRounding.AwayFromZero); database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = part.Quantity, StockBefore = before, StockAfter = product.Stock, Reason = line.ProductId == part.ProductId ? "SaleCancellation" : "KitCancellation", CreatedAtUtc = DateTimeOffset.UtcNow }); }
         }
         var payment = await database.Payments.SingleOrDefaultAsync(item => item.SaleId == sale.Id, cancellationToken);
         if (payment?.Method == "Cash") database.CashMovements.Add(new CashMovementRecord { Id = Guid.NewGuid(), ShiftId = shift.Id, Type = "Out", Amount = payment.Amount, Reason = $"Cancelacion de venta {sale.Id}", CreatedAtUtc = DateTimeOffset.UtcNow });

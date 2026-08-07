@@ -18,7 +18,7 @@ public sealed class TicketService(PosDbContext database)
         var lines = await (from line in database.SaleLines.AsNoTracking() join product in database.Products.AsNoTracking() on line.ProductId equals product.Id where line.SaleId == saleId select new TicketPdfLine(product.Description, line.Quantity, line.UnitPrice, line.LineTotal)).ToListAsync(cancellationToken);
         var payment = await database.Payments.AsNoTracking().SingleOrDefaultAsync(item => item.SaleId == saleId, cancellationToken);
         var store = await database.Stores.AsNoTracking().OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
-        var content = TicketPdfWriter.Create(new TicketPdfData(store.Name, sale.Id, sale.CreatedAtUtc, lines, sale.Total, payment?.Received ?? sale.Total, payment?.Change ?? 0m));
+        var content = TicketPdfWriter.Create(new TicketPdfData(store.Name, store.TicketHeader, store.TicketFooter, store.TicketWidthMm, sale.Id, sale.CreatedAtUtc, lines, sale.Total, payment?.Received ?? sale.Total, payment?.Change ?? 0m));
         var job = await database.PrintJobs.SingleOrDefaultAsync(item => item.SaleId == saleId && item.Status == "Pending", cancellationToken);
         if (job is not null) { job.Status = "Generated"; job.Attempts++; job.CompletedAtUtc = DateTimeOffset.UtcNow; await database.SaveChangesAsync(cancellationToken); }
         return new TicketResult(content, $"Ticket-{sale.Id:N}.pdf");

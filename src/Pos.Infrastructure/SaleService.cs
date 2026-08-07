@@ -9,7 +9,7 @@ public sealed record SaleLineCommand(Guid ProductId, decimal Quantity, bool UseW
 public sealed record CompleteSaleCommand(Guid OperationId, IReadOnlyList<SaleLineCommand> Lines, decimal CashReceived, Guid? CustomerId = null, string PaymentMethod = "Cash");
 public sealed record CompleteSaleResult(Guid SaleId, Guid OperationId, decimal Total, decimal CashReceived, decimal Change, bool Existing);
 
-public sealed class SaleService(PosDbContext database, PromotionService promotions)
+public sealed class SaleService(PosDbContext database, PromotionService promotions, KitService kits)
 {
     public async Task<CompleteSaleResult?> CompleteAsync(string accessToken, CompleteSaleCommand command, CancellationToken cancellationToken)
     {
@@ -23,7 +23,9 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         var existing = await database.Sales.AsNoTracking().SingleOrDefaultAsync(sale => sale.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new CompleteSaleResult(existing.Id, existing.OperationId, existing.Total, 0m, 0m, true);
         var shift = await database.Shifts.SingleOrDefaultAsync(item => item.UserId == user.Id && item.Status == "Open", cancellationToken) ?? throw new InvalidOperationException("El usuario no tiene un turno abierto.");
-        var productIds = command.Lines.Select(line => line.ProductId).Distinct().ToArray();
+        var expanded = new Dictionary<Guid, decimal>();
+        foreach (var line in command.Lines) { var parts = await kits.ExpandAsync(line.ProductId, line.Quantity, cancellationToken) ?? throw new KeyNotFoundException("Producto no encontrado."); foreach (var part in parts) expanded[part.ProductId] = expanded.GetValueOrDefault(part.ProductId) + part.Quantity; }
+        var productIds = expanded.Keys.Concat(command.Lines.Select(item => item.ProductId)).Distinct().ToArray();
         var products = await database.Products.Where(product => productIds.Contains(product.Id) && product.IsActive).ToDictionaryAsync(product => product.Id, cancellationToken);
         if (products.Count != productIds.Length) throw new ArgumentException("Una o mas partidas no existen o estan inactivas.");
         var lines = new List<SaleLineRecord>();
@@ -31,13 +33,17 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         {
             if (line.Quantity <= 0m) throw new ArgumentException("La cantidad debe ser mayor que cero.");
             var product = products[line.ProductId];
-            if (product.Stock < line.Quantity) throw new InvalidOperationException($"Existencia insuficiente para {product.Description}.");
+            var requested = expanded[line.ProductId];
+            if (!product.IsKit && product.Stock < requested) throw new InvalidOperationException($"Existencia insuficiente para {product.Description}.");
             var stockBefore = product.Stock;
-            var unitPrice = line.UseWholesale && product.WholesalePrice > 0m && line.Quantity >= product.WholesaleMinimumQuantity ? product.WholesalePrice : product.Price;
+            var unitPrice = product.Price;
+            var originalLine = command.Lines.SingleOrDefault(item => item.ProductId == line.ProductId);
+            var requestedQuantity = originalLine?.Quantity ?? requested;
+            unitPrice = originalLine is not null && originalLine.UseWholesale && product.WholesalePrice > 0m && requestedQuantity >= product.WholesaleMinimumQuantity ? product.WholesalePrice : product.Price;
             unitPrice = await promotions.DiscountedPriceAsync(product.Id, unitPrice, DateTimeOffset.UtcNow, cancellationToken);
-            var total = decimal.Round(unitPrice * line.Quantity, 2, MidpointRounding.AwayFromZero);
-            product.Stock -= line.Quantity;
-            lines.Add(new SaleLineRecord { Id = Guid.NewGuid(), ProductId = product.Id, Quantity = line.Quantity, UnitPrice = unitPrice, LineTotal = total, StockBefore = stockBefore, StockAfter = product.Stock });
+            var total = originalLine is null ? 0m : decimal.Round(unitPrice * requestedQuantity, 2, MidpointRounding.AwayFromZero);
+            if (!product.IsKit) product.Stock -= requested;
+            if (originalLine is not null) lines.Add(new SaleLineRecord { Id = Guid.NewGuid(), ProductId = product.Id, Quantity = requestedQuantity, UnitPrice = unitPrice, LineTotal = total, StockBefore = stockBefore, StockAfter = product.Stock });
         }
         var totalSale = decimal.Round(lines.Sum(line => line.LineTotal), 2, MidpointRounding.AwayFromZero);
         CustomerRecord? customer = null;
@@ -51,7 +57,8 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         }
         else if (command.CashReceived < totalSale) throw new InvalidOperationException("El efectivo recibido es insuficiente.");
         var sale = new SaleRecord { Id = Guid.NewGuid(), OperationId = command.OperationId, ShiftId = shift.Id, CustomerId = command.CustomerId, Total = totalSale, CreatedAtUtc = DateTimeOffset.UtcNow };
-        foreach (var line in lines) { line.SaleId = sale.Id; database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = line.ProductId, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -line.Quantity, StockBefore = line.StockBefore, StockAfter = line.StockAfter, CreatedAtUtc = sale.CreatedAtUtc }); }
+        foreach (var line in lines) { line.SaleId = sale.Id; if (!products[line.ProductId].IsKit) database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = line.ProductId, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -line.Quantity, StockBefore = line.StockBefore, StockAfter = line.StockAfter, CreatedAtUtc = sale.CreatedAtUtc }); }
+        foreach (var component in expanded.Where(item => !command.Lines.Any(line => line.ProductId == item.Key))) { var product = products[component.Key]; if (product.Stock < component.Value) throw new InvalidOperationException($"Existencia insuficiente para {product.Description}."); var before = product.Stock; product.Stock -= component.Value; database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -component.Value, StockBefore = before, StockAfter = product.Stock, Reason = "KitSale", CreatedAtUtc = sale.CreatedAtUtc }); }
         var change = command.PaymentMethod == "Cash" ? decimal.Round(command.CashReceived - totalSale, 2, MidpointRounding.AwayFromZero) : 0m;
         database.Sales.Add(sale); database.SaleLines.AddRange(lines); database.Payments.Add(new PaymentRecord { Id = Guid.NewGuid(), SaleId = sale.Id, Method = command.PaymentMethod, Amount = totalSale, Received = command.PaymentMethod == "Cash" ? command.CashReceived : 0m, Change = change });
         if (customer is not null) database.CreditTransactions.Add(new CreditTransactionRecord { Id = Guid.NewGuid(), CustomerId = customer.Id, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Type = "Sale", Amount = totalSale, BalanceBefore = currentCredit, BalanceAfter = currentCredit + totalSale, Reason = "Venta a credito", CreatedAtUtc = sale.CreatedAtUtc });

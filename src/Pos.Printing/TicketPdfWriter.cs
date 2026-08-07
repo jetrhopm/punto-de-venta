@@ -3,15 +3,19 @@ using System.Text;
 namespace Pos.Printing;
 
 public sealed record TicketPdfLine(string Description, decimal Quantity, decimal UnitPrice, decimal Total);
-public sealed record TicketPdfData(string StoreName, Guid SaleId, DateTimeOffset CreatedAtUtc, IReadOnlyList<TicketPdfLine> Lines, decimal Total, decimal Received, decimal Change);
+public sealed record TicketPdfData(string StoreName, string Header, string Footer, int WidthMm, Guid SaleId, DateTimeOffset CreatedAtUtc, IReadOnlyList<TicketPdfLine> Lines, decimal Total, decimal Received, decimal Change)
+{
+    public TicketPdfData(string storeName, Guid saleId, DateTimeOffset createdAtUtc, IReadOnlyList<TicketPdfLine> lines, decimal total, decimal received, decimal change)
+        : this(storeName, string.Empty, "Gracias por su compra", 80, saleId, createdAtUtc, lines, total, received, change) { }
+}
 
 public static class TicketPdfWriter
 {
     public static byte[] Create(TicketPdfData ticket)
     {
-        var lines = new List<string> { ticket.StoreName, "TICKET DE VENTA", $"Folio: {ticket.SaleId}", ticket.CreatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm"), "" };
+        var lines = new List<string> { ticket.StoreName, ticket.Header, "TICKET DE VENTA", $"Folio: {ticket.SaleId}", ticket.CreatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm"), "" };
         lines.AddRange(ticket.Lines.Select(line => $"{line.Quantity:0.###} x {line.Description}  ${line.Total:0.00}"));
-        lines.AddRange(["", $"TOTAL: ${ticket.Total:0.00}", $"RECIBIDO: ${ticket.Received:0.00}", $"CAMBIO: ${ticket.Change:0.00}", "", "COPIA DIGITAL"]);
+        lines.AddRange(["", $"TOTAL: ${ticket.Total:0.00}", $"RECIBIDO: ${ticket.Received:0.00}", $"CAMBIO: ${ticket.Change:0.00}", "", ticket.Footer, "COPIA DIGITAL"]);
         var content = new StringBuilder("BT\n/F1 9 Tf\n12 TL\n");
         foreach (var line in lines) content.Append("(").Append(Escape(ToAscii(line))).Append(") Tj T*\n");
         content.Append("ET\n");

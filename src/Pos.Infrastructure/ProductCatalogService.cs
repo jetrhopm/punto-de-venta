@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Pos.Infrastructure;
 
-public sealed record ProductCommand(string Code, string Description, decimal Price, decimal Cost = 0m, decimal WholesalePrice = 0m, decimal WholesaleMinimumQuantity = 0m);
+public sealed record ProductCommand(string Code, string Description, decimal Price, decimal Cost = 0m, decimal WholesalePrice = 0m, decimal WholesaleMinimumQuantity = 0m, bool IsKit = false);
 public sealed record ProductResult(Guid Id, string Code, string Description, decimal Price, decimal Cost, decimal WholesalePrice, decimal WholesaleMinimumQuantity, bool IsActive);
 
 public sealed class ProductCatalogService(PosDbContext database)
@@ -16,7 +16,7 @@ public sealed class ProductCatalogService(PosDbContext database)
         if (userId is null) return null;
         var normalizedCode = NormalizeCode(command.Code);
         if (await database.Products.AnyAsync(product => product.NormalizedCode == normalizedCode, cancellationToken)) throw new InvalidOperationException("El codigo del producto ya existe.");
-        var product = new ProductRecord { Id = Guid.NewGuid(), Code = command.Code.Trim(), NormalizedCode = normalizedCode, Description = command.Description.Trim(), Price = decimal.Round(command.Price, 2), Cost = decimal.Round(command.Cost, 2), WholesalePrice = decimal.Round(command.WholesalePrice, 2), WholesaleMinimumQuantity = decimal.Round(command.WholesaleMinimumQuantity, 3), IsActive = true };
+        var product = new ProductRecord { Id = Guid.NewGuid(), Code = command.Code.Trim(), NormalizedCode = normalizedCode, Description = command.Description.Trim(), Price = decimal.Round(command.Price, 2), Cost = decimal.Round(command.Cost, 2), WholesalePrice = decimal.Round(command.WholesalePrice, 2), WholesaleMinimumQuantity = decimal.Round(command.WholesaleMinimumQuantity, 3), IsKit = command.IsKit, IsActive = true };
         database.Products.Add(product);
         await database.SaveChangesAsync(cancellationToken);
         return ToResult(product);
@@ -30,7 +30,7 @@ public sealed class ProductCatalogService(PosDbContext database)
         var product = await database.Products.SingleOrDefaultAsync(item => item.Id == id, cancellationToken) ?? throw new KeyNotFoundException("Producto no encontrado.");
         var normalizedCode = NormalizeCode(command.Code);
         if (await database.Products.AnyAsync(item => item.Id != id && item.NormalizedCode == normalizedCode, cancellationToken)) throw new InvalidOperationException("El codigo del producto ya existe.");
-        product.Code = command.Code.Trim(); product.NormalizedCode = normalizedCode; product.Description = command.Description.Trim(); product.Price = decimal.Round(command.Price, 2); product.Cost = decimal.Round(command.Cost, 2); product.WholesalePrice = decimal.Round(command.WholesalePrice, 2); product.WholesaleMinimumQuantity = decimal.Round(command.WholesaleMinimumQuantity, 3);
+        product.Code = command.Code.Trim(); product.NormalizedCode = normalizedCode; product.Description = command.Description.Trim(); product.Price = decimal.Round(command.Price, 2); product.Cost = decimal.Round(command.Cost, 2); product.WholesalePrice = decimal.Round(command.WholesalePrice, 2); product.WholesaleMinimumQuantity = decimal.Round(command.WholesaleMinimumQuantity, 3); product.IsKit = command.IsKit;
         await database.SaveChangesAsync(cancellationToken);
         return ToResult(product);
     }

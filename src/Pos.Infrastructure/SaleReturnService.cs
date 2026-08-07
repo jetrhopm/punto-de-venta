@@ -10,7 +10,7 @@ public sealed record ReturnSaleCommand(Guid OperationId, Guid SaleId, IReadOnlyL
 public sealed record ReturnSaleResult(Guid ReturnId, Guid SaleId, decimal Amount, bool Existing);
 public sealed record SaleLineForReturn(Guid ProductId, string Description, decimal SoldQuantity, decimal ReturnedQuantity, decimal UnitPrice);
 
-public sealed class SaleReturnService(PosDbContext database)
+public sealed class SaleReturnService(PosDbContext database, KitService kits)
 {
     public async Task<ReturnSaleResult?> ReturnAsync(string token, ReturnSaleCommand command, CancellationToken cancellationToken)
     {
@@ -36,7 +36,9 @@ public sealed class SaleReturnService(PosDbContext database)
         var record = new ReturnRecord { Id = Guid.NewGuid(), SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Amount = decimal.Round(amount, 2), Reason = command.Reason.Trim(), CreatedAtUtc = DateTimeOffset.UtcNow };
         foreach (var line in lines)
         {
-            line.ReturnId = record.Id; var product = await database.Products.SingleAsync(item => item.Id == line.ProductId, cancellationToken); var before = product.Stock; product.Stock = decimal.Round(before + line.Quantity, 3, MidpointRounding.AwayFromZero); database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = line.ProductId, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = line.Quantity, StockBefore = before, StockAfter = product.Stock, Reason = "SaleReturn", CreatedAtUtc = record.CreatedAtUtc });
+            line.ReturnId = record.Id;
+            var parts = await kits.ExpandAsync(line.ProductId, line.Quantity, cancellationToken) ?? throw new KeyNotFoundException("Producto de devolucion no encontrado.");
+            foreach (var part in parts) { var product = await database.Products.SingleAsync(item => item.Id == part.ProductId, cancellationToken); var before = product.Stock; product.Stock = decimal.Round(before + part.Quantity, 3, MidpointRounding.AwayFromZero); database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = part.ProductId, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = part.Quantity, StockBefore = before, StockAfter = product.Stock, Reason = line.ProductId == part.ProductId ? "SaleReturn" : "KitReturn", CreatedAtUtc = record.CreatedAtUtc }); }
         }
         var payment = await database.Payments.SingleOrDefaultAsync(item => item.SaleId == sale.Id, cancellationToken);
         if (payment?.Method == "Cash") database.CashMovements.Add(new CashMovementRecord { Id = Guid.NewGuid(), ShiftId = shift.Id, Type = "Out", Amount = record.Amount, Reason = $"Devolucion de venta {sale.Id}", CreatedAtUtc = record.CreatedAtUtc });
