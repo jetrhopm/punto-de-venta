@@ -19,6 +19,7 @@ builder.Services.AddScoped<CustomerCreditService>();
 builder.Services.AddScoped<SupplierPurchaseService>();
 builder.Services.AddScoped<SaleReversalService>();
 builder.Services.AddScoped<SaleReturnService>();
+builder.Services.AddScoped<ReportService>();
 
 var app = builder.Build();
 
@@ -176,6 +177,25 @@ app.MapPost("/api/sales/return", async (HttpRequest request, ReturnSaleCommand c
 app.MapGet("/api/sales/{saleId:guid}/return-lines", async (Guid saleId, HttpRequest request, SaleReturnService returns, CancellationToken cancellationToken) =>
 {
     var result = await returns.LinesAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), saleId, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapGet("/api/reports/sales", async (DateTimeOffset from, DateTimeOffset to, HttpRequest request, ReportService reports, CancellationToken cancellationToken) =>
+{
+    var result = await reports.SalesAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), from, to, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapGet("/api/reports/sales.csv", async (DateTimeOffset from, DateTimeOffset to, HttpRequest request, ReportService reports, CancellationToken cancellationToken) =>
+{
+    var content = await reports.SalesCsvAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), from, to, cancellationToken); return content is null ? Results.Unauthorized() : Results.File(content, "text/csv", $"ventas-{from:yyyyMMdd}-{to:yyyyMMdd}.csv");
+});
+app.MapGet("/api/reports/inventory", async (HttpRequest request, ReportService reports, CancellationToken cancellationToken) =>
+{
+    var result = await reports.InventoryAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapGet("/api/reports/credit", async (HttpRequest request, ReportService reports, CancellationToken cancellationToken) =>
+{
+    var result = await reports.CreditAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
 

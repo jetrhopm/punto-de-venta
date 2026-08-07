@@ -29,3 +29,4 @@
 - Se agregan proveedores, recepcion de compras, costo promedio ponderado y pantalla WPF de compras.
 - Se implementan cancelaciones idempotentes con reverso de inventario, caja o credito y motivo auditado.
 - Se agregan devoluciones parciales por partida con limite vendido, reverso de caja o credito e idempotencia.
+- Se agregan reportes de ventas protegidos por permiso y exportacion CSV con proteccion contra formulas.

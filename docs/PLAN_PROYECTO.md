@@ -54,7 +54,8 @@ Estado actualizado: 2026-08-06
 
 ### Fase 2: operacion comercial completa
 
-- En curso: clientes, credito, abonos, proveedores, compras con costo promedio, cancelacion total y devoluciones parciales; faltan reportes, promociones y kits.
+- Completado: clientes, credito, abonos, proveedores, compras con costo promedio, cancelacion total, devoluciones parciales y reportes de ventas con exportacion CSV.
+- Pendiente de Fase 2: mayoreo, promociones, kits, editor avanzado de ticket e instalador de produccion con actualizaciones seguras.
 - Proveedores, compras y recepciones.
 - Mayoreo, promociones, kits, devoluciones y reportes.
 - Editor completo de ticket.

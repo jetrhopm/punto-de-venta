@@ -62,6 +62,7 @@ public partial class MainWindow : Window
             if (section == "Inventario") { var window = new InventoryAdjustmentWindow { Owner = this }; window.ShowDialog(); return; }
             if (section == "Clientes") { OpenCustomers(); return; }
             if (section == "Compras") { var window = new PurchaseWindow { Owner = this }; window.ShowDialog(); return; }
+            if (section == "Reportes") { var window = new ReportsWindow { Owner = this }; window.ShowDialog(); return; }
             NavigateTo(section);
         }
     }
@@ -277,6 +278,7 @@ public partial class MainWindow : Window
         "Corte" => SessionContext.HasPermission("CloseShift"),
         "Configuracion" => SessionContext.HasPermission("ConfigureStore"),
         "Compras" => SessionContext.HasPermission("ManageSuppliersAndPurchases"),
+        "Reportes" => SessionContext.HasPermission("ViewReports"),
         _ => false
     };
 

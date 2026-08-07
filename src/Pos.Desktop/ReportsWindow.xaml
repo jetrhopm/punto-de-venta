@@ -1,0 +1,37 @@
+<Window x:Class="Pos.Desktop.ReportsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Reportes" Width="900" Height="600" MinWidth="700" MinHeight="420"
+        WindowStartupLocation="CenterOwner" Loaded="OnLoaded">
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <DockPanel>
+            <Button DockPanel.Dock="Right" Click="OnExportClick">Exportar ventas CSV</Button>
+            <StackPanel>
+                <TextBlock Text="Reporte de ventas" FontSize="21" FontWeight="SemiBold" Foreground="#17324D" />
+                <TextBlock x:Name="RangeText" Margin="0,4,0,0" Foreground="#526577" />
+            </StackPanel>
+        </DockPanel>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,16,0,12">
+            <TextBlock Text="Ventas:" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <TextBlock x:Name="CountText" Margin="6,0,22,0" VerticalAlignment="Center" />
+            <TextBlock Text="Total:" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <TextBlock x:Name="TotalText" Margin="6,0,0,0" VerticalAlignment="Center" />
+        </StackPanel>
+        <ListView Grid.Row="2" x:Name="SalesList">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="Fecha" DisplayMemberBinding="{Binding CreatedAtUtc}" Width="170" />
+                    <GridViewColumn Header="Venta" DisplayMemberBinding="{Binding SaleId}" Width="245" />
+                    <GridViewColumn Header="Estado" DisplayMemberBinding="{Binding Status}" Width="100" />
+                    <GridViewColumn Header="Total" DisplayMemberBinding="{Binding Total}" Width="90" />
+                    <GridViewColumn Header="Pago" DisplayMemberBinding="{Binding PaymentMethod}" Width="120" />
+                </GridView>
+            </ListView.View>
+        </ListView>
+    </Grid>
+</Window>
