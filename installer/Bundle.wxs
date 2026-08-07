@@ -1,3 +1,3 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
-  <Bundle Name="Punto de Venta" Manufacturer="Punto de Venta" Version="$(var.ProductVersion)" UpgradeCode="E2F2F47F-2F4C-4D24-9A0D-7D8F8B8A6C10"><BootstrapperApplication><bal:WixStandardBootstrapperApplication LicenseUrl="" Theme="hyperlinkLicense" /></BootstrapperApplication><Chain><MsiPackage SourceFile="$(var.MsiPath)" DisplayInternalUI="yes" /></Chain></Bundle>
+  <Bundle Name="Punto de Venta" Manufacturer="Punto de Venta" Version="$(var.ProductVersion)" UpgradeCode="E2F2F47F-2F4C-4D24-9A0D-7D8F8B8A6C10"><BootstrapperApplication><bal:WixStandardBootstrapperApplication LicenseUrl="" Theme="hyperlinkLicense" /></BootstrapperApplication><Chain><MsiPackage SourceFile="$(var.MsiPath)" /></Chain></Bundle>
 </Wix>

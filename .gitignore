@@ -1,6 +1,7 @@
 # Herramientas locales regenerables
 .tools/
 .wix/
+.tools/wix6-extension/
 
 # .NET
 bin/

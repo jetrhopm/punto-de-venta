@@ -59,7 +59,8 @@ Estado actualizado: 2026-08-06
 - Completado adicional: promociones porcentuales por producto con vigencia.
 - Completado adicional: pantalla WPF de promociones y preparación local de publicación de producción con WiX.
 - Completado adicional: kits con componentes y reversos, configuración WPF de ticket y MSI de producción con actualización mayor/reparación.
-- Pendiente técnico: generar y probar el Bundle `Setup.exe` cuando WiX Bal quede reparado; integrar PostgreSQL/servicio Windows en el Bundle y validar en Windows 10/11 limpios.
+- Completado adicional: Bundle `Setup.exe` y MSI generados reproduciblemente con WiX 6, actualización mayor y reparación.
+- Pendiente de validación externa: integrar PostgreSQL/servicio Windows en el Bundle y probar instalación, actualización, reparación y conservación de datos en Windows 10/11 limpios.
 - Proveedores, compras y recepciones.
 - Mayoreo, promociones, kits, devoluciones y reportes.
 - Editor completo de ticket.

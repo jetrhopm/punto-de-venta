@@ -2,7 +2,7 @@
 
 El instalador usa WiX Toolset v7. La compilacion requiere ejecutar `scripts/package-production.ps1` desde una terminal con permisos administrativos cuando se instale PostgreSQL como servicio.
 
-Para crear el MSI y `Setup.exe` ejecuta `scripts/build-installer.ps1 -Version 1.0.0`. Cambiar la version produce una actualización mayor; el MSI permite reparar desde Aplicaciones instaladas. WiX debe mostrar `WixToolset.Bal.wixext 7.0.0` sin la marca `damaged`; si aparece dañada, hay que reparar la extensión antes de crear el Bundle.
+Para crear el MSI y `Setup.exe` ejecuta `scripts/build-installer.ps1 -Version 1.0.0`. El script usa WiX 6 y descarga la extensión Bal oficial desde NuGet si no existe. Cambiar la version produce una actualización mayor; el MSI permite reparar desde Aplicaciones instaladas.
 
 Antes de publicar una version real se debe:
 
