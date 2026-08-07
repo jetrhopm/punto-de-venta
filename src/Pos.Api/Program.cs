@@ -21,6 +21,7 @@ builder.Services.AddScoped<SupplierPurchaseService>();
 builder.Services.AddScoped<SaleReversalService>();
 builder.Services.AddScoped<SaleReturnService>();
 builder.Services.AddScoped<ReportService>();
+builder.Services.AddScoped<PromotionService>();
 
 var app = builder.Build();
 
@@ -158,6 +159,13 @@ app.MapPut("/api/products/{id:guid}", async (Guid id, HttpRequest request, Produ
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["product"] = [exception.Message] }); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+
+app.MapPost("/api/promotions", async (HttpRequest request, PromotionCommand command, PromotionService promotions, CancellationToken cancellationToken) =>
+{
+    try { var result = await promotions.CreateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Created($"/api/promotions/{result.Id}", result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["promotion"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
 
 app.MapPost("/api/sales/complete", async (HttpRequest request, CompleteSaleCommand command, SaleService sales, CancellationToken cancellationToken) =>

@@ -31,3 +31,4 @@
 - Se agregan devoluciones parciales por partida con limite vendido, reverso de caja o credito e idempotencia.
 - Se agregan reportes de ventas protegidos por permiso y exportacion CSV con proteccion contra formulas.
 - Se agregan precio de mayoreo, cantidad minima y migraciones automaticas al iniciar la API.
+- Se agregan promociones porcentuales por producto con vigencia, permiso y aplicacion transaccional.

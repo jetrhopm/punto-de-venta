@@ -9,7 +9,7 @@ public sealed record SaleLineCommand(Guid ProductId, decimal Quantity, bool UseW
 public sealed record CompleteSaleCommand(Guid OperationId, IReadOnlyList<SaleLineCommand> Lines, decimal CashReceived, Guid? CustomerId = null, string PaymentMethod = "Cash");
 public sealed record CompleteSaleResult(Guid SaleId, Guid OperationId, decimal Total, decimal CashReceived, decimal Change, bool Existing);
 
-public sealed class SaleService(PosDbContext database)
+public sealed class SaleService(PosDbContext database, PromotionService promotions)
 {
     public async Task<CompleteSaleResult?> CompleteAsync(string accessToken, CompleteSaleCommand command, CancellationToken cancellationToken)
     {
@@ -34,6 +34,7 @@ public sealed class SaleService(PosDbContext database)
             if (product.Stock < line.Quantity) throw new InvalidOperationException($"Existencia insuficiente para {product.Description}.");
             var stockBefore = product.Stock;
             var unitPrice = line.UseWholesale && product.WholesalePrice > 0m && line.Quantity >= product.WholesaleMinimumQuantity ? product.WholesalePrice : product.Price;
+            unitPrice = await promotions.DiscountedPriceAsync(product.Id, unitPrice, DateTimeOffset.UtcNow, cancellationToken);
             var total = decimal.Round(unitPrice * line.Quantity, 2, MidpointRounding.AwayFromZero);
             product.Stock -= line.Quantity;
             lines.Add(new SaleLineRecord { Id = Guid.NewGuid(), ProductId = product.Id, Quantity = line.Quantity, UnitPrice = unitPrice, LineTotal = total, StockBefore = stockBefore, StockAfter = product.Stock });
