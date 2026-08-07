@@ -57,7 +57,8 @@ Estado actualizado: 2026-08-06
 - Completado: clientes, credito, abonos, proveedores, compras con costo promedio, cancelacion total, devoluciones parciales y reportes de ventas con exportacion CSV.
 - Completado adicional: precio de mayoreo y cantidad minima persistidos y aplicables en la venta.
 - Completado adicional: promociones porcentuales por producto con vigencia.
-- Pendiente de Fase 2: kits, editor avanzado de ticket e instalador de produccion con actualizaciones seguras.
+- Completado adicional: pantalla WPF de promociones y preparación local de publicación de producción con WiX.
+- Pendiente de Fase 2: kits, editor avanzado de ticket y Bundle Setup.exe con instalación de PostgreSQL, reparación y actualización probadas.
 - Proveedores, compras y recepciones.
 - Mayoreo, promociones, kits, devoluciones y reportes.
 - Editor completo de ticket.

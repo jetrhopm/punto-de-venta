@@ -63,6 +63,7 @@ public partial class MainWindow : Window
             if (section == "Clientes") { OpenCustomers(); return; }
             if (section == "Compras") { var window = new PurchaseWindow { Owner = this }; window.ShowDialog(); return; }
             if (section == "Reportes") { var window = new ReportsWindow { Owner = this }; window.ShowDialog(); return; }
+            if (section == "Promociones") { var window = new PromotionWindow { Owner = this }; window.ShowDialog(); return; }
             NavigateTo(section);
         }
     }
@@ -279,6 +280,7 @@ public partial class MainWindow : Window
         "Configuracion" => SessionContext.HasPermission("ConfigureStore"),
         "Compras" => SessionContext.HasPermission("ManageSuppliersAndPurchases"),
         "Reportes" => SessionContext.HasPermission("ViewReports"),
+        "Promociones" => SessionContext.HasPermission("ManageProducts"),
         _ => false
     };
 

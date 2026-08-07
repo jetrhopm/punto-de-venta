@@ -32,3 +32,4 @@
 - Se agregan reportes de ventas protegidos por permiso y exportacion CSV con proteccion contra formulas.
 - Se agregan precio de mayoreo, cantidad minima y migraciones automaticas al iniciar la API.
 - Se agregan promociones porcentuales por producto con vigencia, permiso y aplicacion transaccional.
+- Se agrega pantalla WPF para administrar promociones y herramienta local de publicación de producción con WiX.
