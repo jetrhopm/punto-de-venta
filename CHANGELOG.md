@@ -28,3 +28,4 @@
 - Se inicia Fase 2 con clientes, ventas a credito, abonos idempotentes y estado de cuenta.
 - Se agregan proveedores, recepcion de compras, costo promedio ponderado y pantalla WPF de compras.
 - Se implementan cancelaciones idempotentes con reverso de inventario, caja o credito y motivo auditado.
+- Se agregan devoluciones parciales por partida con limite vendido, reverso de caja o credito e idempotencia.

@@ -226,6 +226,14 @@ public partial class MainWindow : Window
         catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API."; }
     }
 
+    private void OnReturnLastSaleClick(object sender, RoutedEventArgs e)
+    {
+        if (!SessionContext.HasPermission("ProcessReturns")) { StatusText.Text = "No tienes permiso para procesar devoluciones."; return; }
+        if (_lastSaleId is null) { StatusText.Text = "No hay una venta reciente para devolver."; return; }
+        var window = new ReturnSaleWindow(_lastSaleId.Value) { Owner = this };
+        window.ShowDialog();
+    }
+
     private static async Task SaveTicketPdfAsync(Guid saleId)
     {
         using var response = await Client.GetAsync($"/api/sales/{saleId}/ticket.pdf");

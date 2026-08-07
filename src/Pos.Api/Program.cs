@@ -18,6 +18,7 @@ builder.Services.AddScoped<UserAdministrationService>();
 builder.Services.AddScoped<CustomerCreditService>();
 builder.Services.AddScoped<SupplierPurchaseService>();
 builder.Services.AddScoped<SaleReversalService>();
+builder.Services.AddScoped<SaleReturnService>();
 
 var app = builder.Build();
 
@@ -164,6 +165,18 @@ app.MapPost("/api/sales/cancel", async (HttpRequest request, CancelSaleCommand c
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["sale"] = [exception.Message] }); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+app.MapPost("/api/sales/return", async (HttpRequest request, ReturnSaleCommand command, SaleReturnService returns, CancellationToken cancellationToken) =>
+{
+    try { var result = await returns.ReturnAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["return"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+app.MapGet("/api/sales/{saleId:guid}/return-lines", async (Guid saleId, HttpRequest request, SaleReturnService returns, CancellationToken cancellationToken) =>
+{
+    var result = await returns.LinesAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), saleId, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
 
 app.MapPost("/api/inventory/adjust", async (HttpRequest request, InventoryAdjustmentCommand command, InventoryService inventory, CancellationToken cancellationToken) =>
