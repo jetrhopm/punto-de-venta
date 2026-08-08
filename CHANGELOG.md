@@ -35,3 +35,4 @@
 - Se agrega pantalla WPF para administrar promociones y herramienta local de publicación de producción con WiX.
 - Se implementan kits con componentes, devolución/cancelación por componentes y configuración persistente de ticket.
 - Se genera Bundle final `Setup.exe` y MSI de producción con actualización mayor y reparación mediante WiX.
+- Se reorganiza visualmente la ventana de ventas en tres zonas: acciones rápidas, carrito y resumen de cobro.

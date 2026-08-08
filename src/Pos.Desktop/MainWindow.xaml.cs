@@ -178,7 +178,14 @@ public partial class MainWindow : Window
         if (existing is null) _cart.Add(new CartLineView(row.Product.Id, row.Product.Description, row.Product.Price, 1));
         else { existing.Quantity++; CartList.Items.Refresh(); }
         ProductSearchTextBox.Clear(); ProductResultsList.Visibility = Visibility.Collapsed;
+        UpdateSaleSummary();
         StatusText.Text = "Producto agregado a la venta.";
+    }
+
+    private void UpdateSaleSummary()
+    {
+        SaleTotalText.Text = $"${_cart.Sum(item => item.Total):0.00}";
+        SaleItemsText.Text = $"Artículos: {_cart.Sum(item => item.Quantity):0.###}";
     }
 
     private sealed record ProductSearchResult(Guid Id, string Code, string Description, decimal Price);
@@ -208,7 +215,7 @@ public partial class MainWindow : Window
             if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
             var result = await response.Content.ReadFromJsonAsync<SaleResponse>();
             _lastSaleId = result?.SaleId;
-            _cart.Clear(); CartList.Items.Refresh(); StatusText.Text = result is null ? "Venta confirmada." : cashWindow.CreditRequested ? "Venta a credito confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
+            _cart.Clear(); CartList.Items.Refresh(); UpdateSaleSummary(); StatusText.Text = result is null ? "Venta confirmada." : cashWindow.CreditRequested ? "Venta a credito confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
             if (result is not null) await SaveTicketPdfAsync(result.SaleId);
         }
         catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API para confirmar la venta."; }
