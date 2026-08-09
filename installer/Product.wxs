@@ -1,8 +1,10 @@
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="Punto de Venta" Manufacturer="Punto de Venta" Version="$(var.ProductVersion)" UpgradeCode="8B7C3D3B-7D6C-4E7F-9A18-2C31CF5A9E10" Scope="perMachine">
     <MajorUpgrade DowngradeErrorMessage="Ya existe una version mas reciente." />
     <MediaTemplate EmbedCab="yes" />
     <StandardDirectory Id="ProgramFiles64Folder"><Directory Id="INSTALLFOLDER" Name="Punto de Venta"><Directory Id="CLIENTFOLDER" Name="client" /><Directory Id="APIFOLDER" Name="api" /><Directory Id="PGFOLDER" Name="postgresql" /></Directory></StandardDirectory>
-    <Feature Id="MainFeature" Title="Punto de Venta" Level="1"><Files Include="$(var.SourceDir)\client\**" Directory="CLIENTFOLDER" /><Files Include="$(var.SourceDir)\api\**" Directory="APIFOLDER" /><Files Include="$(var.SourceDir)\postgresql\**" Directory="PGFOLDER" /><File Source="$(var.SourceDir)\install-production.ps1" /></Feature>
+    <StandardDirectory Id="ProgramMenuFolder"><Directory Id="APPLICATIONPROGRAMSFOLDER" Name="Punto de Venta" /></StandardDirectory>
+    <Feature Id="MainFeature" Title="Punto de Venta" Level="1"><Files Include="$(var.SourceDir)\client\**" Directory="CLIENTFOLDER" /><Files Include="$(var.SourceDir)\api\**" Directory="APIFOLDER" /><Files Include="$(var.SourceDir)\postgresql\**" Directory="PGFOLDER" /><File Source="$(var.SourceDir)\install-production.ps1" /><Component Id="ShortcutsComponent" Directory="INSTALLFOLDER"><RegistryValue Root="HKLM" Key="Software\PuntoDeVenta" Name="ShortcutsInstalled" Type="integer" Value="1" KeyPath="yes" /><Shortcut Id="StartMenuShortcut" Directory="APPLICATIONPROGRAMSFOLDER" Name="Punto de Venta" Target="[CLIENTFOLDER]Pos.Desktop.exe" WorkingDirectory="CLIENTFOLDER" /><Shortcut Id="DesktopShortcut" Directory="DesktopFolder" Name="Punto de Venta" Target="[CLIENTFOLDER]Pos.Desktop.exe" WorkingDirectory="CLIENTFOLDER" /></Component></Feature>
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
   </Package>
 </Wix>

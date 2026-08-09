@@ -22,6 +22,8 @@ El Bundle actual todavía no ejecuta automáticamente ese bootstrap durante la c
 
 Desde la version 1.0.3, Burn encadena el bootstrap autocontenido despues del MSI. La instalacion normal ya no requiere ejecutar PowerShell ni instalar PostgreSQL o Visual C++ manualmente. La validacion en una VM limpia sigue siendo obligatoria.
 
+El instalador incluye licencia RTF, ruta seleccionable, accesos directos en Escritorio e Inicio, icono del producto, PostgreSQL, Visual C++ Redistributable y el bootstrap automatico de servicios. La interfaz estandar de WiX conserva algunos textos del sistema mientras se incorpora una localizacion completa en espanol.
+
 Antes de publicar una version real se debe:
 
 - firmar `Setup.exe` y los binarios con un certificado Authenticode;
