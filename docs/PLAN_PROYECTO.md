@@ -60,6 +60,7 @@ Estado actualizado: 2026-08-06
 - Completado adicional: pantalla WPF de promociones y preparación local de publicación de producción con WiX.
 - Completado adicional: kits con componentes y reversos, configuración WPF de ticket y MSI de producción con actualización mayor/reparación.
 - Completado adicional: Bundle `Setup.exe` y MSI generados reproduciblemente con WiX 6, actualización mayor y reparación.
+- Completado adicional: pantalla WPF para configurar kits y componentes.
 - Pendiente de validación externa: integrar PostgreSQL/servicio Windows en el Bundle y probar instalación, actualización, reparación y conservación de datos en Windows 10/11 limpios.
 - Proveedores, compras y recepciones.
 - Mayoreo, promociones, kits, devoluciones y reportes.

@@ -65,6 +65,7 @@ public partial class MainWindow : Window
             if (section == "Reportes") { var window = new ReportsWindow { Owner = this }; window.ShowDialog(); return; }
             if (section == "Promociones") { var window = new PromotionWindow { Owner = this }; window.ShowDialog(); return; }
             if (section == "Configuracion") { var window = new TicketSettingsWindow { Owner = this }; window.ShowDialog(); return; }
+            if (section == "Kits") { var window = new KitWindow { Owner = this }; window.ShowDialog(); return; }
             NavigateTo(section);
         }
     }
@@ -306,6 +307,7 @@ public partial class MainWindow : Window
         "Compras" => SessionContext.HasPermission("ManageSuppliersAndPurchases"),
         "Reportes" => SessionContext.HasPermission("ViewReports"),
         "Promociones" => SessionContext.HasPermission("ManageProducts"),
+        "Kits" => SessionContext.HasPermission("ManageProducts"),
         _ => false
     };
 

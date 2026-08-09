@@ -37,3 +37,4 @@
 - Se genera Bundle final `Setup.exe` y MSI de producción con actualización mayor y reparación mediante WiX.
 - Se reorganiza visualmente la ventana de ventas en tres zonas: acciones rápidas, carrito y resumen de cobro.
 - Se conecta Enter y botón Buscar al alta rápida de productos y Delete a la eliminación de partidas del carrito.
+- Se agrega pantalla WPF para configurar kits y sus componentes con permiso de productos.
