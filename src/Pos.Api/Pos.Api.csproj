@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
     <ProjectReference Include="..\Pos.Application\Pos.Application.csproj" />
     <ProjectReference Include="..\Pos.Infrastructure\Pos.Infrastructure.csproj" />
     <ProjectReference Include="..\Pos.Domain\Pos.Domain.csproj" />

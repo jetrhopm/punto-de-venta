@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Pos.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
-var connectionString = Environment.GetEnvironmentVariable("POS_CONNECTION_STRING") ?? PosDbContextFactory.ReadDevelopmentConnectionString();
+var connectionString = PosDbContextFactory.ReadConfiguredConnectionString();
 builder.Services.AddDbContext<PosDbContext>(options => options.UseNpgsql(connectionString).ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning)));
 builder.Services.AddScoped<PasswordHasher<UserRecord>>();
 builder.Services.AddScoped<InitialSetupService>();

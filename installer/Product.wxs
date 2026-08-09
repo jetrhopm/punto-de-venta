@@ -2,7 +2,7 @@
   <Package Name="Punto de Venta" Manufacturer="Punto de Venta" Version="$(var.ProductVersion)" UpgradeCode="8B7C3D3B-7D6C-4E7F-9A18-2C31CF5A9E10" Scope="perMachine">
     <MajorUpgrade DowngradeErrorMessage="Ya existe una version mas reciente." />
     <MediaTemplate EmbedCab="yes" />
-    <StandardDirectory Id="ProgramFiles64Folder"><Directory Id="INSTALLFOLDER" Name="Punto de Venta"><Directory Id="CLIENTFOLDER" Name="client" /><Directory Id="APIFOLDER" Name="api" /></Directory></StandardDirectory>
-    <Feature Id="MainFeature" Title="Punto de Venta" Level="1"><Files Include="$(var.SourceDir)\client\**" Directory="CLIENTFOLDER" /><Files Include="$(var.SourceDir)\api\**" Directory="APIFOLDER" /></Feature>
+    <StandardDirectory Id="ProgramFiles64Folder"><Directory Id="INSTALLFOLDER" Name="Punto de Venta"><Directory Id="CLIENTFOLDER" Name="client" /><Directory Id="APIFOLDER" Name="api" /><Directory Id="PGFOLDER" Name="postgresql" /></Directory></StandardDirectory>
+    <Feature Id="MainFeature" Title="Punto de Venta" Level="1"><Files Include="$(var.SourceDir)\client\**" Directory="CLIENTFOLDER" /><Files Include="$(var.SourceDir)\api\**" Directory="APIFOLDER" /><Files Include="$(var.SourceDir)\postgresql\**" Directory="PGFOLDER" /><File Source="$(var.SourceDir)\install-production.ps1" /></Feature>
   </Package>
 </Wix>
