@@ -20,6 +20,8 @@ El script es idempotente. Para quitar solo los servicios sin borrar datos:
 
 El Bundle actual todavía no ejecuta automáticamente ese bootstrap durante la cadena Burn; la ejecución automática queda sujeta a la prueba en Windows limpio para no arriesgar datos durante una actualización.
 
+Desde la version 1.0.3, Burn encadena el bootstrap autocontenido despues del MSI. La instalacion normal ya no requiere ejecutar PowerShell ni instalar PostgreSQL o Visual C++ manualmente. La validacion en una VM limpia sigue siendo obligatoria.
+
 Antes de publicar una version real se debe:
 
 - firmar `Setup.exe` y los binarios con un certificado Authenticode;
