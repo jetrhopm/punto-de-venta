@@ -166,12 +166,23 @@ public partial class MainWindow : Window
         if (e.Key == Key.Enter && ProductResultsList.Items.Count == 1)
         {
             ProductResultsList.SelectedIndex = 0;
-            StatusText.Text = "Producto seleccionado para la venta.";
+            AddSelectedProduct();
             e.Handled = true;
         }
     }
 
+    private void OnSearchButtonClick(object sender, RoutedEventArgs e)
+    {
+        if (ProductResultsList.Items.Count == 1) { ProductResultsList.SelectedIndex = 0; AddSelectedProduct(); }
+        else StatusText.Text = ProductResultsList.Items.Count == 0 ? "No hay productos para agregar." : "Selecciona un producto de la lista.";
+    }
+
     private void OnProductSelected(object sender, MouseButtonEventArgs e)
+    {
+        AddSelectedProduct();
+    }
+
+    private void AddSelectedProduct()
     {
         if (ProductResultsList.SelectedItem is not ProductSearchRow row) return;
         var existing = _cart.FirstOrDefault(item => item.ProductId == row.Product.Id);
@@ -180,6 +191,12 @@ public partial class MainWindow : Window
         ProductSearchTextBox.Clear(); ProductResultsList.Visibility = Visibility.Collapsed;
         UpdateSaleSummary();
         StatusText.Text = "Producto agregado a la venta.";
+    }
+
+    private void OnCartKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Delete || CartList.SelectedItem is not CartLineView line) return;
+        _cart.Remove(line); CartList.Items.Refresh(); UpdateSaleSummary(); StatusText.Text = "Partida eliminada de la venta."; e.Handled = true;
     }
 
     private void UpdateSaleSummary()
