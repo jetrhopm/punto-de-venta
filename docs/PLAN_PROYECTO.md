@@ -1,6 +1,6 @@
 # Plan completo del punto de venta
 
-Estado actualizado: 2026-08-06
+Estado actualizado: 2026-08-08
 
 ## Terminado
 
@@ -62,10 +62,12 @@ Estado actualizado: 2026-08-06
 - Completado adicional: Bundle `Setup.exe` y MSI generados reproduciblemente con WiX 6, actualización mayor y reparación.
 - Completado adicional: pantalla WPF para configurar kits y componentes.
 - Pendiente de validación externa: integrar PostgreSQL/servicio Windows en el Bundle y probar instalación, actualización, reparación y conservación de datos en Windows 10/11 limpios.
-- Proveedores, compras y recepciones.
-- Mayoreo, promociones, kits, devoluciones y reportes.
-- Editor completo de ticket.
-- Instalador de produccion y actualizaciones seguras.
+- Verificado: compilacion de la solucion sin advertencias ni errores.
+- Verificado: pruebas unitarias e integracion contra PostgreSQL real, incluyendo migraciones y lectura del catalogo.
+- Verificado: publicacion autocontenida `win-x64` y generacion reproducible de MSI y `Setup.exe`.
+- Pendiente externo para declarar liberacion de produccion: integrar PostgreSQL y el servicio Windows dentro del Bundle, y probar instalacion, actualizacion, reparacion y conservacion de datos en Windows 10/11 limpios.
+
+La implementacion local de la Fase 2 esta terminada. La validacion externa requiere la maquina virtual o equipos limpios y permisos administrativos; no debe simularse en desarrollo.
 
 ### Fase 3: multicaja LAN
 
