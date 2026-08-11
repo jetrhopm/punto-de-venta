@@ -21,6 +21,8 @@ public partial class LoginWindow : Window
         if (window.ShowDialog() == true) ServerText.Text = $"Servidor: {ApiClient.BaseUrl}";
     }
 
+    private void OnPairClick(object sender, RoutedEventArgs e) => new JoinServerWindow { Owner = this }.ShowDialog();
+
     private async void OnLoginClick(object sender, RoutedEventArgs e)
     {
         MessageText.Text = "";
@@ -35,6 +37,7 @@ public partial class LoginWindow : Window
             var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
             SessionContext.AccessToken = result?.AccessToken;
             SessionContext.DisplayName = result?.DisplayName;
+            SessionContext.IsAdministrator = result?.IsAdministrator == true;
             SessionContext.Permissions.Clear();
             if (result?.Permissions is not null) SessionContext.Permissions.UnionWith(result.Permissions);
             var mainWindow = new MainWindow();

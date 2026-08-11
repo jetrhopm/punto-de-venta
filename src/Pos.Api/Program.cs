@@ -25,6 +25,7 @@ builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<PromotionService>();
 builder.Services.AddScoped<KitService>();
 builder.Services.AddScoped<TicketSettingsService>();
+builder.Services.AddScoped<LanPairingService>();
 
 var app = builder.Build();
 
@@ -58,6 +59,16 @@ app.MapGet("/api/lan/info", () => Results.Ok(new
     apiVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0",
     machine = Environment.MachineName
 }));
+app.MapPost("/api/lan/pairing-codes", async (HttpRequest request, LanPairingService pairing, CancellationToken cancellationToken) =>
+{
+    var result = await pairing.CreateCodeAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapPost("/api/lan/pair", async (PairDeviceCommand command, LanPairingService pairing, CancellationToken cancellationToken) =>
+{
+    try { var result = await pairing.PairAsync(command, cancellationToken); return result is null ? Results.BadRequest(new { message = "Codigo invalido, usado o expirado." }) : Results.Ok(result); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
 app.MapGet("/api/ticket-settings", async (HttpRequest request, TicketSettingsService settings, CancellationToken cancellationToken) => { var result = await settings.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { result.TicketHeader, result.TicketFooter, result.TicketWidthMm }); });
 app.MapPut("/api/ticket-settings", async (HttpRequest request, TicketSettingsCommand command, TicketSettingsService settings, CancellationToken cancellationToken) => { try { var result = await settings.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { result.TicketHeader, result.TicketFooter, result.TicketWidthMm }); } catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["ticket"] = [exception.Message] }); } });
 

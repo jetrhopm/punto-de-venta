@@ -72,9 +72,10 @@ La implementacion local de la Fase 2 esta terminada. La validacion externa requi
 ### Fase 3: multicaja LAN
 
 - Incremento 1 completado: servidor configurable por IP/nombre, prueba de conexion, endpoint de compatibilidad, API preparada para escuchar en LAN privada y regla de Firewall restringida al perfil privado.
-- Pendiente: emparejamiento por codigo temporal e identificadores persistentes de tienda, equipo y caja.
+- Incremento 2 completado: codigo temporal de emparejamiento, identificadores persistentes y almacenamiento local protegido con DPAPI.
 - Pendiente: SignalR para avisos y concurrencia real sobre PostgreSQL.
 - Pendiente: pruebas con dos cajas y fallas de red.
+- Pendiente: validacion de version y estado activo de la caja en cada solicitud protegida.
 
 ### Fase 4: integraciones externas
 

@@ -70,6 +70,12 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnPairingCodeClick(object sender, RoutedEventArgs e)
+    {
+        if (!SessionContext.IsAdministrator) { StatusText.Text = "Solo un administrador puede generar codigos de caja."; return; }
+        new PairingCodeWindow { Owner = this }.ShowDialog();
+    }
+
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         var section = e.Key switch

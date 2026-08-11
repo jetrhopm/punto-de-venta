@@ -29,6 +29,8 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     public DbSet<ReturnLineRecord> ReturnLines => Set<ReturnLineRecord>();
     public DbSet<PromotionRecord> Promotions => Set<PromotionRecord>();
     public DbSet<KitComponentRecord> KitComponents => Set<KitComponentRecord>();
+    public DbSet<DeviceRecord> Devices => Set<DeviceRecord>();
+    public DbSet<PairingCodeRecord> PairingCodes => Set<PairingCodeRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -59,6 +61,14 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             entity.Property(register => register.Name).HasMaxLength(80).IsRequired();
             entity.HasIndex(register => new { register.StoreId, register.Name }).IsUnique();
             entity.HasOne<StoreRecord>().WithMany().HasForeignKey(register => register.StoreId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<DeviceRecord>(entity =>
+        {
+            entity.ToTable("device"); entity.HasKey(item => item.Id); entity.Property(item => item.Name).HasMaxLength(120).IsRequired(); entity.Property(item => item.DeviceType).HasMaxLength(30).IsRequired(); entity.Property(item => item.DeviceTokenHash).HasMaxLength(64).IsRequired(); entity.Property(item => item.CreatedAtUtc).HasColumnType("timestamp with time zone"); entity.Property(item => item.LastSeenAtUtc).HasColumnType("timestamp with time zone"); entity.HasIndex(item => item.DeviceTokenHash).IsUnique(); entity.HasIndex(item => new { item.StoreId, item.Name }).IsUnique(); entity.HasOne<StoreRecord>().WithMany().HasForeignKey(item => item.StoreId).OnDelete(DeleteBehavior.Restrict); entity.HasOne<RegisterRecord>().WithMany().HasForeignKey(item => item.RegisterId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<PairingCodeRecord>(entity =>
+        {
+            entity.ToTable("pairing_code"); entity.HasKey(item => item.Id); entity.Property(item => item.CodeHash).HasMaxLength(64).IsRequired(); entity.Property(item => item.CreatedAtUtc).HasColumnType("timestamp with time zone"); entity.Property(item => item.ExpiresAtUtc).HasColumnType("timestamp with time zone"); entity.Property(item => item.UsedAtUtc).HasColumnType("timestamp with time zone"); entity.HasIndex(item => item.CodeHash).IsUnique(); entity.HasOne<StoreRecord>().WithMany().HasForeignKey(item => item.StoreId).OnDelete(DeleteBehavior.Restrict); entity.HasOne<UserRecord>().WithMany().HasForeignKey(item => item.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
         });
         modelBuilder.Entity<ProductRecord>(entity =>
         {
@@ -175,6 +185,8 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
 public sealed class StoreRecord { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string BusinessType { get; set; } = string.Empty; public string TimeZoneId { get; set; } = "America/Mexico_City"; public string TicketHeader { get; set; } = string.Empty; public string TicketFooter { get; set; } = "Gracias por su compra"; public int TicketWidthMm { get; set; } = 80; public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class UserRecord { public Guid Id { get; set; } public string NormalizedUserName { get; set; } = string.Empty; public string PasswordHash { get; set; } = string.Empty; public string DisplayName { get; set; } = string.Empty; public bool IsAdministrator { get; set; } public bool IsActive { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class RegisterRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public string Name { get; set; } = string.Empty; public bool IsActive { get; set; } }
+public sealed class DeviceRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public Guid RegisterId { get; set; } public string Name { get; set; } = string.Empty; public string DeviceType { get; set; } = "Register"; public string DeviceTokenHash { get; set; } = string.Empty; public bool IsActive { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset? LastSeenAtUtc { get; set; } }
+public sealed class PairingCodeRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public Guid CreatedByUserId { get; set; } public string CodeHash { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset ExpiresAtUtc { get; set; } public DateTimeOffset? UsedAtUtc { get; set; } }
 public sealed class ProductRecord { public Guid Id { get; set; } public string Code { get; set; } = string.Empty; public string NormalizedCode { get; set; } = string.Empty; public string Description { get; set; } = string.Empty; public decimal Price { get; set; } public decimal Cost { get; set; } public decimal WholesalePrice { get; set; } public decimal WholesaleMinimumQuantity { get; set; } public decimal Stock { get; set; } public bool IsKit { get; set; } public bool IsActive { get; set; } }
 public sealed class PromotionRecord { public Guid Id { get; set; } public Guid ProductId { get; set; } public string Name { get; set; } = string.Empty; public decimal Percent { get; set; } public DateTimeOffset StartsAtUtc { get; set; } public DateTimeOffset EndsAtUtc { get; set; } public bool IsActive { get; set; } }
 public sealed class KitComponentRecord { public Guid Id { get; set; } public Guid KitProductId { get; set; } public Guid ComponentProductId { get; set; } public decimal Quantity { get; set; } }
