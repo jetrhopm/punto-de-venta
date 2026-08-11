@@ -1,0 +1,13 @@
+<Window x:Class="Pos.Desktop.ServerConnectionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Conectar con servidor" Width="430" Height="300" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <Grid Margin="24" Background="#F8FAFC">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <TextBlock Text="Servidor principal" FontSize="22" FontWeight="Bold" Foreground="#17324D" />
+        <TextBlock Grid.Row="1" Margin="0,8,0,16" Text="Escribe el nombre o la IP de la computadora servidor." Foreground="#526577" TextWrapping="Wrap" />
+        <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="100"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,8,0"><TextBlock Text="IP o nombre"/><TextBox x:Name="HostTextBox" Height="32" Margin="0,4,0,0" /></StackPanel><StackPanel Grid.Column="1"><TextBlock Text="Puerto"/><TextBox x:Name="PortTextBox" Height="32" Margin="0,4,0,0" Text="5000" /></StackPanel></Grid>
+        <TextBlock Grid.Row="3" x:Name="MessageText" Margin="0,14,0,0" TextWrapping="Wrap" Foreground="#526577" />
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right"><Button Width="100" Margin="0,0,8,0" Click="OnTestClick">Probar conexion</Button><Button Width="90" IsDefault="True" Click="OnSaveClick">Guardar</Button></StackPanel>
+    </Grid>
+</Window>

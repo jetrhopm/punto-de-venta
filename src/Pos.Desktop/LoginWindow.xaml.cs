@@ -6,12 +6,19 @@ namespace Pos.Desktop;
 
 public partial class LoginWindow : Window
 {
-    private static readonly HttpClient Client = new() { BaseAddress = new Uri("http://127.0.0.1:5000") };
+    private static HttpClient Client => ApiClient.Client;
 
     public LoginWindow()
     {
         InitializeComponent();
+        ServerText.Text = $"Servidor: {ApiClient.BaseUrl}";
         PasswordBox.Focus();
+    }
+
+    private void OnServerClick(object sender, RoutedEventArgs e)
+    {
+        var window = new ServerConnectionWindow { Owner = this };
+        if (window.ShowDialog() == true) ServerText.Text = $"Servidor: {ApiClient.BaseUrl}";
     }
 
     private async void OnLoginClick(object sender, RoutedEventArgs e)

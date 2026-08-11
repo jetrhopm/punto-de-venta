@@ -94,6 +94,10 @@ $acl.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new('SYSTEM','
 $acl.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new('BUILTIN\Administrators','Read','Allow'))
 Set-Acl $secretPath $acl
 [Environment]::SetEnvironmentVariable('POS_CONNECTION_FILE', $secretPath, 'Machine')
+[Environment]::SetEnvironmentVariable('POS_API_URLS', 'http://0.0.0.0:5000', 'Machine')
+if (-not (Get-NetFirewallRule -DisplayName 'Punto de Venta API LAN' -ErrorAction SilentlyContinue)) {
+    New-NetFirewallRule -DisplayName 'Punto de Venta API LAN' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5000 -Profile Private | Out-Null
+}
 
 if (-not (Get-Service $apiService -ErrorAction SilentlyContinue)) {
     New-Service -Name $apiService -BinaryPathName "`"$api`"" -DisplayName 'Punto de Venta - API' -Description 'API local del sistema Punto de Venta' -StartupType Automatic

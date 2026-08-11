@@ -9,7 +9,7 @@ namespace Pos.Desktop;
 
 public partial class ReturnSaleWindow : Window
 {
-    private static readonly HttpClient Client = new() { BaseAddress = new Uri("http://127.0.0.1:5000") };
+    private static HttpClient Client => ApiClient.Client;
     private readonly Guid _saleId;
     private LineRow? _selected;
     public ReturnSaleWindow(Guid saleId)

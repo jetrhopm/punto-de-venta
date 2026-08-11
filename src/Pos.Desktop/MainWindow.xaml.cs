@@ -13,7 +13,7 @@ namespace Pos.Desktop;
 
 public partial class MainWindow : Window
 {
-    private static readonly HttpClient Client = new() { BaseAddress = new Uri("http://127.0.0.1:5000") };
+    private static HttpClient Client => ApiClient.Client;
     private CancellationTokenSource? _searchCancellation;
     private Guid? _lastSaleId;
     private readonly ObservableCollection<CartLineView> _cart = [];
@@ -26,7 +26,7 @@ public partial class MainWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (!string.IsNullOrWhiteSpace(SessionContext.AccessToken)) Client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", SessionContext.AccessToken);
+        ApiClient.ApplySession(SessionContext.AccessToken);
         try
         {
             using var response = await Client.GetAsync("/api/setup/status");

@@ -10,7 +10,7 @@ namespace Pos.Desktop;
 
 public partial class ReportsWindow : Window
 {
-    private static readonly HttpClient Client = new() { BaseAddress = new Uri("http://127.0.0.1:5000") };
+    private static HttpClient Client => ApiClient.Client;
     private DateTimeOffset _from;
     private DateTimeOffset _to;
 

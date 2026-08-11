@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Pos.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.UseUrls(Environment.GetEnvironmentVariable("POS_API_URLS") ?? "http://127.0.0.1:5000");
 var connectionString = PosDbContextFactory.ReadConfiguredConnectionString();
 builder.Services.AddDbContext<PosDbContext>(options => options.UseNpgsql(connectionString).ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning)));
 builder.Services.AddScoped<PasswordHasher<UserRecord>>();
@@ -49,6 +50,14 @@ app.MapGet("/api/setup/status", async (PosDbContext database, CancellationToken 
     var store = await database.Stores.AsNoTracking().OrderBy(store => store.CreatedAtUtc).FirstOrDefaultAsync(cancellationToken);
     return Results.Ok(new { configured = store is not null, storeName = store?.Name });
 });
+
+app.MapGet("/api/lan/info", () => Results.Ok(new
+{
+    service = "Pos.Api",
+    protocolVersion = "1",
+    apiVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0",
+    machine = Environment.MachineName
+}));
 app.MapGet("/api/ticket-settings", async (HttpRequest request, TicketSettingsService settings, CancellationToken cancellationToken) => { var result = await settings.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { result.TicketHeader, result.TicketFooter, result.TicketWidthMm }); });
 app.MapPut("/api/ticket-settings", async (HttpRequest request, TicketSettingsCommand command, TicketSettingsService settings, CancellationToken cancellationToken) => { try { var result = await settings.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { result.TicketHeader, result.TicketFooter, result.TicketWidthMm }); } catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["ticket"] = [exception.Message] }); } });
 

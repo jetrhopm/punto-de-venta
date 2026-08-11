@@ -9,7 +9,7 @@ namespace Pos.Desktop;
 
 public partial class PurchaseWindow : Window
 {
-    private static readonly HttpClient Client = new() { BaseAddress = new Uri("http://127.0.0.1:5000") };
+    private static HttpClient Client => ApiClient.Client;
     private CancellationTokenSource? _searchCancellation;
     private ProductRow? _product;
     public PurchaseWindow()

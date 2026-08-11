@@ -7,7 +7,7 @@ namespace Pos.Desktop;
 
 public partial class PromotionWindow : Window
 {
-    private static readonly HttpClient Client = new() { BaseAddress = new Uri("http://127.0.0.1:5000") };
+    private static HttpClient Client => ApiClient.Client;
     private ProductRow? _selected;
     public PromotionWindow() { InitializeComponent(); EndDate.SelectedDate = DateTime.Today.AddDays(30); }
     private async void OnProductTextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)

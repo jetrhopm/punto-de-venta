@@ -1,6 +1,6 @@
 # Plan completo del punto de venta
 
-Estado actualizado: 2026-08-08
+Estado actualizado: 2026-08-11
 
 ## Terminado
 
@@ -71,9 +71,10 @@ La implementacion local de la Fase 2 esta terminada. La validacion externa requi
 
 ### Fase 3: multicaja LAN
 
-- API en servidor principal, emparejamiento y firewall privado.
-- SignalR para avisos y concurrencia real sobre PostgreSQL.
-- Pruebas con dos cajas y fallas de red.
+- Incremento 1 completado: servidor configurable por IP/nombre, prueba de conexion, endpoint de compatibilidad, API preparada para escuchar en LAN privada y regla de Firewall restringida al perfil privado.
+- Pendiente: emparejamiento por codigo temporal e identificadores persistentes de tienda, equipo y caja.
+- Pendiente: SignalR para avisos y concurrencia real sobre PostgreSQL.
+- Pendiente: pruebas con dos cajas y fallas de red.
 
 ### Fase 4: integraciones externas
 
