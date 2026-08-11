@@ -28,6 +28,8 @@ El instalador incluye licencia RTF, ruta seleccionable, accesos directos en Escr
 
 Durante la etapa de configuracion de PostgreSQL y servicios se abre una consola en espanol con las etapas, comandos, carpetas y archivos que se estan creando. Esa consola no debe cerrarse hasta que indique que la instalacion termino.
 
+Durante la copia de los archivos del MSI se muestra tambien la interfaz interna de Windows Installer. Esa vista permite observar la accion de MSI y el archivo que esta procesando, en lugar del texto general `Archivos de Punto de Venta` de Burn.
+
 Los registros quedan en:
 
 - `C:\ProgramData\PuntoDeVenta\logs\instalacion.log`: etapas del bootstrap, comandos y archivos creados.
