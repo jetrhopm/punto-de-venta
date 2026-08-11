@@ -51,6 +51,20 @@ function Invoke-Native([string]$File, [string[]]$Arguments) {
     Write-InstallLog "Finalizo $([IO.Path]::GetFileName($File)) correctamente."
 }
 
+function Ensure-PostgresService {
+    if (-not (Get-Service $postgresService -ErrorAction SilentlyContinue)) {
+        Write-InstallLog 'Registrando el servicio PostgreSQL para recuperar el cluster existente.'
+        Invoke-Native $pgCtl @('register', '-N', $postgresService, '-D', $pgData, '-S', 'auto')
+    }
+    Set-Service -Name $postgresService -StartupType Automatic
+    $service = Get-Service $postgresService
+    if ($service.Status -ne 'Running') {
+        Write-InstallLog 'Iniciando PostgreSQL para recuperar la credencial administrativa.'
+        Start-Service $postgresService
+        Start-Sleep -Seconds 2
+    }
+}
+
 Assert-Administrator
 $installLogPath = Join-Path $DataRoot 'logs\instalacion.log'
 Write-InstallLog "Inicio del instalador. Carpeta de aplicacion: $InstallRoot"
@@ -115,12 +129,29 @@ if (-not (Test-Path (Join-Path $pgData 'PG_VERSION'))) {
     $adminPassword = [Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect([IO.File]::ReadAllBytes($adminSecretPath), $null, [Security.Cryptography.DataProtectionScope]::LocalMachine))
 } else {
     Write-InstallLog 'Etapa 2/8: cluster existente sin credencial protegida; intentando recuperar pos_admin mediante la conexion local de confianza.'
+    Ensure-PostgresService
     $adminBytes = New-Object byte[] 32
     $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
     try { $rng.GetBytes($adminBytes) } finally { $rng.Dispose() }
     $adminPassword = [Convert]::ToBase64String($adminBytes).Replace('+','A').Replace('/','B').Replace('=','C')
     $localSql = "ALTER ROLE pos_admin PASSWORD '$adminPassword';"
-    Invoke-Native $psql @('-U','pos_admin','-d','postgres','-v','ON_ERROR_STOP=1','-c',$localSql)
+    $hbaPath = Join-Path $pgData 'pg_hba.conf'
+    $hbaBackup = Join-Path $DataRoot 'config\pg_hba.conf.before-recovery'
+    Copy-Item $hbaPath $hbaBackup -Force
+    try {
+        $hbaText = [IO.File]::ReadAllText($hbaPath)
+        $hbaText = [Text.RegularExpressions.Regex]::Replace($hbaText, '(?m)^(\s*host\s+all\s+all\s+127\.0\.0\.1/32\s+)\S+', '${1}trust')
+        $hbaText = [Text.RegularExpressions.Regex]::Replace($hbaText, '(?m)^(\s*host\s+all\s+all\s+::1/128\s+)\S+', '${1}trust')
+        [IO.File]::WriteAllText($hbaPath, $hbaText, [Text.UTF8Encoding]::new($false))
+        Restart-Service $postgresService -Force
+        Start-Sleep -Seconds 2
+        Invoke-Native $psql @('-h','127.0.0.1','-p',$port,'-U','pos_admin','-d','postgres','-v','ON_ERROR_STOP=1','-c',$localSql)
+    } finally {
+        Copy-Item $hbaBackup $hbaPath -Force
+        Restart-Service $postgresService -Force
+        Remove-Item $hbaBackup -Force -ErrorAction SilentlyContinue
+        Write-InstallLog 'Configuracion temporal de pg_hba.conf restaurada.'
+    }
     [IO.File]::WriteAllBytes($adminSecretPath, [Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($adminPassword), $null, [Security.Cryptography.DataProtectionScope]::LocalMachine))
     Write-InstallLog "Credencial administrativa recuperada y protegida: $adminSecretPath"
 }
