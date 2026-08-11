@@ -34,11 +34,19 @@ function Assert-Administrator {
 }
 
 function Invoke-Native([string]$File, [string[]]$Arguments) {
-    Write-InstallLog "Ejecutando $([IO.Path]::GetFileName($File)): $($Arguments -join ' ')"
-    & $File @Arguments 2>&1 | ForEach-Object {
-        if ($_ -ne $null) { Write-InstallLog "  $_" }
+    $safeArguments = ($Arguments -join ' ') -replace "PASSWORD '[^']*'", "PASSWORD '<oculta>'"
+    Write-InstallLog "Ejecutando $([IO.Path]::GetFileName($File)): $safeArguments"
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Algunos binarios nativos escriben advertencias en stderr aunque terminen correctamente.
+        $ErrorActionPreference = 'Continue'
+        & $File @Arguments 2>&1 | ForEach-Object {
+            if ($_ -ne $null) { Write-InstallLog "  $_" }
+        }
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
     }
-    $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) { throw "Fallo el comando $([IO.Path]::GetFileName($File)) con codigo $exitCode." }
     Write-InstallLog "Finalizo $([IO.Path]::GetFileName($File)) correctamente."
 }
@@ -94,17 +102,27 @@ if (-not (Test-Path (Join-Path $pgData 'PG_VERSION'))) {
     $bootstrap = Join-Path $DataRoot 'config\bootstrap-password.txt'
     Set-Content -LiteralPath $bootstrap -Value $adminPassword -NoNewline -Encoding ascii
     Write-InstallLog "Archivo temporal de inicializacion creado: $bootstrap"
+    [IO.File]::WriteAllBytes($adminSecretPath, [Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($adminPassword), $null, [Security.Cryptography.DataProtectionScope]::LocalMachine))
+    Write-InstallLog "Credencial administrativa protegida antes de inicializar: $adminSecretPath"
     try {
         Invoke-Native $initDb @('--pgdata', $pgData, '--username', 'pos_admin', '--encoding', 'UTF8', '--auth-host', 'scram-sha-256', '--data-checksums', '--pwfile', $bootstrap)
     } finally {
         Remove-Item $bootstrap -Force -ErrorAction SilentlyContinue
         Write-InstallLog 'Archivo temporal de inicializacion eliminado.'
     }
-    [IO.File]::WriteAllBytes($adminSecretPath, [Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($adminPassword), $null, [Security.Cryptography.DataProtectionScope]::LocalMachine))
-    Write-InstallLog "Credencial administrativa protegida: $adminSecretPath"
 } elseif (Test-Path $adminSecretPath) {
     Write-InstallLog 'Etapa 2/8: cluster PostgreSQL existente detectado; se conserva y se recuperan sus credenciales protegidas.'
     $adminPassword = [Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect([IO.File]::ReadAllBytes($adminSecretPath), $null, [Security.Cryptography.DataProtectionScope]::LocalMachine))
+} else {
+    Write-InstallLog 'Etapa 2/8: cluster existente sin credencial protegida; intentando recuperar pos_admin mediante la conexion local de confianza.'
+    $adminBytes = New-Object byte[] 32
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($adminBytes) } finally { $rng.Dispose() }
+    $adminPassword = [Convert]::ToBase64String($adminBytes).Replace('+','A').Replace('/','B').Replace('=','C')
+    $localSql = "ALTER ROLE pos_admin PASSWORD '$adminPassword';"
+    Invoke-Native $psql @('-U','pos_admin','-d','postgres','-v','ON_ERROR_STOP=1','-c',$localSql)
+    [IO.File]::WriteAllBytes($adminSecretPath, [Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($adminPassword), $null, [Security.Cryptography.DataProtectionScope]::LocalMachine))
+    Write-InstallLog "Credencial administrativa recuperada y protegida: $adminSecretPath"
 }
 
 if (-not (Get-Service $postgresService -ErrorAction SilentlyContinue)) {
