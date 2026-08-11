@@ -66,6 +66,7 @@ Estado actualizado: 2026-08-11
 - Verificado: pruebas unitarias e integracion contra PostgreSQL real, incluyendo migraciones y lectura del catalogo.
 - Verificado: publicacion autocontenida `win-x64` y generacion reproducible de MSI y `Setup.exe`.
 - Pendiente externo para declarar liberacion de produccion: ejecutar el bootstrap durante Burn y probar instalacion, actualizacion, reparacion y conservacion de datos en Windows 10/11 limpios.
+- Completado para diagnostico: el bootstrap muestra una consola visible y escribe etapas en `C:\\ProgramData\\PuntoDeVenta\\logs\\instalacion.log`.
 
 La implementacion local de la Fase 2 esta terminada. La validacion externa requiere la maquina virtual o equipos limpios y permisos administrativos; no debe simularse en desarrollo.
 

@@ -24,6 +24,18 @@ Desde la version 1.0.3, Burn encadena el bootstrap autocontenido despues del MSI
 
 El instalador incluye licencia RTF, ruta seleccionable, accesos directos en Escritorio e Inicio, icono del producto, PostgreSQL, Visual C++ Redistributable y el bootstrap automatico de servicios. La interfaz estandar de WiX conserva algunos textos del sistema mientras se incorpora una localizacion completa en espanol.
 
+## Registro visible de instalacion
+
+Durante la etapa de configuracion de PostgreSQL y servicios se abre una consola en espanol con las etapas, comandos, carpetas y archivos que se estan creando. Esa consola no debe cerrarse hasta que indique que la instalacion termino.
+
+Los registros quedan en:
+
+- `C:\ProgramData\PuntoDeVenta\logs\instalacion.log`: etapas del bootstrap, comandos y archivos creados.
+- `C:\ProgramData\PuntoDeVenta\logs\instalador-bootstrap.log`: inicio, finalizacion y codigo de salida del ejecutable auxiliar.
+- `C:\ProgramData\PuntoDeVenta\logs\postgresql.log`: salida del servidor PostgreSQL.
+
+Si el progreso visual de Setup parece detenerse, espera a que termine la etapa indicada en la consola. Si no cambia durante varios minutos, cierra la instalacion desde el boton Cancelar y revisa `instalacion.log`; el ultimo registro identifica el comando o archivo que estaba en proceso. No repitas la instalacion a ciegas si ya existe `C:\ProgramData\PuntoDeVenta\postgresql\data`, porque el script conserva el cluster existente de forma idempotente.
+
 Antes de publicar una version real se debe:
 
 - firmar `Setup.exe` y los binarios con un certificado Authenticode;
