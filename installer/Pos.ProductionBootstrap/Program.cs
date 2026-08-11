@@ -9,14 +9,6 @@ var bootstrapLog = Path.Combine(
 Directory.CreateDirectory(Path.GetDirectoryName(bootstrapLog)!);
 void Log(string message) => File.AppendAllText(bootstrapLog, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}{Environment.NewLine}");
 
-var script = Path.Combine(AppContext.BaseDirectory, "install-production.ps1");
-if (!File.Exists(script))
-{
-    Log($"ERROR: no existe el bootstrap de produccion: {script}");
-    Console.Error.WriteLine($"No existe el bootstrap de produccion: {script}");
-    return 2;
-}
-
 var candidates = new[]
 {
     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Punto de Venta"),
@@ -24,6 +16,20 @@ var candidates = new[]
 };
 var installRoot = candidates.FirstOrDefault(path => File.Exists(Path.Combine(path, "api", "Pos.Api.exe")))
     ?? candidates[0];
+var scriptCandidates = new[]
+{
+    Path.Combine(installRoot, "install-production.ps1"),
+    Path.Combine(AppContext.BaseDirectory, "install-production.ps1")
+};
+var script = scriptCandidates.FirstOrDefault(File.Exists);
+if (script is null)
+{
+    Log($"ERROR: no existe install-production.ps1. Rutas revisadas: {string.Join("; ", scriptCandidates)}");
+    Console.Error.WriteLine("No existe el script de configuracion de produccion instalado por el MSI.");
+    return 2;
+}
+
+Log($"Script de configuracion encontrado en: {script}");
 var arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" -InstallRoot \"{installRoot}\"";
 if (args.Any(argument => string.Equals(argument, "--uninstall", StringComparison.OrdinalIgnoreCase)))
 {
