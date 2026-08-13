@@ -135,7 +135,7 @@ if (-not (Test-Path (Join-Path $pgData 'PG_VERSION'))) {
         Write-InstallLog 'Archivo temporal de inicializacion eliminado.'
     }
 } elseif (Test-Path $adminSecretPath) {
-    Write-InstallLog 'Etapa 2/8: cluster PostgreSQL existente detectado; se conserva y se recuperan sus credenciales protegidas.'
+    Write-InstallLog 'Etapa 2/8: cluster PostgreSQL existente y configurado detectado; se conserva y se recuperan sus credenciales protegidas.'
     $adminPassword = [Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect([IO.File]::ReadAllBytes($adminSecretPath), $null, [Security.Cryptography.DataProtectionScope]::LocalMachine))
 } else {
     Write-InstallLog 'Etapa 2/8: cluster existente sin credencial protegida; intentando recuperar pos_admin mediante la conexion local de confianza.'
@@ -173,6 +173,8 @@ if (-not (Test-Path (Join-Path $pgData 'PG_VERSION'))) {
 if (-not (Get-Service $postgresService -ErrorAction SilentlyContinue)) {
     Write-InstallLog 'Etapa 3/8: registrando el servicio dedicado de PostgreSQL.'
     Invoke-Native $pgCtl @('register', '-N', $postgresService, '-D', $pgData, '-S', 'auto')
+} else {
+    Write-InstallLog 'Etapa 3/8: servicio PostgreSQL existente detectado; se conserva su registro.'
 }
 Set-Service -Name $postgresService -StartupType Automatic
 Write-InstallLog 'Iniciando PostgreSQL y esperando el servicio.'
@@ -191,7 +193,7 @@ try {
     if ($exists -ne '1') {
         Write-InstallLog 'Base punto_venta no existe; creando base de datos.'
         Invoke-Native $psql @('-h','127.0.0.1','-p',$port,'-U','pos_admin','-d','postgres','-v','ON_ERROR_STOP=1','-c','CREATE DATABASE punto_venta OWNER pos_app;')
-    } else { Write-InstallLog 'Base punto_venta existente detectada; se conserva.' }
+    } else { Write-InstallLog 'Base punto_venta existente detectada; se conserva sin reinicializar.' }
 } finally { Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue }
 
 $connection = "Host=127.0.0.1;Port=$port;Database=punto_venta;Username=pos_app;Password=$password;Application Name=Pos.Production"
@@ -208,12 +210,14 @@ Set-Acl $secretPath $acl
 if (-not (Get-NetFirewallRule -DisplayName 'Punto de Venta API LAN' -ErrorAction SilentlyContinue)) {
     Write-InstallLog 'Etapa 5/8: creando regla de Firewall solo para perfil privado, puerto 5000.'
     New-NetFirewallRule -DisplayName 'Punto de Venta API LAN' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5000 -Profile Private | Out-Null
+} else {
+    Write-InstallLog 'Etapa 5/8: regla de Firewall existente detectada; se conserva.'
 }
 
 if (-not (Get-Service $apiService -ErrorAction SilentlyContinue)) {
     Write-InstallLog 'Etapa 6/8: registrando el servicio de Windows de la API.'
     New-Service -Name $apiService -BinaryPathName "`"$api`"" -DisplayName 'Punto de Venta - API' -Description 'API local del sistema Punto de Venta' -StartupType Automatic
-} else { Restart-Service $apiService -Force }
+} else { Write-InstallLog 'Etapa 6/8: servicio de API existente detectado; se conserva su registro.' }
 Write-InstallLog 'Etapa 7/8: iniciando la API y comprobando el servicio.'
 Start-Service $apiService -ErrorAction SilentlyContinue
 Write-InstallLog 'Etapa 8/8: instalacion terminada. PostgreSQL y la API quedaron registrados como servicios de Windows.'
