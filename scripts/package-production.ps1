@@ -25,5 +25,6 @@ foreach ($directory in @('bin', 'lib', 'share')) {
 Set-Content (Join-Path $output 'VERSION.txt') $((Get-Date).ToUniversalTime().ToString('O')) -Encoding utf8
 Copy-Item (Join-Path $PSScriptRoot 'install-production.ps1') (Join-Path $output 'install-production.ps1') -Force
 Copy-Item (Join-Path $root '.tools\vc_redist.x64.exe') (Join-Path $output 'vc_redist.x64.exe') -Force
+Copy-Item (Join-Path $root 'src\Pos.Desktop\Assets\Icons\app.ico') (Join-Path $output 'client\app.ico') -Force
 Write-Host "Publicacion de produccion preparada en $output"
 Write-Host 'Paquete de produccion preparado para el instalador autocontenido.'
