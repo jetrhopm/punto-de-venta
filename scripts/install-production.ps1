@@ -185,8 +185,10 @@ try {
     Write-InstallLog 'Etapa 4/8: creando o actualizando el usuario de aplicacion.'
     $sql = "DO `$`$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pos_app') THEN CREATE ROLE pos_app LOGIN PASSWORD '$password'; ELSE ALTER ROLE pos_app PASSWORD '$password'; END IF; END `$`$;"
     Invoke-Native $psql @('-h','127.0.0.1','-p',$port,'-U','pos_admin','-d','postgres','-v','ON_ERROR_STOP=1','-c',$sql)
-    $exists = & $psql -h 127.0.0.1 -p $port -U pos_admin -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='punto_venta'"
-    if ($exists.Trim() -ne '1') {
+    $existsOutput = @(& $psql -h 127.0.0.1 -p $port -U pos_admin -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='punto_venta'")
+    if ($LASTEXITCODE -ne 0) { throw 'No se pudo comprobar si existe la base de datos punto_venta.' }
+    $exists = ([string]($existsOutput -join '')).Trim()
+    if ($exists -ne '1') {
         Write-InstallLog 'Base punto_venta no existe; creando base de datos.'
         Invoke-Native $psql @('-h','127.0.0.1','-p',$port,'-U','pos_admin','-d','postgres','-v','ON_ERROR_STOP=1','-c','CREATE DATABASE punto_venta OWNER pos_app;')
     } else { Write-InstallLog 'Base punto_venta existente detectada; se conserva.' }
