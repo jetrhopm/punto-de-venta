@@ -30,7 +30,12 @@ public static class Program
                 return elevated?.ExitCode ?? 1;
             }
             WriteLaunchLog("Creando la aplicación WPF.");
-            var application = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
+            System.Windows.Forms.Application.EnableVisualStyles();
+            System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
+            using var form = new InstallerForm(args.Any(a => a.Equals("/uninstall", StringComparison.OrdinalIgnoreCase)));
+            System.Windows.Forms.Application.Run(form);
+            return 0;
+            /*
             WriteLaunchLog("Creando la ventana del instalador.");
             var window = new SetupWindow(args.Any(a => a.Equals("/uninstall", StringComparison.OrdinalIgnoreCase)));
             application.MainWindow = window;
@@ -38,14 +43,14 @@ public static class Program
             window.Show();
             var result = application.Run();
             WriteLaunchLog($"La ventana terminó. Código: {result}");
-            return result;
+            return result; */
         }
         catch (Exception exception)
         {
             var diagnostic = Path.Combine(Path.GetTempPath(), "PuntoDeVenta-Setup-error.log");
             try { File.WriteAllText(diagnostic, $"[{DateTime.Now:O}] {exception}\r\n"); } catch { }
             WriteLaunchLog($"ERROR de arranque: {exception}");
-            MessageBox.Show($"No se pudo abrir el instalador.\r\n\r\n{exception.Message}\r\n\r\nDiagnóstico: {diagnostic}", "Punto de Venta", MessageBoxButton.OK, MessageBoxImage.Error);
+            System.Windows.Forms.MessageBox.Show($"No se pudo abrir el instalador.\r\n\r\n{exception.Message}\r\n\r\nDiagnóstico: {diagnostic}", "Punto de Venta", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Error);
             return 1;
         }
     }
