@@ -7,7 +7,23 @@ using System.Text;
 
 namespace Pos.Desktop;
 
-public sealed record ProductImportPreviewRow(int RowNumber, string Code, string Description, decimal Price, decimal Cost, decimal Stock, decimal WholesalePrice, decimal WholesaleMinimumQuantity, string Category, decimal MinimumStock, decimal MaximumStock, string UnitOfMeasure, string SupplierName, string Status);
+public sealed class ProductImportPreviewRow
+{
+    public int RowNumber { get; set; }
+    public string Code { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public decimal Cost { get; set; }
+    public decimal Stock { get; set; }
+    public decimal WholesalePrice { get; set; }
+    public decimal WholesaleMinimumQuantity { get; set; }
+    public string Category { get; set; } = string.Empty;
+    public decimal MinimumStock { get; set; }
+    public decimal MaximumStock { get; set; }
+    public string UnitOfMeasure { get; set; } = string.Empty;
+    public string SupplierName { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+}
 
 public static class ProductImportFileReader
 {
@@ -16,7 +32,8 @@ public static class ProductImportFileReader
         var extension = Path.GetExtension(path);
         var rows = extension.Equals(".xlsx", StringComparison.OrdinalIgnoreCase) ? ReadXlsx(path, defaultWholesaleMinimum) : ReadCsv(path, defaultWholesaleMinimum);
         var duplicateCodes = rows.Where(item => !string.IsNullOrWhiteSpace(item.Code)).GroupBy(item => item.Code.Trim(), StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1).Select(group => group.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return rows.Select(item => item with { Status = Validate(item, duplicateCodes) }).ToArray();
+        foreach (var row in rows) row.Status = Validate(row, duplicateCodes);
+        return rows;
     }
 
     private static IReadOnlyList<ProductImportPreviewRow> ReadXlsx(string path, decimal defaultWholesaleMinimum)
@@ -33,7 +50,7 @@ public static class ProductImportFileReader
             var description = Text(row, headers, "producto", "descripcion", "nombre");
             if (string.IsNullOrWhiteSpace(code) && string.IsNullOrWhiteSpace(description)) continue;
             var wholesale = Number(row, headers, "pmayoreo", "preciomayoreo", "mayoreo");
-            result.Add(new(row.RowNumber(), code, description, Number(row, headers, "pventa", "precioventa", "precio"), Number(row, headers, "pcosto", "costo", "preciocosto"), Number(row, headers, "existencia", "stock", "inventario"), wholesale, wholesale > 0 ? defaultWholesaleMinimum : 0m, Text(row, headers, "departamento", "categoria"), Number(row, headers, "invminimo", "inventariominimo", "minimo"), Number(row, headers, "invmaximo", "inventariomaximo", "maximo"), Text(row, headers, "tipodeventa", "unidad", "unidaddemedida"), Text(row, headers, "proveedor", "proveedorprincipal"), string.Empty));
+            result.Add(new ProductImportPreviewRow { RowNumber = row.RowNumber(), Code = code, Description = description, Price = Number(row, headers, "pventa", "precioventa", "precio"), Cost = Number(row, headers, "pcosto", "costo", "preciocosto"), Stock = InventoryNumber(row, headers, "existencia", "stock", "inventario"), WholesalePrice = wholesale, WholesaleMinimumQuantity = wholesale > 0 ? defaultWholesaleMinimum : 0m, Category = Text(row, headers, "departamento", "categoria"), MinimumStock = InventoryNumber(row, headers, "invminimo", "inventariominimo", "minimo"), MaximumStock = InventoryNumber(row, headers, "invmaximo", "inventariomaximo", "maximo"), UnitOfMeasure = Text(row, headers, "tipodeventa", "unidad", "unidaddemedida"), SupplierName = Text(row, headers, "proveedor", "proveedorprincipal") });
         }
         return result;
     }
@@ -56,15 +73,17 @@ public static class ProductImportFileReader
             var description = Text(csv, headers, "producto", "descripcion", "nombre");
             if (string.IsNullOrWhiteSpace(code) && string.IsNullOrWhiteSpace(description)) continue;
             var wholesale = Number(csv, headers, "pmayoreo", "preciomayoreo", "mayoreo");
-            result.Add(new(csv.Parser.Row, code, description, Number(csv, headers, "pventa", "precioventa", "precio"), Number(csv, headers, "pcosto", "costo", "preciocosto"), Number(csv, headers, "existencia", "stock", "inventario"), wholesale, wholesale > 0 ? defaultWholesaleMinimum : 0m, Text(csv, headers, "departamento", "categoria"), Number(csv, headers, "invminimo", "inventariominimo", "minimo"), Number(csv, headers, "invmaximo", "inventariomaximo", "maximo"), Text(csv, headers, "tipodeventa", "unidad", "unidaddemedida"), Text(csv, headers, "proveedor", "proveedorprincipal"), string.Empty));
+            result.Add(new ProductImportPreviewRow { RowNumber = csv.Parser.Row, Code = code, Description = description, Price = Number(csv, headers, "pventa", "precioventa", "precio"), Cost = Number(csv, headers, "pcosto", "costo", "preciocosto"), Stock = InventoryNumber(csv, headers, "existencia", "stock", "inventario"), WholesalePrice = wholesale, WholesaleMinimumQuantity = wholesale > 0 ? defaultWholesaleMinimum : 0m, Category = Text(csv, headers, "departamento", "categoria"), MinimumStock = InventoryNumber(csv, headers, "invminimo", "inventariominimo", "minimo"), MaximumStock = InventoryNumber(csv, headers, "invmaximo", "inventariomaximo", "maximo"), UnitOfMeasure = Text(csv, headers, "tipodeventa", "unidad", "unidaddemedida"), SupplierName = Text(csv, headers, "proveedor", "proveedorprincipal") });
         }
         return result;
     }
 
     private static string Text(IXLRangeRow row, Dictionary<string, int> headers, params string[] aliases) => Find(headers, aliases) is int column ? row.Cell(column).GetFormattedString().Trim() : string.Empty;
     private static decimal Number(IXLRangeRow row, Dictionary<string, int> headers, params string[] aliases) => Find(headers, aliases) is int column ? ParseNumber(row.Cell(column).GetFormattedString()) : 0m;
+    private static decimal InventoryNumber(IXLRangeRow row, Dictionary<string, int> headers, params string[] aliases) => Find(headers, aliases) is int column ? ParseInventoryNumber(row.Cell(column).GetFormattedString()) : 0m;
     private static string Text(CsvReader csv, Dictionary<string, int> headers, params string[] aliases) => Find(headers, aliases) is int column ? csv.GetField(column)?.Trim() ?? string.Empty : string.Empty;
     private static decimal Number(CsvReader csv, Dictionary<string, int> headers, params string[] aliases) => ParseNumber(Text(csv, headers, aliases));
+    private static decimal InventoryNumber(CsvReader csv, Dictionary<string, int> headers, params string[] aliases) => ParseInventoryNumber(Text(csv, headers, aliases));
     private static int? Find(Dictionary<string, int> headers, params string[] aliases) { foreach (var alias in aliases) if (headers.TryGetValue(alias, out var column)) return column; return null; }
 
     private static decimal ParseNumber(string value)
@@ -74,6 +93,12 @@ public static class ProductImportFileReader
         if (decimal.TryParse(cleaned, NumberStyles.Number | NumberStyles.AllowCurrencySymbol, CultureInfo.GetCultureInfo("es-MX"), out var mexican)) return mexican;
         if (decimal.TryParse(cleaned, NumberStyles.Number | NumberStyles.AllowCurrencySymbol, CultureInfo.InvariantCulture, out var invariant)) return invariant;
         return decimal.MinValue;
+    }
+
+    private static decimal ParseInventoryNumber(string value)
+    {
+        var parsed = ParseNumber(value);
+        return parsed == decimal.MinValue || parsed < 0 ? 0m : parsed;
     }
 
     private static string Validate(ProductImportPreviewRow row, HashSet<string> duplicates)

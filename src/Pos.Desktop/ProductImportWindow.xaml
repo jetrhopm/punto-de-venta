@@ -30,28 +30,29 @@
                 </ComboBox>
             </StackPanel>
             <StackPanel Grid.Column="3" Margin="10,0">
-                <TextBlock Text="Mínimo mayoreo"/>
+                <TextBlock Text="Minimo mayoreo"/>
                 <TextBox x:Name="WholesaleMinimumBox" Width="90" Height="30" Text="1"
-                         ToolTip="Se usa cuando eleventa exporta precio de mayoreo sin cantidad mínima"/>
+                         ToolTip="Se usa cuando eleventa exporta precio de mayoreo sin cantidad minima"/>
             </StackPanel>
         </Grid>
 
-        <DataGrid Grid.Row="2" x:Name="PreviewGrid" IsReadOnly="True" AutoGenerateColumns="False"
-                  EnableRowVirtualization="True" EnableColumnVirtualization="True">
+        <DataGrid Grid.Row="2" x:Name="PreviewGrid" IsReadOnly="False" AutoGenerateColumns="False"
+                  EnableRowVirtualization="True" EnableColumnVirtualization="True"
+                  CellEditEnding="OnPreviewCellEditEnding">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Fila" Binding="{Binding RowNumber}"/>
-                <DataGridTextColumn Header="Código" Binding="{Binding Code}" Width="110"/>
-                <DataGridTextColumn Header="Producto" Binding="{Binding Description}" Width="220"/>
-                <DataGridTextColumn Header="Departamento" Binding="{Binding Category}" Width="130"/>
-                <DataGridTextColumn Header="Costo" Binding="{Binding Cost, StringFormat=C2}"/>
-                <DataGridTextColumn Header="Venta" Binding="{Binding Price, StringFormat=C2}"/>
-                <DataGridTextColumn Header="Mayoreo" Binding="{Binding WholesalePrice, StringFormat=C2}"/>
-                <DataGridTextColumn Header="Existencia" Binding="{Binding Stock}"/>
-                <DataGridTextColumn Header="Mínimo" Binding="{Binding MinimumStock}"/>
-                <DataGridTextColumn Header="Máximo" Binding="{Binding MaximumStock}"/>
-                <DataGridTextColumn Header="Tipo de venta" Binding="{Binding UnitOfMeasure}" Width="110"/>
-                <DataGridTextColumn Header="Proveedor" Binding="{Binding SupplierName}" Width="150"/>
-                <DataGridTextColumn Header="Estado" Binding="{Binding Status}" Width="150"/>
+                <DataGridTextColumn Header="Fila" Binding="{Binding RowNumber}" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Codigo" Binding="{Binding Code, UpdateSourceTrigger=LostFocus}" Width="110"/>
+                <DataGridTextColumn Header="Producto" Binding="{Binding Description, UpdateSourceTrigger=LostFocus}" Width="220"/>
+                <DataGridTextColumn Header="Departamento" Binding="{Binding Category, UpdateSourceTrigger=LostFocus}" Width="130"/>
+                <DataGridTextColumn Header="Costo" Binding="{Binding Cost, StringFormat=C2, UpdateSourceTrigger=LostFocus}"/>
+                <DataGridTextColumn Header="Venta" Binding="{Binding Price, StringFormat=C2, UpdateSourceTrigger=LostFocus}"/>
+                <DataGridTextColumn Header="Mayoreo" Binding="{Binding WholesalePrice, StringFormat=C2, UpdateSourceTrigger=LostFocus}"/>
+                <DataGridTextColumn Header="Existencia" Binding="{Binding Stock, UpdateSourceTrigger=LostFocus}"/>
+                <DataGridTextColumn Header="Minimo" Binding="{Binding MinimumStock, UpdateSourceTrigger=LostFocus}"/>
+                <DataGridTextColumn Header="Maximo" Binding="{Binding MaximumStock, UpdateSourceTrigger=LostFocus}"/>
+                <DataGridTextColumn Header="Tipo de venta" Binding="{Binding UnitOfMeasure, UpdateSourceTrigger=LostFocus}" Width="110"/>
+                <DataGridTextColumn Header="Proveedor" Binding="{Binding SupplierName, UpdateSourceTrigger=LostFocus}" Width="150"/>
+                <DataGridTextColumn Header="Estado" Binding="{Binding Status}" Width="150" IsReadOnly="True"/>
             </DataGrid.Columns>
         </DataGrid>
 

@@ -2,6 +2,8 @@
 
 ## Sin liberar
 
+- Se permite editar la vista previa de importacion de inventario antes de confirmar la carga.
+- Se convierten a 0 los valores no numericos de existencia, inventario minimo e inventario maximo al leer CSV/XLSX de eleventa.
 - Se renueva el sistema visual WPF con jerarquia, espaciado, estados de foco y colores operativos consistentes.
 - Se integran iconos Material para WPF mediante MahApps.Metro.IconPacks 6.2.1 con licencia MIT.
 - Se redisenan Ventas, inicio de sesion, configuracion inicial, respaldos, impresoras, tienda y usuarios sin cambiar sus permisos ni flujos.

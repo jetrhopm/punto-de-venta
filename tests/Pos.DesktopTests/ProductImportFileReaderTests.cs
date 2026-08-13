@@ -38,4 +38,35 @@ public sealed class ProductImportFileReaderTests
         }
         finally { File.Delete(path); }
     }
+
+    [Fact]
+    public void ConvertsNonNumericInventoryFieldsToZero()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"eleventa-{Guid.NewGuid():N}.xlsx");
+        try
+        {
+            using (var workbook = new XLWorkbook())
+            {
+                var sheet = workbook.AddWorksheet("Sheet1");
+                var headers = new[] { "Codigo", "Producto", "P. Costo", "P. Venta", "Existencia", "Inv. Minimo", "Inv. Maximo" };
+                for (var index = 0; index < headers.Length; index++) sheet.Cell(1, index + 1).Value = headers[index];
+                sheet.Cell(2, 1).Value = "ABC1";
+                sheet.Cell(2, 2).Value = "Producto con inventario texto";
+                sheet.Cell(2, 3).Value = 10m;
+                sheet.Cell(2, 4).Value = 15m;
+                sheet.Cell(2, 5).Value = "-";
+                sheet.Cell(2, 6).Value = "sin dato";
+                sheet.Cell(2, 7).Value = "N/A";
+                workbook.SaveAs(path);
+            }
+
+            var row = Assert.Single(ProductImportFileReader.Read(path, 1m));
+
+            Assert.Equal(0m, row.Stock);
+            Assert.Equal(0m, row.MinimumStock);
+            Assert.Equal(0m, row.MaximumStock);
+            Assert.Equal("Válido", row.Status);
+        }
+        finally { File.Delete(path); }
+    }
 }
