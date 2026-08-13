@@ -178,9 +178,14 @@ if (-not (Get-Service $postgresService -ErrorAction SilentlyContinue)) {
 }
 Set-Service -Name $postgresService -StartupType Automatic
 Write-InstallLog 'Iniciando PostgreSQL y esperando el servicio.'
-Start-Service $postgresService
-Start-Sleep -Seconds 2
-Write-InstallLog 'Servicio PostgreSQL iniciado.'
+$postgresStatus = (Get-Service $postgresService).Status
+if ($postgresStatus -ne 'Running') {
+    Start-Service $postgresService
+    Start-Sleep -Seconds 2
+    Write-InstallLog 'Servicio PostgreSQL iniciado.'
+} else {
+    Write-InstallLog 'Servicio PostgreSQL ya estaba activo; se conserva.'
+}
 
 $env:PGPASSWORD = $adminPassword
 try {
@@ -202,8 +207,10 @@ $encrypted = [Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF
 Write-InstallLog "Cadena de conexion protegida: $secretPath"
 $acl = Get-Acl $secretPath
 $acl.SetAccessRuleProtection($true, $false)
-$acl.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new('SYSTEM','FullControl','Allow'))
-$acl.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new('BUILTIN\Administrators','Read','Allow'))
+$systemSid = [Security.Principal.SecurityIdentifier]::new('S-1-5-18')
+$administratorsSid = [Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
+$acl.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new($systemSid, [Security.AccessControl.FileSystemRights]::FullControl, [Security.AccessControl.AccessControlType]::Allow))
+$acl.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new($administratorsSid, [Security.AccessControl.FileSystemRights]::Read, [Security.AccessControl.AccessControlType]::Allow))
 Set-Acl $secretPath $acl
 [Environment]::SetEnvironmentVariable('POS_CONNECTION_FILE', $secretPath, 'Machine')
 [Environment]::SetEnvironmentVariable('POS_API_URLS', 'http://0.0.0.0:5000', 'Machine')
