@@ -23,7 +23,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 if (Test-Path $published) { Remove-Item $published -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $published, $output | Out-Null
-& $dotnet publish $setupProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -o $published
+& $dotnet publish $setupProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:Version=$Version -o $published
 if ($LASTEXITCODE -ne 0) { throw 'No se pudo publicar el instalador autocontenido.' }
 
 $setup = Join-Path $output 'Setup.exe'

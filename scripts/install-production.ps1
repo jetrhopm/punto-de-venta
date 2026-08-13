@@ -90,6 +90,7 @@ $pgCtl = Join-Path $postgresBin 'pg_ctl.exe'
 $initDb = Join-Path $postgresBin 'initdb.exe'
 $psql = Join-Path $postgresBin 'psql.exe'
 $api = Join-Path $InstallRoot 'api\Pos.Api.exe'
+$apiBinaryPath = "`"$api`" --Pos:ConnectionFile=`"$secretPath`" --Pos:Urls=http://0.0.0.0:5000"
 
 if ($Uninstall) {
     Write-InstallLog 'Modo desinstalacion: deteniendo y eliminando servicios. Los datos se conservan.'
@@ -232,8 +233,12 @@ if (-not (Get-NetFirewallRule -DisplayName 'Punto de Venta API LAN' -ErrorAction
 
 if (-not (Get-Service $apiService -ErrorAction SilentlyContinue)) {
     Write-InstallLog 'Etapa 6/8: registrando el servicio de Windows de la API.'
-    New-Service -Name $apiService -BinaryPathName "`"$api`"" -DisplayName 'Punto de Venta - API' -Description 'API local del sistema Punto de Venta' -StartupType Automatic
-} else { Write-InstallLog 'Etapa 6/8: servicio de API existente detectado; se conserva su registro.' }
+    New-Service -Name $apiService -BinaryPathName $apiBinaryPath -DisplayName 'Punto de Venta - API' -Description 'API local del sistema Punto de Venta' -StartupType Automatic
+} else {
+    Write-InstallLog 'Etapa 6/8: servicio de API existente detectado; actualizando su ejecutable y configuración.'
+    Stop-Service $apiService -Force -ErrorAction SilentlyContinue
+    Invoke-Native (Join-Path $env:SystemRoot 'System32\sc.exe') @('config', $apiService, 'binPath=', $apiBinaryPath, 'start=', 'auto')
+}
 Write-InstallLog 'Etapa 7/8: iniciando la API y comprobando el servicio.'
 Start-Service $apiService -ErrorAction SilentlyContinue
 $apiReady = $false
@@ -250,5 +255,18 @@ for ($attempt = 1; $attempt -le 30; $attempt++) {
         Start-Sleep -Seconds 1
     }
 }
-if (-not $apiReady) { throw 'La API no respondió a la comprobación de inicio. Revisa el servicio PuntoDeVentaApi.' }
+if (-not $apiReady) {
+    $serviceState = Get-Service $apiService -ErrorAction SilentlyContinue
+    Write-InstallLog "Estado final de PuntoDeVentaApi: $($serviceState.Status)"
+    $apiStartupLog = Join-Path $DataRoot 'logs\api-startup.log'
+    if (Test-Path $apiStartupLog) {
+        Write-InstallLog 'Ultimas lineas del registro de arranque de la API:'
+        Get-Content $apiStartupLog -Tail 60 | ForEach-Object { Write-InstallLog "  $_" }
+    }
+    Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=(Get-Date).AddMinutes(-10)} -ErrorAction SilentlyContinue |
+        Where-Object { $_.ProviderName -in @('.NET Runtime', 'Application Error', 'PuntoDeVentaApi') } |
+        Select-Object -First 10 |
+        ForEach-Object { Write-InstallLog "Evento Windows $($_.ProviderName): $($_.Message -replace '[\r\n]+',' ')" }
+    throw 'La API no respondió a la comprobación de inicio. El diagnóstico quedó agregado a instalacion.log.'
+}
 Write-InstallLog 'Etapa 8/8: instalacion terminada. PostgreSQL y la API quedaron registrados como servicios de Windows.'

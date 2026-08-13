@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Hosting.WindowsServices;
 using Pos.Infrastructure;
 
 var startupLog = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "logs", "api-startup.log");
@@ -12,10 +13,15 @@ void WriteStartupLog(string message)
 
 AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) => WriteStartupLog($"ERROR NO CONTROLADO: {eventArgs.ExceptionObject}");
 WriteStartupLog("Iniciando API.");
-var builder = WebApplication.CreateBuilder(args);
-builder.Host.UseWindowsService();
-builder.WebHost.UseUrls(Environment.GetEnvironmentVariable("POS_API_URLS") ?? "http://127.0.0.1:5000");
-var connectionString = PosDbContextFactory.ReadConfiguredConnectionString();
+var webOptions = new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = WindowsServiceHelpers.IsWindowsService() ? AppContext.BaseDirectory : default
+};
+var builder = WebApplication.CreateBuilder(webOptions);
+builder.Host.UseWindowsService(options => options.ServiceName = "PuntoDeVentaApi");
+builder.WebHost.UseUrls(builder.Configuration["Pos:Urls"] ?? Environment.GetEnvironmentVariable("POS_API_URLS") ?? "http://127.0.0.1:5000");
+var connectionString = PosDbContextFactory.ReadConfiguredConnectionString(builder.Configuration["Pos:ConnectionFile"]);
 builder.Services.AddDbContext<PosDbContext>(options => options.UseNpgsql(connectionString).ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning)));
 builder.Services.AddScoped<PasswordHasher<UserRecord>>();
 builder.Services.AddScoped<InitialSetupService>();
@@ -39,10 +45,16 @@ builder.Services.AddScoped<LanPairingService>();
 
 var app = builder.Build();
 
-await using (var migrationScope = app.Services.CreateAsyncScope())
+try
 {
+    await using var migrationScope = app.Services.CreateAsyncScope();
     var database = migrationScope.ServiceProvider.GetRequiredService<PosDbContext>();
     await database.Database.MigrateAsync();
+}
+catch (Exception exception)
+{
+    WriteStartupLog($"ERROR AL INICIAR O APLICAR MIGRACIONES: {exception}");
+    throw;
 }
 WriteStartupLog("Migraciones aplicadas. API lista para recibir solicitudes.");
 

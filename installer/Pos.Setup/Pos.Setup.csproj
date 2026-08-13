@@ -6,7 +6,6 @@
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <PublishTrimmed>false</PublishTrimmed>
-    <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -14,6 +13,5 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Payload.zip" LogicalName="PuntoDeVenta.Payload.zip" />
-    <Resource Include="..\..\src\Pos.Desktop\Assets\Icons\app-icon-256.png" Link="Assets\app-icon-256.png" />
   </ItemGroup>
 </Project>

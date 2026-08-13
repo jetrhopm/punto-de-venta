@@ -1,134 +1,330 @@
 using System.Diagnostics;
-using System.IO;
-using System.IO.Compression;
-using Microsoft.Win32;
-using System.Windows.Forms;
 using System.Drawing;
+using System.IO.Compression;
+using System.Reflection;
+using System.Text;
+using Microsoft.Win32;
 
 namespace Pos.Setup;
 
 public sealed class InstallerForm : Form
 {
-    readonly bool uninstall; readonly string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Punto de Venta");
-    readonly Label status = new(); readonly ProgressBar bar = new() { Minimum = 0, Maximum = 100 }; readonly Button run = new();
-    readonly CheckBox terms = new() { Text = "Acepto los términos y condiciones", AutoSize = true, Checked = false };
-    readonly CheckBox desktop = new() { Text = "Acceso directo en el escritorio", AutoSize = true, Checked = true }; readonly CheckBox start = new() { Text = "Menú Inicio", AutoSize = true, Checked = true };
+    private const string ProductTitle = "Punto de Venta";
+    private readonly string _installRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), ProductTitle);
+    private readonly string _dataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta");
+    private readonly bool _uninstall;
+    private readonly CheckBox _terms = new() { Text = "Acepto los términos y condiciones", AutoSize = true };
+    private readonly CheckBox _desktopShortcut = new() { Text = "Crear acceso directo en el escritorio", AutoSize = true, Checked = true };
+    private readonly CheckBox _startShortcut = new() { Text = "Crear acceso directo en el menú Inicio", AutoSize = true, Checked = true };
+    private readonly Label _status = new() { AutoEllipsis = true };
+    private readonly ProgressBar _progress = new() { Minimum = 0, Maximum = 100 };
+    private readonly TextBox _details = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BackColor = Color.White };
+    private readonly Button _action = new();
+    private bool _busy;
+    private bool _completed;
 
-    public InstallerForm(bool isUninstall)
+    public InstallerForm(bool uninstall)
     {
-        uninstall = isUninstall; Text = isUninstall ? "Desinstalar Punto de Venta" : "Instalación de Punto de Venta"; ClientSize = new Size(720, 500); StartPosition = FormStartPosition.CenterScreen; FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false;
-        Controls.Add(new Label { Text = Text, Font = new Font("Segoe UI", 22, FontStyle.Bold), ForeColor = Color.FromArgb(23,50,77), Location = new Point(28,25), AutoSize = true });
-        Controls.Add(new Label { Text = "Punto de Venta - instalador para Windows x64", Location = new Point(30,75), AutoSize = true, ForeColor = Color.FromArgb(82,101,119) });
-        if (isUninstall) Controls.Add(new Label { Text = "Se quitarán la aplicación y los servicios. La base de datos y respaldos se conservarán.", Location = new Point(30,140), Size = new Size(650,60) });
-        else { Controls.Add(new Label { Text = "Dependencias: PostgreSQL incluido, API local, cliente WPF y Microsoft Visual C++ Redistributable.", Location = new Point(30,130), Size = new Size(650,45) }); Controls.Add(new Label { Text = "Al finalizar, Punto de Venta abrirá un asistente para crear la tienda, el usuario administrador y decidir la carga de inventario.", Location = new Point(30,170), Size = new Size(650,45) }); terms.SetBounds(30,230,400,25); Controls.Add(terms); desktop.SetBounds(30,280,260,25); start.SetBounds(310,280,150,25); Controls.Add(desktop); Controls.Add(start); Controls.Add(new Label { Text = "Carpeta de instalación: " + root, Location = new Point(30,325), Size = new Size(650,30) }); }
-        status.SetBounds(30,370,650,45); bar.SetBounds(30,420,650,24); run.Text = isUninstall ? "Desinstalar" : "Instalar"; run.SetBounds(540,455,140,36); run.Click += async (_,_) => await Execute(); Controls.Add(status); Controls.Add(bar); Controls.Add(run);
-    }
-    void Add(string label, TextBox box, int x, int y) { Controls.Add(new Label { Text = label, Location = new Point(x,y), AutoSize = true }); box.SetBounds(x,y+22,200,30); Controls.Add(box); }
-    async Task Execute()
-    {
-        if (!uninstall && !terms.Checked) { status.Text = "Debes aceptar los términos y condiciones."; return; } run.Enabled=false;
-        try { if (uninstall) { await Ps(Path.Combine(root,"install-production.ps1"),"-Uninstall"); Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PuntoDeVenta",false); Set(100,"Desinstalación terminada. Tus datos se conservaron."); }
-            else
-            {
-                var temp = Path.Combine(Path.GetTempPath(), "PuntoDeVenta-Setup", Guid.NewGuid().ToString("N"));
-                Directory.CreateDirectory(temp);
-                try
-                {
-                    await Extract(temp);
-                    await InstallVisualCppIfNeeded(temp);
-                    if (HasExistingInstallation()) Set(61, "Instalación existente detectada. Se conservarán datos y configuración.");
-                    await StopServicesForUpdate();
-                    await Copy(temp);
-                }
-                finally { try { Directory.Delete(temp, true); } catch { } }
+        _uninstall = uninstall;
+        Text = uninstall ? "Desinstalar Punto de Venta" : "Instalación de Punto de Venta";
+        ClientSize = new Size(760, 650);
+        StartPosition = FormStartPosition.CenterScreen;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!);
+        FormClosing += OnFormClosing;
 
-                Set(84, "Verificando PostgreSQL, la base de datos y la API...");
-                await Ps(Path.Combine(root, "install-production.ps1"), "");
-                Register();
-                MakeLinks();
-                Set(100, "Instalación terminada. Abriendo configuración inicial...");
-                StartDesktop();
-            } }
-        catch(Exception ex) { status.Text="Error: "+ex.Message; Directory.CreateDirectory(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"PuntoDeVenta","logs")); File.AppendAllText(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"PuntoDeVenta","logs","setup-error.log"),ex+Environment.NewLine); run.Enabled=true; }
-    }
-    async Task Extract(string dest) { await using var s=typeof(InstallerForm).Assembly.GetManifestResourceStream("PuntoDeVenta.Payload.zip")??throw new InvalidOperationException("No se encontró el paquete interno."); using var z=new ZipArchive(s); var total=z.Entries.Sum(e=>Math.Max(0,e.Length)); long done=0; foreach(var e in z.Entries){var t=Path.GetFullPath(Path.Combine(dest,e.FullName.Replace('/',Path.DirectorySeparatorChar)));if(!t.StartsWith(Path.GetFullPath(dest)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Paquete inválido.");if(e.Name.Length==0){Directory.CreateDirectory(t);continue;}Directory.CreateDirectory(Path.GetDirectoryName(t)!);await using var i=e.Open();await using var o=File.Create(t);var b=new byte[65536];int n;while((n=await i.ReadAsync(b))>0){await o.WriteAsync(b.AsMemory(0,n));done+=n;Set(3+(int)(done*55/Math.Max(1,total)),"Copiando: "+e.FullName);}} }
-    async Task StopServicesForUpdate()
-    {
-        Set(58, "Deteniendo servicios de la instalación anterior...");
-        var powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe");
-        await TryRun(powershell, "-NoProfile -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='SilentlyContinue'; Get-Service -Name 'PuntoDeVentaApi','PuntoDeVentaPostgreSQL' -ErrorAction SilentlyContinue | Stop-Service -Force -ErrorAction SilentlyContinue; exit 0\"");
-        await Task.Delay(TimeSpan.FromSeconds(5));
-    }
+        var logo = new PictureBox { Location = new Point(30, 24), Size = new Size(64, 64), SizeMode = PictureBoxSizeMode.Zoom };
+        logo.Image = Icon?.ToBitmap();
+        Controls.Add(logo);
+        Controls.Add(new Label { Text = Text, Font = new Font("Segoe UI", 22, FontStyle.Bold), ForeColor = Color.FromArgb(23, 50, 77), Location = new Point(110, 28), AutoSize = true });
+        Controls.Add(new Label { Text = "Instalador autocontenido para Windows x64", Location = new Point(112, 70), AutoSize = true, ForeColor = Color.FromArgb(82, 101, 119) });
 
-    async Task InstallVisualCppIfNeeded(string payloadRoot)
-    {
-        if (IsVisualCppInstalled())
+        if (uninstall)
         {
-            Set(59, "Microsoft Visual C++ ya está instalado. Se omite la dependencia.");
+            Controls.Add(new Label { Text = "Se quitarán la aplicación y sus servicios. La base de datos, configuración y respaldos se conservarán.", Location = new Point(30, 120), Size = new Size(700, 45) });
+        }
+        else
+        {
+            Controls.Add(new Label { Text = "Incluye PostgreSQL, API local, cliente de escritorio y Microsoft Visual C++ Redistributable. Las dependencias válidas se detectan y se conservan.", Location = new Point(30, 115), Size = new Size(700, 45) });
+            Controls.Add(new Label { Text = "Al terminar podrás abrir el asistente para crear la tienda, el administrador y decidir cómo cargar el inventario.", Location = new Point(30, 160), Size = new Size(700, 40) });
+            _terms.SetBounds(30, 210, 350, 25);
+            _desktopShortcut.SetBounds(30, 250, 300, 25);
+            _startShortcut.SetBounds(370, 250, 300, 25);
+            Controls.AddRange([_terms, _desktopShortcut, _startShortcut]);
+            Controls.Add(new Label { Text = $"Carpeta de instalación: {_installRoot}", Location = new Point(30, 288), Size = new Size(700, 25) });
+        }
+
+        _status.SetBounds(30, 325, 700, 28);
+        _progress.SetBounds(30, 360, 700, 24);
+        _details.SetBounds(30, 400, 700, 175);
+        _action.Text = uninstall ? "Desinstalar" : "Instalar";
+        _action.SetBounds(540, 595, 190, 38);
+        _action.Click += OnActionClick;
+        Controls.AddRange([_status, _progress, _details, _action]);
+        SetProgress(0, uninstall ? "Listo para desinstalar." : "Listo para comprobar e instalar los componentes.");
+    }
+
+    private async void OnActionClick(object? sender, EventArgs e)
+    {
+        if (_completed)
+        {
+            if (_uninstall) ScheduleApplicationRemoval(); else StartDesktop();
+            Close();
+            return;
+        }
+        if (!_uninstall && !_terms.Checked)
+        {
+            SetProgress(_progress.Value, "Debes aceptar los términos y condiciones para continuar.");
             return;
         }
 
-        Set(59, "Instalando dependencia Microsoft Visual C++...");
-        await Run(Path.Combine(payloadRoot, "vc_redist.x64.exe"), "/install /quiet /norestart");
-    }
-
-    bool HasExistingInstallation() =>
-        File.Exists(Path.Combine(root, "client", "Pos.Desktop.exe")) ||
-        File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "postgresql", "data", "PG_VERSION"));
-
-    static bool IsVisualCppInstalled()
-    {
-        using var runtime = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64");
-        return runtime?.GetValue("Installed") is not null && Convert.ToInt32(runtime.GetValue("Installed")) == 1;
-    }
-
-    async Task Copy(string src)
-    {
-        var files = Directory.GetFiles(src, "*", SearchOption.AllDirectories);
-        for (var n = 0; n < files.Length; n++)
+        _busy = true;
+        _action.Enabled = false;
+        _terms.Enabled = false;
+        try
         {
-            var relative = Path.GetRelativePath(src, files[n]);
-            var target = Path.Combine(root, relative);
+            if (_uninstall) await UninstallAsync(); else await InstallAsync();
+            _completed = true;
+            _action.Text = _uninstall ? "Cerrar" : "Abrir Punto de Venta";
+            _action.Enabled = true;
+        }
+        catch (Exception exception)
+        {
+            Log($"ERROR: {exception}");
+            SetProgress(_progress.Value, $"No se completó la operación: {exception.Message}");
+            _action.Text = "Reintentar";
+            _action.Enabled = true;
+            _terms.Enabled = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task InstallAsync()
+    {
+        var temporaryPayload = Path.Combine(Path.GetTempPath(), "PuntoDeVenta-Setup", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temporaryPayload);
+        try
+        {
+            SetProgress(2, "Extrayendo el paquete interno...");
+            await ExtractPayloadAsync(temporaryPayload);
+            await InstallVisualCppIfNeededAsync(temporaryPayload);
+            if (HasExistingInstallation()) Log("Instalación existente detectada: se conservarán datos y configuración.");
+            await StopServicesForUpdateAsync();
+            await CopyPayloadAsync(temporaryPayload);
+            File.Copy(Environment.ProcessPath!, Path.Combine(_installRoot, "Setup.exe"), true);
+        }
+        finally { try { Directory.Delete(temporaryPayload, true); } catch { } }
+
+        SetProgress(84, "Verificando PostgreSQL, base de datos y API...");
+        await RunPowerShellAsync(Path.Combine(_installRoot, "install-production.ps1"), string.Empty);
+        RegisterInstallation();
+        CreateShortcuts();
+        SetProgress(100, "Instalación terminada. Ya puedes abrir la configuración inicial.");
+    }
+
+    private async Task UninstallAsync()
+    {
+        var script = Path.Combine(_installRoot, "install-production.ps1");
+        if (File.Exists(script)) await RunPowerShellAsync(script, "-Uninstall");
+        Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PuntoDeVenta", false);
+        DeleteShortcuts();
+        SetProgress(100, "Desinstalación terminada. Los datos y respaldos se conservaron.");
+    }
+
+    private async Task ExtractPayloadAsync(string destination)
+    {
+        await using var resource = typeof(InstallerForm).Assembly.GetManifestResourceStream("PuntoDeVenta.Payload.zip") ?? throw new InvalidOperationException("No se encontró el paquete interno.");
+        using var archive = new ZipArchive(resource, ZipArchiveMode.Read);
+        var total = archive.Entries.Sum(entry => Math.Max(0, entry.Length));
+        long complete = 0;
+        foreach (var entry in archive.Entries)
+        {
+            var target = Path.GetFullPath(Path.Combine(destination, entry.FullName.Replace('/', Path.DirectorySeparatorChar)));
+            if (!target.StartsWith(Path.GetFullPath(destination) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("El paquete interno contiene una ruta inválida.");
+            if (string.IsNullOrEmpty(entry.Name)) { Directory.CreateDirectory(target); continue; }
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            await CopyWithRetry(files[n], target, relative);
-            Set(64 + n * 18 / Math.Max(1, files.Length), "Instalando: " + relative);
+            await using var input = entry.Open();
+            await using var output = File.Create(target);
+            var buffer = new byte[64 * 1024];
+            int read;
+            while ((read = await input.ReadAsync(buffer)) > 0)
+            {
+                await output.WriteAsync(buffer.AsMemory(0, read));
+                complete += read;
+                SetProgress(2 + (int)(complete * 48 / Math.Max(1, total)), $"Extrayendo: {entry.FullName}");
+            }
         }
     }
 
-    async Task CopyWithRetry(string source, string target, string relative)
+    private async Task InstallVisualCppIfNeededAsync(string payloadRoot)
+    {
+        if (IsVisualCppInstalled())
+        {
+            SetProgress(52, "Microsoft Visual C++ ya está instalado; se conserva.");
+            return;
+        }
+        SetProgress(52, "Instalando Microsoft Visual C++ Redistributable...");
+        await RunProcessAsync(Path.Combine(payloadRoot, "vc_redist.x64.exe"), "/install /quiet /norestart", payloadRoot);
+    }
+
+    private async Task StopServicesForUpdateAsync()
+    {
+        SetProgress(56, "Deteniendo servicios anteriores para actualizar archivos...");
+        var powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe");
+        await RunProcessAsync(powershell, "-NoProfile -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='SilentlyContinue'; Get-Service -Name 'PuntoDeVentaApi','PuntoDeVentaPostgreSQL' -ErrorAction SilentlyContinue | Stop-Service -Force -ErrorAction SilentlyContinue; exit 0\"", Path.GetDirectoryName(powershell)!);
+        await Task.Delay(TimeSpan.FromSeconds(3));
+    }
+
+    private async Task CopyPayloadAsync(string source)
+    {
+        var files = Directory.GetFiles(source, "*", SearchOption.AllDirectories);
+        for (var index = 0; index < files.Length; index++)
+        {
+            var relative = Path.GetRelativePath(source, files[index]);
+            var target = Path.Combine(_installRoot, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            await CopyWithRetryAsync(files[index], target, relative);
+            SetProgress(58 + index * 24 / Math.Max(1, files.Length), $"Instalando: {relative}");
+        }
+    }
+
+    private async Task CopyWithRetryAsync(string source, string target, string relative)
     {
         for (var attempt = 1; ; attempt++)
         {
             try { File.Copy(source, target, true); return; }
             catch (IOException) when (attempt < 16)
             {
-                Set(59, "Esperando que se libere: " + relative);
+                SetProgress(_progress.Value, $"Esperando que Windows libere: {relative}");
                 await Task.Delay(TimeSpan.FromSeconds(1));
             }
         }
     }
-    async Task Ps(string script,string extra)=>await Run(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),@"WindowsPowerShell\v1.0\powershell.exe"),$"-NoProfile -ExecutionPolicy Bypass -File {Program.QuoteArgument(script)} -InstallRoot {Program.QuoteArgument(root)} {extra}");
-    async Task Run(string file,string args)
+
+    private async Task RunPowerShellAsync(string script, string extraArguments)
     {
-        var workingDirectory = Directory.Exists(root) ? root : Path.GetDirectoryName(file)!;
-        using var p=Process.Start(new ProcessStartInfo(file,args){WorkingDirectory=workingDirectory,UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true,CreateNoWindow=true})??throw new InvalidOperationException("No se pudo iniciar "+Path.GetFileName(file));p.OutputDataReceived+=(_,e)=>{if(!string.IsNullOrWhiteSpace(e.Data))BeginInvoke(()=>status.Text=e.Data);};p.BeginOutputReadLine();p.BeginErrorReadLine();await p.WaitForExitAsync();if(p.ExitCode!=0)throw new InvalidOperationException(Path.GetFileName(file)+" terminó con código "+p.ExitCode);
+        if (!File.Exists(script)) throw new FileNotFoundException("No existe el script de configuración.", script);
+        var powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe");
+        await RunProcessAsync(powershell, $"-NoProfile -ExecutionPolicy Bypass -File {Program.QuoteArgument(script)} -InstallRoot {Program.QuoteArgument(_installRoot)} {extraArguments}", _installRoot);
     }
-    async Task TryRun(string file, string args)
+
+    private async Task RunProcessAsync(string file, string arguments, string workingDirectory)
     {
-        try { await Run(file, args); }
-        catch (Exception exception)
+        Log($"Ejecutando {Path.GetFileName(file)}");
+        using var process = Process.Start(new ProcessStartInfo(file, arguments)
         {
-            var logs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "logs");
-            Directory.CreateDirectory(logs);
-            File.AppendAllText(Path.Combine(logs, "setup-update.log"), $"[{DateTime.Now:O}] No se pudo detener un servicio: {exception.Message}{Environment.NewLine}");
-        }
+            WorkingDirectory = workingDirectory,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        }) ?? throw new InvalidOperationException($"No se pudo iniciar {Path.GetFileName(file)}.");
+        process.OutputDataReceived += (_, eventArgs) => { if (!string.IsNullOrWhiteSpace(eventArgs.Data)) BeginInvoke(() => { Log(eventArgs.Data); _status.Text = eventArgs.Data; }); };
+        process.ErrorDataReceived += (_, eventArgs) => { if (!string.IsNullOrWhiteSpace(eventArgs.Data)) BeginInvoke(() => Log(eventArgs.Data)); };
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+        await process.WaitForExitAsync();
+        if (process.ExitCode is not (0 or 3010)) throw new InvalidOperationException($"{Path.GetFileName(file)} terminó con código {process.ExitCode}.");
+        if (process.ExitCode == 3010) Log("El componente solicita reiniciar Windows para completar su actualización.");
     }
-    void StartDesktop()
+
+    private void RegisterInstallation()
     {
-        var desktopApp = Path.Combine(root, "client", "Pos.Desktop.exe");
-        if (File.Exists(desktopApp)) Process.Start(new ProcessStartInfo(desktopApp) { UseShellExecute = true });
+        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
+        using var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PuntoDeVenta");
+        key?.SetValue("DisplayName", ProductTitle);
+        key?.SetValue("DisplayVersion", version);
+        key?.SetValue("Publisher", ProductTitle);
+        key?.SetValue("InstallLocation", _installRoot);
+        key?.SetValue("DisplayIcon", Path.Combine(_installRoot, "client", "app.ico"));
+        key?.SetValue("UninstallString", $"{Program.QuoteArgument(Path.Combine(_installRoot, "Setup.exe"))} /uninstall");
+        key?.SetValue("ModifyPath", Program.QuoteArgument(Path.Combine(_installRoot, "Setup.exe")));
+        key?.SetValue("NoRepair", 0, RegistryValueKind.DWord);
     }
-    void Register(){using var k=Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PuntoDeVenta");k?.SetValue("DisplayName","Punto de Venta");k?.SetValue("DisplayVersion","2.2.1");k?.SetValue("InstallLocation",root);k?.SetValue("UninstallString",Program.QuoteArgument(Path.Combine(root,"Setup.exe"))+" /uninstall");}
-    void MakeLinks(){var target=Path.Combine(root,"client","Pos.Desktop.exe");var shell=Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!);if(shell is null)return;var t=shell.GetType();void Link(string p){Directory.CreateDirectory(Path.GetDirectoryName(p)!);var x=t.InvokeMember("CreateShortcut",System.Reflection.BindingFlags.InvokeMethod,null,shell,new object[]{p});x!.GetType().InvokeMember("TargetPath",System.Reflection.BindingFlags.SetProperty,null,x,new object[]{target});x.GetType().InvokeMember("Save",System.Reflection.BindingFlags.InvokeMethod,null,x,null);}if(desktop.Checked)Link(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),"Punto de Venta.lnk"));if(start.Checked)Link(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),"Punto de Venta.lnk"));}
-    void Set(int n,string text){if(!IsDisposed)BeginInvoke(()=>{bar.Value=Math.Clamp(n,0,100);status.Text=text;});}
+
+    private void CreateShortcuts()
+    {
+        var target = Path.Combine(_installRoot, "client", "Pos.Desktop.exe");
+        var shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!);
+        if (shell is null) return;
+        var shellType = shell.GetType();
+        void Create(string path)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var shortcut = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, [path]);
+            shortcut!.GetType().InvokeMember("TargetPath", BindingFlags.SetProperty, null, shortcut, [target]);
+            shortcut.GetType().InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, [Path.GetDirectoryName(target)!]);
+            shortcut.GetType().InvokeMember("IconLocation", BindingFlags.SetProperty, null, shortcut, [Path.Combine(_installRoot, "client", "app.ico")]);
+            shortcut.GetType().InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, null);
+        }
+        if (_desktopShortcut.Checked) Create(DesktopShortcutPath);
+        if (_startShortcut.Checked) Create(StartShortcutPath);
+    }
+
+    private void DeleteShortcuts()
+    {
+        foreach (var path in new[] { DesktopShortcutPath, StartShortcutPath }) try { File.Delete(path); } catch { }
+    }
+
+    private void StartDesktop()
+    {
+        var desktop = Path.Combine(_installRoot, "client", "Pos.Desktop.exe");
+        if (!File.Exists(desktop)) throw new FileNotFoundException("No se encontró la aplicación instalada.", desktop);
+        Process.Start(new ProcessStartInfo(desktop) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(desktop)! });
+    }
+
+    private void ScheduleApplicationRemoval()
+    {
+        var expectedRoot = Path.GetFullPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), ProductTitle));
+        if (!string.Equals(Path.GetFullPath(_installRoot), expectedRoot, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("La carpeta de desinstalación no es válida.");
+
+        var cleanup = Path.Combine(Path.GetTempPath(), $"PuntoDeVenta-remove-{Guid.NewGuid():N}.cmd");
+        var commands = $"@echo off\r\ntimeout /t 3 /nobreak >nul\r\nrmdir /s /q \"{expectedRoot}\"\r\ndel \"%~f0\"\r\n";
+        File.WriteAllText(cleanup, commands, Encoding.ASCII);
+        Process.Start(new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe"), $"/d /c {Program.QuoteArgument(cleanup)}")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = Path.GetTempPath()
+        });
+    }
+
+    private bool HasExistingInstallation() => File.Exists(Path.Combine(_installRoot, "client", "Pos.Desktop.exe")) || File.Exists(Path.Combine(_dataRoot, "postgresql", "data", "PG_VERSION"));
+
+    private static bool IsVisualCppInstalled()
+    {
+        using var runtime = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64");
+        return runtime?.GetValue("Installed") is not null && Convert.ToInt32(runtime.GetValue("Installed")) == 1;
+    }
+
+    private string DesktopShortcutPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Punto de Venta.lnk");
+    private string StartShortcutPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "Punto de Venta.lnk");
+
+    private void SetProgress(int value, string message)
+    {
+        if (IsDisposed) return;
+        void Update() { _progress.Value = Math.Clamp(value, 0, 100); _status.Text = message; Log(message); }
+        if (InvokeRequired) BeginInvoke(Update); else Update();
+    }
+
+    private void Log(string message)
+    {
+        var line = $"[{DateTime.Now:HH:mm:ss}] {message}";
+        if (!_details.IsDisposed) _details.AppendText(line + Environment.NewLine);
+        try
+        {
+            var path = Path.Combine(_dataRoot, "logs", "setup.log");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.AppendAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}{Environment.NewLine}");
+        }
+        catch { }
+    }
+
+    private void OnFormClosing(object? sender, FormClosingEventArgs eventArgs)
+    {
+        if (!_busy) return;
+        eventArgs.Cancel = true;
+        MessageBox.Show("Espera a que termine la operación antes de cerrar el instalador.", ProductTitle, MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
 }

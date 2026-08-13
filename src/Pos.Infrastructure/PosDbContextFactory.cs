@@ -15,9 +15,9 @@ public sealed class PosDbContextFactory : IDesignTimeDbContextFactory<PosDbConte
         return new PosDbContext(options);
     }
 
-    public static string ReadConfiguredConnectionString()
+    public static string ReadConfiguredConnectionString(string? configuredEncryptedPath = null)
     {
-        var encryptedPath = Environment.GetEnvironmentVariable("POS_CONNECTION_FILE");
+        var encryptedPath = configuredEncryptedPath ?? Environment.GetEnvironmentVariable("POS_CONNECTION_FILE");
         if (!string.IsNullOrWhiteSpace(encryptedPath) && File.Exists(encryptedPath))
         {
             if (!OperatingSystem.IsWindows())
