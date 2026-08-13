@@ -26,8 +26,20 @@ public static class Program
             return elevated?.ExitCode ?? 1;
         }
 
-        var application = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
-        return application.Run(new SetupWindow(args.Any(a => a.Equals("/uninstall", StringComparison.OrdinalIgnoreCase))));
+        try
+        {
+            var application = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
+            var window = new SetupWindow(args.Any(a => a.Equals("/uninstall", StringComparison.OrdinalIgnoreCase)));
+            application.MainWindow = window;
+            return application.Run(window);
+        }
+        catch (Exception exception)
+        {
+            var diagnostic = Path.Combine(Path.GetTempPath(), "PuntoDeVenta-Setup-error.log");
+            try { File.WriteAllText(diagnostic, $"[{DateTime.Now:O}] {exception}\r\n"); } catch { }
+            MessageBox.Show($"No se pudo abrir el instalador.\r\n\r\n{exception.Message}\r\n\r\nDiagnóstico: {diagnostic}", "Punto de Venta", MessageBoxButton.OK, MessageBoxImage.Error);
+            return 1;
+        }
     }
 
     private static bool IsAdministrator() => new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
