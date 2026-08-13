@@ -187,11 +187,16 @@ if ($postgresStatus -ne 'Running') {
     Write-InstallLog 'Servicio PostgreSQL ya estaba activo; se conserva.'
 }
 
+$preserveApplicationConnection = Test-Path $secretPath
 $env:PGPASSWORD = $adminPassword
 try {
-    Write-InstallLog 'Etapa 4/8: creando o actualizando el usuario de aplicacion.'
-    $sql = "DO `$`$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pos_app') THEN CREATE ROLE pos_app LOGIN PASSWORD '$password'; ELSE ALTER ROLE pos_app PASSWORD '$password'; END IF; END `$`$;"
-    Invoke-Native $psql @('-h','127.0.0.1','-p',$port,'-U','pos_admin','-d','postgres','-v','ON_ERROR_STOP=1','-c',$sql)
+    if ($preserveApplicationConnection) {
+        Write-InstallLog 'Etapa 4/8: conexión de aplicación existente detectada; se conserva su credencial y usuario técnico.'
+    } else {
+        Write-InstallLog 'Etapa 4/8: creando el usuario de aplicacion.'
+        $sql = "DO `$`$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pos_app') THEN CREATE ROLE pos_app LOGIN PASSWORD '$password'; ELSE ALTER ROLE pos_app PASSWORD '$password'; END IF; END `$`$;"
+        Invoke-Native $psql @('-h','127.0.0.1','-p',$port,'-U','pos_admin','-d','postgres','-v','ON_ERROR_STOP=1','-c',$sql)
+    }
     $existsOutput = @(& $psql -h 127.0.0.1 -p $port -U pos_admin -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='punto_venta'")
     if ($LASTEXITCODE -ne 0) { throw 'No se pudo comprobar si existe la base de datos punto_venta.' }
     $exists = ([string]($existsOutput -join '')).Trim()
@@ -201,17 +206,21 @@ try {
     } else { Write-InstallLog 'Base punto_venta existente detectada; se conserva sin reinicializar.' }
 } finally { Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue }
 
-$connection = "Host=127.0.0.1;Port=$port;Database=punto_venta;Username=pos_app;Password=$password;Application Name=Pos.Production"
-$encrypted = [Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($connection), $null, [Security.Cryptography.DataProtectionScope]::LocalMachine)
-[IO.File]::WriteAllBytes($secretPath, $encrypted)
-Write-InstallLog "Cadena de conexion protegida: $secretPath"
-$acl = Get-Acl $secretPath
-$acl.SetAccessRuleProtection($true, $false)
-$systemSid = [Security.Principal.SecurityIdentifier]::new('S-1-5-18')
-$administratorsSid = [Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
-$acl.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new($systemSid, [Security.AccessControl.FileSystemRights]::FullControl, [Security.AccessControl.AccessControlType]::Allow))
-$acl.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new($administratorsSid, [Security.AccessControl.FileSystemRights]::Read, [Security.AccessControl.AccessControlType]::Allow))
-Set-Acl $secretPath $acl
+if ($preserveApplicationConnection) {
+    Write-InstallLog "Cadena de conexión existente detectada; se conserva: $secretPath"
+} else {
+    $connection = "Host=127.0.0.1;Port=$port;Database=punto_venta;Username=pos_app;Password=$password;Application Name=Pos.Production"
+    $encrypted = [Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($connection), $null, [Security.Cryptography.DataProtectionScope]::LocalMachine)
+    [IO.File]::WriteAllBytes($secretPath, $encrypted)
+    Write-InstallLog "Cadena de conexion protegida: $secretPath"
+    $acl = Get-Acl $secretPath
+    $acl.SetAccessRuleProtection($true, $false)
+    $systemSid = [Security.Principal.SecurityIdentifier]::new('S-1-5-18')
+    $administratorsSid = [Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
+    $acl.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new($systemSid, [Security.AccessControl.FileSystemRights]::FullControl, [Security.AccessControl.AccessControlType]::Allow))
+    $acl.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new($administratorsSid, [Security.AccessControl.FileSystemRights]::Read, [Security.AccessControl.AccessControlType]::Allow))
+    Set-Acl $secretPath $acl
+}
 [Environment]::SetEnvironmentVariable('POS_CONNECTION_FILE', $secretPath, 'Machine')
 [Environment]::SetEnvironmentVariable('POS_API_URLS', 'http://0.0.0.0:5000', 'Machine')
 if (-not (Get-NetFirewallRule -DisplayName 'Punto de Venta API LAN' -ErrorAction SilentlyContinue)) {
