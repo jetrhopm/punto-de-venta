@@ -8,6 +8,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Windows PowerShell 5.1 does not load DPAPI's assembly by default.
+Add-Type -AssemblyName System.Security
+
 $installLogPath = Join-Path $DataRoot 'logs\instalacion.log'
 
 function Write-InstallLog([string]$Message) {
