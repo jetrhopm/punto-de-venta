@@ -227,4 +227,19 @@ if (-not (Get-Service $apiService -ErrorAction SilentlyContinue)) {
 } else { Write-InstallLog 'Etapa 6/8: servicio de API existente detectado; se conserva su registro.' }
 Write-InstallLog 'Etapa 7/8: iniciando la API y comprobando el servicio.'
 Start-Service $apiService -ErrorAction SilentlyContinue
+$apiReady = $false
+for ($attempt = 1; $attempt -le 30; $attempt++) {
+    try {
+        $health = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:5000/health' -TimeoutSec 2
+        if ($health.StatusCode -eq 200) {
+            $apiReady = $true
+            Write-InstallLog "API disponible despues de $attempt intento(s)."
+            break
+        }
+    } catch {
+        Write-InstallLog "Esperando que la API termine de iniciar ($attempt/30)."
+        Start-Sleep -Seconds 1
+    }
+}
+if (-not $apiReady) { throw 'La API no respondió a la comprobación de inicio. Revisa el servicio PuntoDeVentaApi.' }
 Write-InstallLog 'Etapa 8/8: instalacion terminada. PostgreSQL y la API quedaron registrados como servicios de Windows.'

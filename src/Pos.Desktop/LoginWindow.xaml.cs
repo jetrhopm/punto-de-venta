@@ -18,7 +18,11 @@ public partial class LoginWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        await EnsureInitialSetupAsync();
+        LoginButton.IsEnabled = false;
+        MessageText.Text = "Comprobando la configuración inicial...";
+        var configured = await EnsureInitialSetupAsync();
+        if (configured) MessageText.Text = "Ingresa los datos del administrador para continuar.";
+        LoginButton.IsEnabled = true;
     }
 
     private void OnServerClick(object sender, RoutedEventArgs e)
@@ -78,6 +82,7 @@ public partial class LoginWindow : Window
                 var inventoryWindow = new InventoryOnboardingWindow { Owner = this };
                 inventoryWindow.ShowDialog();
                 MessageText.Text = "Tienda creada. Ahora inicia sesión con tus datos.";
+                return true;
             }
             return false;
         }
