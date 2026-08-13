@@ -13,6 +13,7 @@ TestResults/
 
 # Publicaciones y paquetes locales
 artifacts/
+installer/Pos.Setup/Payload.zip
 publish/
 *.nupkg
 

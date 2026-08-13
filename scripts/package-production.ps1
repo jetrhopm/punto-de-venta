@@ -10,7 +10,6 @@ $output = Join-Path $root 'artifacts\production\win-x64'
 $postgresSource = Join-Path $root '.tools\postgresql-18.4\pgsql'
 
 if (-not (Test-Path $dotnet)) { throw 'No existe el SDK local.' }
-if (-not (Test-Path $wix)) { throw 'No existe WiX local. Ejecuta: .tools\dotnet\dotnet.exe tool install wix --tool-path .tools\wix' }
 if (-not (Test-Path (Join-Path $postgresSource 'bin\pg_ctl.exe'))) { throw 'No existe PostgreSQL portable. Ejecuta scripts/dev-setup.ps1 para preparar los binarios oficiales.' }
 if (Test-Path $output) { Remove-Item $output -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $output | Out-Null
@@ -23,5 +22,6 @@ New-Item -ItemType Directory -Force -Path (Join-Path $output 'postgresql') | Out
 Copy-Item $postgresSource (Join-Path $output 'postgresql') -Recurse -Force
 Set-Content (Join-Path $output 'VERSION.txt') $((Get-Date).ToUniversalTime().ToString('O')) -Encoding utf8
 Copy-Item (Join-Path $PSScriptRoot 'install-production.ps1') (Join-Path $output 'install-production.ps1') -Force
+Copy-Item (Join-Path $root '.tools\vc_redist.x64.exe') (Join-Path $output 'vc_redist.x64.exe') -Force
 Write-Host "Publicacion de produccion preparada en $output"
-Write-Host 'El Setup.exe final requiere WiX Bundle y prueba en maquinas limpias antes de liberarse.'
+Write-Host 'Paquete de produccion preparado para el instalador autocontenido.'

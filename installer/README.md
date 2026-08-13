@@ -1,48 +1,58 @@
 # Instalador de produccion
 
-El instalador usa WiX Toolset 6. La compilacion publica el cliente WPF y la API como aplicaciones autocontenidas `win-x64`.
+El instalador actual es un unico `Setup.exe` autocontenido para Windows x64. Desde la version 2.0 ya no usa Burn, MSI ni una cadena de prerrequisitos. El paquete contiene el cliente WPF, la API, PostgreSQL portable, el script de servicios y Visual C++ Redistributable.
 
-Para crear el MSI y `Setup.exe` ejecuta `scripts/build-installer.ps1 -Version 1.0.0`. El script usa WiX 6 y descarga la extensión Bal oficial desde NuGet si no existe. Cambiar la version produce una actualización mayor; el MSI permite reparar desde Aplicaciones instaladas.
+## Construccion
 
-El paquete incluye los binarios oficiales portables de PostgreSQL y `install-production.ps1`. Ese bootstrap crea el clúster dedicado con checksums, registra PostgreSQL y la API como servicios de Windows, genera las credenciales y protege la cadena de conexión con DPAPI.
-
-Después de instalar el MSI, ejecuta una vez desde PowerShell como administrador:
+Desde la raiz del repositorio:
 
 ```powershell
-& 'C:\Program Files\Punto de Venta\install-production.ps1'
+$env:DOTNET_ROOT = (Resolve-Path .tools\dotnet).Path
+& .\scripts\build-installer.ps1 -Version 2.0.0
 ```
 
-El script es idempotente. Para quitar solo los servicios sin borrar datos:
+El resultado es `artifacts\installer\Setup.exe`.
 
-```powershell
-& 'C:\Program Files\Punto de Venta\install-production.ps1' -Uninstall
-```
+El proceso crea un `Payload.zip` temporal, lo incrusta dentro del ejecutable y lo elimina al terminar. No se debe copiar `Payload.zip` a la computadora del usuario.
 
-El Bundle actual todavía no ejecuta automáticamente ese bootstrap durante la cadena Burn; la ejecución automática queda sujeta a la prueba en Windows limpio para no arriesgar datos durante una actualización.
+## Funcionamiento visible
 
-Desde la version 1.0.3, Burn encadena el bootstrap autocontenido despues del MSI. La instalacion normal ya no requiere ejecutar PowerShell ni instalar PostgreSQL o Visual C++ manualmente. La validacion en una VM limpia sigue siendo obligatoria.
-
-El instalador incluye licencia RTF, ruta seleccionable, accesos directos en Escritorio e Inicio, icono del producto, PostgreSQL, Visual C++ Redistributable y el bootstrap automatico de servicios. La interfaz estandar de WiX conserva algunos textos del sistema mientras se incorpora una localizacion completa en espanol.
-
-## Registro visible de instalacion
-
-Durante la etapa de configuracion de PostgreSQL y servicios se abre una consola en espanol con las etapas, comandos, carpetas y archivos que se estan creando. Esa consola no debe cerrarse hasta que indique que la instalacion termino.
-
-Durante la copia de los archivos del MSI se muestra tambien la interfaz interna de Windows Installer. Esa vista permite observar la accion de MSI y el archivo que esta procesando, en lugar del texto general `Archivos de Punto de Venta` de Burn.
+`Setup.exe` solicita elevacion una sola vez y muestra una consola con la carpeta de instalacion, el archivo que se extrae, porcentaje, archivos copiados, Visual C++, PostgreSQL y servicios.
 
 Los registros quedan en:
 
-- `C:\ProgramData\PuntoDeVenta\logs\instalacion.log`: etapas del bootstrap, comandos y archivos creados.
-- `C:\ProgramData\PuntoDeVenta\logs\instalador-bootstrap.log`: inicio, finalizacion y codigo de salida del ejecutable auxiliar.
-- `C:\ProgramData\PuntoDeVenta\logs\postgresql.log`: salida del servidor PostgreSQL.
+```text
+C:\ProgramData\PuntoDeVenta\logs\setup.log
+C:\ProgramData\PuntoDeVenta\logs\instalacion.log
+C:\ProgramData\PuntoDeVenta\logs\postgresql.log
+```
 
-Si el progreso visual de Setup parece detenerse, espera a que termine la etapa indicada en la consola. Si no cambia durante varios minutos, cierra la instalacion desde el boton Cancelar y revisa `instalacion.log`; el ultimo registro identifica el comando o archivo que estaba en proceso. No repitas la instalacion a ciegas si ya existe `C:\ProgramData\PuntoDeVenta\postgresql\data`, porque el script conserva el cluster existente de forma idempotente.
+La instalacion se hace en `C:\Program Files\Punto de Venta`. La base, secretos, logs y respaldos quedan en `C:\ProgramData\PuntoDeVenta`.
 
-Antes de publicar una version real se debe:
+## Modos
 
-- firmar `Setup.exe` y los binarios con un certificado Authenticode;
-- probar instalacion, reparacion, actualizacion y desinstalacion en Windows 10/11 x64 limpios;
-- validar respaldo verificable antes de cada migracion;
-- conservar `ProgramData\\PuntoDeVenta` al desinstalar por defecto.
-- integrar PostgreSQL dedicado, secretos protegidos y el servicio Windows de la API;
-- probar la instalacion en Windows 10/11 x64 limpios, sin .NET ni PostgreSQL previos.
+Instalar o reparar archivos y servicios:
+
+```powershell
+.\Setup.exe
+```
+
+Eliminar solamente los servicios y conservar datos:
+
+```powershell
+.\Setup.exe /uninstall
+```
+
+La reinstalacion es idempotente: conserva el cluster PostgreSQL existente y no borra datos por defecto.
+
+## Verificacion en una VM
+
+Comprueba primero el hash que se publico:
+
+```powershell
+Get-FileHash .\Setup.exe -Algorithm SHA256
+```
+
+No uses el `Setup.exe` de versiones anteriores. La version 2.0 no debe mostrar `Setup Progress` de Burn ni `Archivos de Punto de Venta`; debe abrir su consola propia desde el primer momento.
+
+Antes de declararlo liberado todavía se requiere probar instalación, reparación, actualización y desinstalación con conservación de datos en Windows 10 y Windows 11 x64 limpios.
