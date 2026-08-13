@@ -108,7 +108,11 @@ public sealed class InstallerForm : Form
         }
     }
     async Task Ps(string script,string extra)=>await Run(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),@"WindowsPowerShell\v1.0\powershell.exe"),$"-NoProfile -ExecutionPolicy Bypass -File {Program.QuoteArgument(script)} -InstallRoot {Program.QuoteArgument(root)} {extra}");
-    async Task Run(string file,string args){using var p=Process.Start(new ProcessStartInfo(file,args){WorkingDirectory=root,UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true,CreateNoWindow=true})??throw new InvalidOperationException("No se pudo iniciar "+Path.GetFileName(file));p.OutputDataReceived+=(_,e)=>{if(!string.IsNullOrWhiteSpace(e.Data))BeginInvoke(()=>status.Text=e.Data);};p.BeginOutputReadLine();p.BeginErrorReadLine();await p.WaitForExitAsync();if(p.ExitCode!=0)throw new InvalidOperationException(Path.GetFileName(file)+" terminó con código "+p.ExitCode);}
+    async Task Run(string file,string args)
+    {
+        var workingDirectory = Directory.Exists(root) ? root : Path.GetDirectoryName(file)!;
+        using var p=Process.Start(new ProcessStartInfo(file,args){WorkingDirectory=workingDirectory,UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true,CreateNoWindow=true})??throw new InvalidOperationException("No se pudo iniciar "+Path.GetFileName(file));p.OutputDataReceived+=(_,e)=>{if(!string.IsNullOrWhiteSpace(e.Data))BeginInvoke(()=>status.Text=e.Data);};p.BeginOutputReadLine();p.BeginErrorReadLine();await p.WaitForExitAsync();if(p.ExitCode!=0)throw new InvalidOperationException(Path.GetFileName(file)+" terminó con código "+p.ExitCode);
+    }
     async Task TryRun(string file, string args)
     {
         try { await Run(file, args); }
