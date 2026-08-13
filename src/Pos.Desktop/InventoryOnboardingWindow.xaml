@@ -1,0 +1,24 @@
+<Window x:Class="Pos.Desktop.InventoryOnboardingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Inventario inicial - Punto de Venta" Width="520" Height="330"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <Grid Background="#F8FAFC" Margin="28">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="Inventario inicial" FontSize="24" FontWeight="Bold" Foreground="#17324D" />
+            <TextBlock Text="La tienda ya fue creada. Decide cómo continuar con tu inventario." Margin="0,6,0,0" Foreground="#526577" TextWrapping="Wrap" />
+        </StackPanel>
+        <StackPanel Grid.Row="1" Margin="0,22,0,0">
+            <Button Height="44" Background="#146CB0" Foreground="White" FontWeight="Bold" Click="OnImportLaterClick">Importar inventario desde un archivo</Button>
+            <TextBlock Text="La importación se abrirá desde Productos después de iniciar sesión. Ningún archivo se modifica ni se importa automáticamente." Margin="4,4,4,14" Foreground="#526577" TextWrapping="Wrap" />
+            <Button Height="40" Click="OnManualClick">Capturar productos manualmente</Button>
+            <Button Height="40" Margin="0,8,0,0" Click="OnSkipClick">Omitir por ahora</Button>
+        </StackPanel>
+        <TextBlock Grid.Row="2" x:Name="MessageText" Foreground="#526577" TextWrapping="Wrap" />
+    </Grid>
+</Window>
