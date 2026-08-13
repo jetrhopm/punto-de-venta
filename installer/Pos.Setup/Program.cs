@@ -29,10 +29,16 @@ public static class Program
                 elevated?.WaitForExit();
                 return elevated?.ExitCode ?? 1;
             }
+            WriteLaunchLog("Creando la aplicación WPF.");
             var application = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
+            WriteLaunchLog("Creando la ventana del instalador.");
             var window = new SetupWindow(args.Any(a => a.Equals("/uninstall", StringComparison.OrdinalIgnoreCase)));
             application.MainWindow = window;
-            return application.Run(window);
+            WriteLaunchLog("Mostrando la ventana del instalador.");
+            window.Show();
+            var result = application.Run();
+            WriteLaunchLog($"La ventana terminó. Código: {result}");
+            return result;
         }
         catch (Exception exception)
         {
