@@ -23,7 +23,11 @@ foreach ($directory in @('bin', 'lib', 'share')) {
     Copy-Item (Join-Path $postgresSource $directory) (Join-Path $output "postgresql\pgsql\$directory") -Recurse -Force
 }
 Set-Content (Join-Path $output 'VERSION.txt') $((Get-Date).ToUniversalTime().ToString('O')) -Encoding utf8
-Copy-Item (Join-Path $PSScriptRoot 'install-production.ps1') (Join-Path $output 'install-production.ps1') -Force
+$productionScript = Join-Path $output 'install-production.ps1'
+Copy-Item (Join-Path $PSScriptRoot 'install-production.ps1') $productionScript -Force
+# Windows PowerShell 5.1 necesita BOM para interpretar UTF-8 de forma confiable.
+$productionScriptText = [IO.File]::ReadAllText($productionScript, [Text.Encoding]::UTF8)
+[IO.File]::WriteAllText($productionScript, $productionScriptText, [Text.UTF8Encoding]::new($true))
 Copy-Item (Join-Path $root '.tools\vc_redist.x64.exe') (Join-Path $output 'vc_redist.x64.exe') -Force
 Copy-Item (Join-Path $root 'src\Pos.Desktop\Assets\Icons\app.ico') (Join-Path $output 'client\app.ico') -Force
 Write-Host "Publicacion de produccion preparada en $output"

@@ -33,7 +33,9 @@ Ejecutar una versión nueva de `Setup.exe` sobre la instalación existente. No e
 - Tienda, usuarios, productos, ventas y migraciones aplicadas.
 - Regla de firewall válida y servicios existentes, actualizando su configuración cuando corresponda.
 
-No se debe rotar la contraseña de `pos_app` si existe una conexión protegida válida.
+Si existe una conexión protegida válida, la reparación recupera su contraseña y la vuelve a aplicar al rol `pos_app`. Esto corrige instalaciones incompletas sin rotar la credencial, recrear la base ni perder datos.
+
+El servicio `PuntoDeVentaApi` se actualiza mediante la API de administración de servicios de Windows. Esto conserva el servicio y evita errores de interpretación de comillas en rutas con espacios.
 
 ## Registros
 

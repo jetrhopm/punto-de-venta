@@ -2,6 +2,7 @@
 
 ## Sin liberar
 
+- Se corrige la reparacion del instalador para resincronizar la credencial tecnica de PostgreSQL y actualizar correctamente el servicio API.
 - Se agrega prompt maestro del proyecto.
 - Se documentan requisitos de desarrollo.
 - Se crea estructura inicial de solucion .NET.

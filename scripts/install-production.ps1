@@ -189,15 +189,37 @@ if ($postgresStatus -ne 'Running') {
 }
 
 $preserveApplicationConnection = Test-Path $secretPath
+$existingConnection = $null
+if ($preserveApplicationConnection) {
+    try {
+        $existingConnection = [Text.Encoding]::UTF8.GetString(
+            [Security.Cryptography.ProtectedData]::Unprotect(
+                [IO.File]::ReadAllBytes($secretPath),
+                $null,
+                [Security.Cryptography.DataProtectionScope]::LocalMachine))
+        $passwordMatch = [Text.RegularExpressions.Regex]::Match(
+            $existingConnection,
+            '(?i)(?:^|;)\s*Password\s*=\s*([^;]+)')
+        if (-not $passwordMatch.Success) {
+            throw 'La cadena protegida no contiene una contraseña de aplicación válida.'
+        }
+        $password = $passwordMatch.Groups[1].Value.Trim()
+        Write-InstallLog 'Credencial técnica existente recuperada para comprobar y reparar el acceso de pos_app.'
+    } catch {
+        throw "No se pudo recuperar la credencial protegida de la aplicación. $($_.Exception.Message)"
+    }
+}
 $env:PGPASSWORD = $adminPassword
 try {
     if ($preserveApplicationConnection) {
-        Write-InstallLog 'Etapa 4/8: conexión de aplicación existente detectada; se conserva su credencial y usuario técnico.'
+        Write-InstallLog 'Etapa 4/8: conexión existente detectada; sincronizando la credencial técnica sin modificar los datos.'
     } else {
         Write-InstallLog 'Etapa 4/8: creando el usuario de aplicacion.'
-        $sql = "DO `$`$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pos_app') THEN CREATE ROLE pos_app LOGIN PASSWORD '$password'; ELSE ALTER ROLE pos_app PASSWORD '$password'; END IF; END `$`$;"
-        Invoke-Native $psql @('-h','127.0.0.1','-p',$port,'-U','pos_admin','-d','postgres','-v','ON_ERROR_STOP=1','-c',$sql)
     }
+    $escapedApplicationPassword = $password.Replace("'", "''")
+    $sql = "DO `$`$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pos_app') THEN CREATE ROLE pos_app LOGIN PASSWORD '$escapedApplicationPassword'; ELSE ALTER ROLE pos_app WITH LOGIN PASSWORD '$escapedApplicationPassword'; END IF; END `$`$;"
+    Invoke-Native $psql @('-h','127.0.0.1','-p',$port,'-U','pos_admin','-d','postgres','-v','ON_ERROR_STOP=1','-c',$sql)
+    Write-InstallLog 'Credencial del rol pos_app comprobada y sincronizada correctamente.'
     $existsOutput = @(& $psql -h 127.0.0.1 -p $port -U pos_admin -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='punto_venta'")
     if ($LASTEXITCODE -ne 0) { throw 'No se pudo comprobar si existe la base de datos punto_venta.' }
     $exists = ([string]($existsOutput -join '')).Trim()
@@ -237,7 +259,14 @@ if (-not (Get-Service $apiService -ErrorAction SilentlyContinue)) {
 } else {
     Write-InstallLog 'Etapa 6/8: servicio de API existente detectado; actualizando su ejecutable y configuración.'
     Stop-Service $apiService -Force -ErrorAction SilentlyContinue
-    Invoke-Native (Join-Path $env:SystemRoot 'System32\sc.exe') @('config', $apiService, 'binPath=', $apiBinaryPath, 'start=', 'auto')
+    $serviceUpdate = Invoke-CimMethod -InputObject (Get-CimInstance Win32_Service -Filter "Name='$apiService'") -MethodName Change -Arguments @{
+        PathName = $apiBinaryPath
+        StartMode = 'Automatic'
+    }
+    if ($serviceUpdate.ReturnValue -ne 0) {
+        throw "Windows no pudo actualizar el servicio PuntoDeVentaApi. Código: $($serviceUpdate.ReturnValue)."
+    }
+    Write-InstallLog "Servicio PuntoDeVentaApi actualizado. Ejecutable: $apiBinaryPath"
 }
 Write-InstallLog 'Etapa 7/8: iniciando la API y comprobando el servicio.'
 Start-Service $apiService -ErrorAction SilentlyContinue
