@@ -26,8 +26,22 @@ public partial class LoginWindow : Window
     private async void OnLoginClick(object sender, RoutedEventArgs e)
     {
         MessageText.Text = "";
+        LoginButton.IsEnabled = false;
         try
         {
+            using var setupResponse = await Client.GetAsync("/api/setup/status");
+            if (!setupResponse.IsSuccessStatusCode)
+            {
+                MessageText.Text = $"La API respondio con {(int)setupResponse.StatusCode}. Revisa el servicio local.";
+                return;
+            }
+            var setup = await setupResponse.Content.ReadFromJsonAsync<SetupStatus>();
+            if (setup?.Configured != true)
+            {
+                var setupWindow = new InitialSetupWindow { Owner = this };
+                if (setupWindow.ShowDialog() == true) MessageText.Text = "Tienda creada. Ahora inicia sesion con tus datos.";
+                return;
+            }
             var response = await Client.PostAsJsonAsync("/api/auth/login", new { userName = UserNameTextBox.Text, password = PasswordBox.Password });
             if (!response.IsSuccessStatusCode)
             {
@@ -45,8 +59,11 @@ public partial class LoginWindow : Window
             mainWindow.Show();
             Close();
         }
-        catch (HttpRequestException) { MessageText.Text = "La API local no esta disponible."; }
+        catch (HttpRequestException) { MessageText.Text = "La API local no esta disponible. Verifica el servicio PuntoDeVentaApi."; }
+        catch (TaskCanceledException) { MessageText.Text = "La API tardo demasiado en responder. Verifica PostgreSQL y el servicio PuntoDeVentaApi."; }
+        finally { LoginButton.IsEnabled = true; }
     }
 
+    private sealed record SetupStatus(bool Configured, string? StoreName);
     private sealed record LoginResponse(Guid SessionId, string AccessToken, Guid UserId, string DisplayName, bool IsAdministrator, DateTimeOffset ExpiresAtUtc, List<string> Permissions);
 }
