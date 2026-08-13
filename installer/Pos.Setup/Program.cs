@@ -14,20 +14,21 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        if (!IsAdministrator())
-        {
-            var stage = Path.Combine(Path.GetTempPath(), "PuntoDeVenta-Setup", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(stage);
-            var local = Path.Combine(stage, "Setup.exe");
-            File.Copy(Environment.ProcessPath!, local, true);
-            using var elevated = Process.Start(new ProcessStartInfo(local, string.Join(' ', args.Select(QuoteArgument)))
-            { UseShellExecute = true, Verb = "runas", WorkingDirectory = stage });
-            elevated?.WaitForExit();
-            return elevated?.ExitCode ?? 1;
-        }
-
         try
         {
+            WriteLaunchLog($"Inicio del Setup.exe. Ruta: {Environment.ProcessPath}");
+            if (!IsAdministrator())
+            {
+                var stage = Path.Combine(Path.GetTempPath(), "PuntoDeVenta-Setup", Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(stage);
+                var local = Path.Combine(stage, "Setup.exe");
+                File.Copy(Environment.ProcessPath!, local, true);
+                WriteLaunchLog($"Solicitando elevación. Copia local: {local}");
+                using var elevated = Process.Start(new ProcessStartInfo(local, string.Join(' ', args.Select(QuoteArgument)))
+                { UseShellExecute = true, Verb = "runas", WorkingDirectory = stage });
+                elevated?.WaitForExit();
+                return elevated?.ExitCode ?? 1;
+            }
             var application = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
             var window = new SetupWindow(args.Any(a => a.Equals("/uninstall", StringComparison.OrdinalIgnoreCase)));
             application.MainWindow = window;
@@ -37,6 +38,7 @@ public static class Program
         {
             var diagnostic = Path.Combine(Path.GetTempPath(), "PuntoDeVenta-Setup-error.log");
             try { File.WriteAllText(diagnostic, $"[{DateTime.Now:O}] {exception}\r\n"); } catch { }
+            WriteLaunchLog($"ERROR de arranque: {exception}");
             MessageBox.Show($"No se pudo abrir el instalador.\r\n\r\n{exception.Message}\r\n\r\nDiagnóstico: {diagnostic}", "Punto de Venta", MessageBoxButton.OK, MessageBoxImage.Error);
             return 1;
         }
@@ -44,6 +46,16 @@ public static class Program
 
     private static bool IsAdministrator() => new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
     internal static string QuoteArgument(string value) => $"\"{value.Replace("\"", "\\\"")}\"";
+    private static void WriteLaunchLog(string message)
+    {
+        try
+        {
+            var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "logs", "setup-launch.log");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.AppendAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}\r\n");
+        }
+        catch { }
+    }
 }
 
 public partial class SetupWindow : Window
