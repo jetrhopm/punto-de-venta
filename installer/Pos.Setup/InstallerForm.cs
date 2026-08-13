@@ -39,8 +39,8 @@ public sealed class InstallerForm : Form
     {
         Set(58, "Deteniendo servicios de la instalación anterior...");
         var powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe");
-        await Run(powershell, "-NoProfile -ExecutionPolicy Bypass -Command \"Stop-Service -Name 'PuntoDeVentaApi','PuntoDeVentaPostgreSQL' -Force -ErrorAction SilentlyContinue\"");
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        await TryRun(powershell, "-NoProfile -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='SilentlyContinue'; Get-Service -Name 'PuntoDeVentaApi','PuntoDeVentaPostgreSQL' -ErrorAction SilentlyContinue | Stop-Service -Force -ErrorAction SilentlyContinue; exit 0\"");
+        await Task.Delay(TimeSpan.FromSeconds(5));
     }
 
     async Task Copy(string src)
@@ -70,6 +70,16 @@ public sealed class InstallerForm : Form
     }
     async Task Ps(string script,string extra)=>await Run(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),@"WindowsPowerShell\v1.0\powershell.exe"),$"-NoProfile -ExecutionPolicy Bypass -File {Program.QuoteArgument(script)} -InstallRoot {Program.QuoteArgument(root)} {extra}");
     async Task Run(string file,string args){using var p=Process.Start(new ProcessStartInfo(file,args){WorkingDirectory=root,UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true,CreateNoWindow=true})??throw new InvalidOperationException("No se pudo iniciar "+Path.GetFileName(file));p.OutputDataReceived+=(_,e)=>{if(!string.IsNullOrWhiteSpace(e.Data))BeginInvoke(()=>status.Text=e.Data);};p.BeginOutputReadLine();p.BeginErrorReadLine();await p.WaitForExitAsync();if(p.ExitCode!=0)throw new InvalidOperationException(Path.GetFileName(file)+" terminó con código "+p.ExitCode);}
+    async Task TryRun(string file, string args)
+    {
+        try { await Run(file, args); }
+        catch (Exception exception)
+        {
+            var logs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "logs");
+            Directory.CreateDirectory(logs);
+            File.AppendAllText(Path.Combine(logs, "setup-update.log"), $"[{DateTime.Now:O}] No se pudo detener un servicio: {exception.Message}{Environment.NewLine}");
+        }
+    }
     async Task SetupAdmin(){using var c=new HttpClient{BaseAddress=new Uri("http://127.0.0.1:5000"),Timeout=TimeSpan.FromSeconds(10)};for(int n=0;n<20;n++){try{var s=await c.GetFromJsonAsync<SetupStatus>("/api/setup/status");if(s?.Configured==true)return;if(s is not null){var r=await c.PostAsJsonAsync("/api/setup/initial",new{storeName=store.Text,businessType="Comercio general",userName="admin",password=password.Text,administratorName=admin.Text,registerName="Caja 1"});if(!r.IsSuccessStatusCode&&r.StatusCode!=System.Net.HttpStatusCode.Conflict)throw new InvalidOperationException("No se pudo crear el administrador.");return;}}catch(HttpRequestException){await Task.Delay(1000);}}throw new InvalidOperationException("La API no respondió.");}
     void Register(){using var k=Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PuntoDeVenta");k?.SetValue("DisplayName","Punto de Venta");k?.SetValue("DisplayVersion","2.1.4");k?.SetValue("InstallLocation",root);k?.SetValue("UninstallString",Program.QuoteArgument(Path.Combine(root,"Setup.exe"))+" /uninstall");}
     void MakeLinks(){var target=Path.Combine(root,"client","Pos.Desktop.exe");var shell=Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!);if(shell is null)return;var t=shell.GetType();void Link(string p){Directory.CreateDirectory(Path.GetDirectoryName(p)!);var x=t.InvokeMember("CreateShortcut",System.Reflection.BindingFlags.InvokeMethod,null,shell,new object[]{p});x!.GetType().InvokeMember("TargetPath",System.Reflection.BindingFlags.SetProperty,null,x,new object[]{target});x.GetType().InvokeMember("Save",System.Reflection.BindingFlags.InvokeMethod,null,x,null);}if(desktop.Checked)Link(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),"Punto de Venta.lnk"));if(start.Checked)Link(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),"Punto de Venta.lnk"));}
