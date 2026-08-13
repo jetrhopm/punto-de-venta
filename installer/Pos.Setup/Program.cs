@@ -20,13 +20,18 @@ bool IsAdministrator() => new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsI
 if (!IsAdministrator())
 {
     Log("Solicitando permisos de administrador de Windows.");
+    var localStage = Path.Combine(Path.GetTempPath(), "PuntoDeVenta-Setup", Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(localStage);
+    var localExecutable = Path.Combine(localStage, "Setup.exe");
+    File.Copy(Environment.ProcessPath!, localExecutable, true);
+    Log($"Copiando el instalador a una ruta local antes de elevar: {localExecutable}");
     var elevated = Process.Start(new ProcessStartInfo
     {
-        FileName = Environment.ProcessPath!,
+        FileName = localExecutable,
         Arguments = string.Join(' ', args.Select(QuoteArgument)),
         UseShellExecute = true,
         Verb = "runas",
-        WorkingDirectory = AppContext.BaseDirectory
+        WorkingDirectory = localStage
     });
     if (elevated is null) return 1;
     await elevated.WaitForExitAsync();

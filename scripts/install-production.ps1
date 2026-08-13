@@ -59,7 +59,17 @@ function Start-PostgresForRecovery {
     }
 
     Write-InstallLog 'Iniciando PostgreSQL directamente con pg_ctl y esperando confirmacion de disponibilidad.'
-    Invoke-Native $pgCtl @('start', '-D', $pgData, '-l', $logPath, '-o', "-p $port", '-w')
+    try {
+        Invoke-Native $pgCtl @('start', '-D', $pgData, '-l', $logPath, '-o', "-p $port", '-w')
+    } catch {
+        Write-InstallLog 'PostgreSQL no pudo iniciar. Ultimas lineas de postgresql.log:'
+        if (Test-Path $logPath) {
+            Get-Content -LiteralPath $logPath -Tail 60 | ForEach-Object { Write-InstallLog "  $_" }
+        } else {
+            Write-InstallLog "No existe el log esperado: $logPath"
+        }
+        throw
+    }
 }
 
 Assert-Administrator
