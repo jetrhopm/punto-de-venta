@@ -2,6 +2,12 @@
 
 ## Sin liberar
 
+- Se agrega un centro de configuracion local para tienda, usuarios, impresoras, respaldos e importacion de inventario.
+- Se permite administrar cajeros con permiso granular sin permitir que un cajero modifique administradores.
+- Se enumeran impresoras instaladas en Windows, se guarda una por caja y se agrega impresion de prueba.
+- Se crean respaldos PostgreSQL reales con `pg_dump`, checksum SHA-256, manifiesto y copia externa.
+- Se importa CSV/XLSX de eleventa con vista previa, respaldo previo, transaccion, idempotencia, kardex y reporte.
+- Se conservan departamento, minimos, maximos, tipo de venta y proveedor principal del archivo de eleventa.
 - Se corrige el inicio tras reiniciar Windows con dependencia y recuperación del servicio API, reintentos y diagnóstico visible en el login.
 - Se corrige la reparacion del instalador para resincronizar la credencial tecnica de PostgreSQL y actualizar correctamente el servicio API.
 - Se agrega prompt maestro del proyecto.

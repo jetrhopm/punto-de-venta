@@ -1,6 +1,6 @@
 # Plan completo del punto de venta
 
-Estado actualizado: 2026-08-11
+Estado actualizado: 2026-08-13
 
 ## Terminado
 
@@ -43,14 +43,14 @@ Estado actualizado: 2026-08-11
 - Asistente WPF completo de primera configuracion.
 - Administracion de usuarios y permisos en API; bloqueo progresivo y recuperacion administrada quedan para el siguiente incremento de seguridad.
 - Turnos: apertura, entradas, salidas y corte conectados en WPF.
-- Alta y edicion de productos protegidas por permiso; pendiente importacion CSV.
+- Alta y edicion de productos protegidas por permiso; importacion CSV/XLSX con vista previa, respaldo, idempotencia y transaccion completada.
 - Venta finalizada con `operation_id` idempotente, efectivo y cambio.
 - Cliente WPF con carrito, seleccion de resultados y ventana de cobro en efectivo.
 - Descuento de existencia y kardex con ajustes autorizados, existencias anterior/posterior y auditoria de operacion.
 - Cobro en efectivo transaccional con recibido/cambio y movimientos detallados de caja.
 - Ticket PDF guardable mediante dialogo de Windows y cola transaccional; ESC/POS fisico queda posterior.
 - Respaldo con checksum, restauracion de prueba y diagnostico local documentados; restauracion requiere credenciales administrativas PostgreSQL.
-- Importador CSV real bloqueado hasta recibir el archivo de productos.
+- Importador validado con el archivo XLSX real de eleventa: codigo, descripcion, costos, precios, mayoreo, departamento, existencia, minimos, maximos, tipo de venta y proveedor.
 
 ### Fase 2: operacion comercial completa
 
@@ -71,6 +71,8 @@ Estado actualizado: 2026-08-11
 La implementacion local de la Fase 2 esta terminada. La validacion externa requiere la maquina virtual o equipos limpios y permisos administrativos; no debe simularse en desarrollo.
 
 ### Fase 3: multicaja LAN
+
+- Incremento local previo completado: centro de configuracion para datos de tienda, usuarios y permisos, impresoras de Windows, respaldos e importacion CSV/XLSX.
 
 - Incremento 1 completado: servidor configurable por IP/nombre, prueba de conexion, endpoint de compatibilidad, API preparada para escuchar en LAN privada y regla de Firewall restringida al perfil privado.
 - Incremento 2 completado: codigo temporal de emparejamiento, identificadores persistentes y almacenamiento local protegido con DPAPI.

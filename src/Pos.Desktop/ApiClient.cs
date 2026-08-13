@@ -16,6 +16,7 @@ public static class ApiClient
     public static Guid? DeviceId { get; private set; }
     public static Guid? StoreId { get; private set; }
     public static Guid? RegisterId { get; private set; }
+    public static string? PrinterName { get; private set; }
 
     static ApiClient() => Load();
 
@@ -29,7 +30,7 @@ public static class ApiClient
         BaseUrl = uri.ToString().TrimEnd('/');
         ClientInstance.BaseAddress = new Uri(BaseUrl + "/");
         Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new ClientSettings(BaseUrl)));
+        SaveSettings();
     }
 
     public static void ApplySession(string? accessToken) => ClientInstance.DefaultRequestHeaders.Authorization = string.IsNullOrWhiteSpace(accessToken) ? null : new AuthenticationHeaderValue("Bearer", accessToken);
@@ -60,7 +61,25 @@ public static class ApiClient
         DeviceId = deviceId; StoreId = storeId; RegisterId = registerId;
         Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
         var protectedToken = Convert.ToBase64String(ProtectedData.Protect(System.Text.Encoding.UTF8.GetBytes(deviceToken), null, DataProtectionScope.CurrentUser));
-        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new ClientSettings(BaseUrl, deviceId, storeId, registerId, protectedToken)));
+        SaveSettings(protectedToken);
+    }
+
+    public static void SetPrinter(string? printerName)
+    {
+        PrinterName = string.IsNullOrWhiteSpace(printerName) ? null : printerName.Trim();
+        SaveSettings();
+    }
+
+    private static void SaveSettings(string? protectedToken = null)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
+        var currentToken = protectedToken;
+        if (currentToken is null && File.Exists(SettingsPath))
+        {
+            try { currentToken = JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(SettingsPath))?.DeviceTokenProtected; }
+            catch (JsonException) { }
+        }
+        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName)));
     }
 
     private static void Load()
@@ -74,6 +93,7 @@ public static class ApiClient
                 {
                     BaseUrl = settings.BaseUrl.TrimEnd('/');
                     DeviceId = settings.DeviceId; StoreId = settings.StoreId; RegisterId = settings.RegisterId;
+                    PrinterName = settings.PrinterName;
                     ClientInstance.BaseAddress = new Uri(BaseUrl + "/");
                     return;
                 }
@@ -83,5 +103,5 @@ public static class ApiClient
         ClientInstance.BaseAddress = new Uri(BaseUrl + "/");
     }
 
-    private sealed record ClientSettings(string BaseUrl, Guid? DeviceId = null, Guid? StoreId = null, Guid? RegisterId = null, string? DeviceTokenProtected = null);
+    private sealed record ClientSettings(string BaseUrl, Guid? DeviceId = null, Guid? StoreId = null, Guid? RegisterId = null, string? DeviceTokenProtected = null, string? PrinterName = null);
 }

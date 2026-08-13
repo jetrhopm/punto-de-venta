@@ -1,0 +1,12 @@
+<Window x:Class="Pos.Desktop.StoreSettingsWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Datos de la tienda" Width="650" Height="610" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <Grid Margin="24">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <TextBlock Text="Datos de la tienda" FontSize="22" FontWeight="Bold" Foreground="#17324D"/>
+        <Grid Grid.Row="1" Margin="0,18,0,12">
+            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+            <StackPanel Margin="0,0,10,0"><TextBlock Text="Nombre comercial"/><TextBox x:Name="NameBox" Height="34" Margin="0,4,0,12"/><TextBlock Text="Giro"/><ComboBox x:Name="BusinessTypeBox" Height="34" Margin="0,4,0,12" IsEditable="True"><ComboBoxItem>Abarrotes</ComboBoxItem><ComboBoxItem>Minisúper</ComboBoxItem><ComboBoxItem>Farmacia</ComboBoxItem><ComboBoxItem>Papelería</ComboBoxItem><ComboBoxItem>Ferretería</ComboBoxItem><ComboBoxItem>Comercio general</ComboBoxItem><ComboBoxItem>Otro</ComboBoxItem></ComboBox><TextBlock Text="Razón social"/><TextBox x:Name="LegalNameBox" Height="34" Margin="0,4,0,12"/><TextBlock Text="RFC"/><TextBox x:Name="TaxIdBox" Height="34" Margin="0,4,0,12"/></StackPanel>
+            <StackPanel Grid.Column="1" Margin="10,0,0,0"><TextBlock Text="Teléfono"/><TextBox x:Name="PhoneBox" Height="34" Margin="0,4,0,12"/><TextBlock Text="Zona horaria"/><TextBox x:Name="TimeZoneBox" Height="34" Margin="0,4,0,12" Text="America/Mexico_City"/><TextBlock Text="Dirección"/><TextBox x:Name="AddressBox" Height="112" Margin="0,4,0,12" TextWrapping="Wrap" AcceptsReturn="True"/></StackPanel>
+        </Grid>
+        <StackPanel Grid.Row="2"><Button Width="150" Height="38" HorizontalAlignment="Right" Click="OnSaveClick">Guardar cambios</Button><TextBlock x:Name="StatusText" Margin="0,10,0,0" Foreground="#526577" TextWrapping="Wrap"/></StackPanel>
+    </Grid>
+</Window>

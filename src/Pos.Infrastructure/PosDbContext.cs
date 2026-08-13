@@ -31,6 +31,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     public DbSet<KitComponentRecord> KitComponents => Set<KitComponentRecord>();
     public DbSet<DeviceRecord> Devices => Set<DeviceRecord>();
     public DbSet<PairingCodeRecord> PairingCodes => Set<PairingCodeRecord>();
+    public DbSet<ImportBatchRecord> ImportBatches => Set<ImportBatchRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,6 +42,10 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             entity.HasKey(store => store.Id);
             entity.Property(store => store.Name).HasMaxLength(160).IsRequired();
             entity.Property(store => store.BusinessType).HasMaxLength(80).IsRequired();
+            entity.Property(store => store.LegalName).HasMaxLength(200);
+            entity.Property(store => store.TaxId).HasMaxLength(20);
+            entity.Property(store => store.Address).HasMaxLength(300);
+            entity.Property(store => store.Phone).HasMaxLength(30);
             entity.Property(store => store.TimeZoneId).HasMaxLength(100).IsRequired();
             entity.Property(store => store.CreatedAtUtc).HasColumnType("timestamp with time zone"); entity.Property(store => store.TicketHeader).HasMaxLength(300); entity.Property(store => store.TicketFooter).HasMaxLength(300);
         });
@@ -77,10 +82,26 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             entity.Property(product => product.Code).HasMaxLength(80).IsRequired();
             entity.Property(product => product.NormalizedCode).HasMaxLength(80).IsRequired();
             entity.Property(product => product.Description).HasMaxLength(200).IsRequired();
+            entity.Property(product => product.Category).HasMaxLength(100);
+            entity.Property(product => product.UnitOfMeasure).HasMaxLength(30).HasDefaultValue("Pieza");
             entity.Property(product => product.Price).HasPrecision(18, 2);
             entity.Property(product => product.WholesalePrice).HasPrecision(18, 2);
             entity.Property(product => product.WholesaleMinimumQuantity).HasPrecision(18, 3);
+            entity.Property(product => product.MinimumStock).HasPrecision(18, 3);
+            entity.Property(product => product.MaximumStock).HasPrecision(18, 3);
             entity.HasIndex(product => product.NormalizedCode).IsUnique();
+            entity.HasIndex(product => product.PrimarySupplierId);
+            entity.HasOne<SupplierRecord>().WithMany().HasForeignKey(product => product.PrimarySupplierId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<ImportBatchRecord>(entity =>
+        {
+            entity.ToTable("import_batch");
+            entity.HasKey(item => item.Id);
+            entity.HasIndex(item => item.OperationId).IsUnique();
+            entity.Property(item => item.SourceFileName).HasMaxLength(260).IsRequired();
+            entity.Property(item => item.DuplicateRule).HasMaxLength(20).IsRequired();
+            entity.Property(item => item.CreatedAtUtc).HasColumnType("timestamp with time zone");
+            entity.HasOne<UserRecord>().WithMany().HasForeignKey(item => item.UserId).OnDelete(DeleteBehavior.Restrict);
         });
         modelBuilder.Entity<PromotionRecord>(entity =>
         {
@@ -182,12 +203,13 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     }
 }
 
-public sealed class StoreRecord { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string BusinessType { get; set; } = string.Empty; public string TimeZoneId { get; set; } = "America/Mexico_City"; public string TicketHeader { get; set; } = string.Empty; public string TicketFooter { get; set; } = "Gracias por su compra"; public int TicketWidthMm { get; set; } = 80; public DateTimeOffset CreatedAtUtc { get; set; } }
+public sealed class StoreRecord { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string BusinessType { get; set; } = string.Empty; public string LegalName { get; set; } = string.Empty; public string TaxId { get; set; } = string.Empty; public string Address { get; set; } = string.Empty; public string Phone { get; set; } = string.Empty; public string TimeZoneId { get; set; } = "America/Mexico_City"; public string TicketHeader { get; set; } = string.Empty; public string TicketFooter { get; set; } = "Gracias por su compra"; public int TicketWidthMm { get; set; } = 80; public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class UserRecord { public Guid Id { get; set; } public string NormalizedUserName { get; set; } = string.Empty; public string PasswordHash { get; set; } = string.Empty; public string DisplayName { get; set; } = string.Empty; public bool IsAdministrator { get; set; } public bool IsActive { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class RegisterRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public string Name { get; set; } = string.Empty; public bool IsActive { get; set; } }
 public sealed class DeviceRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public Guid RegisterId { get; set; } public string Name { get; set; } = string.Empty; public string DeviceType { get; set; } = "Register"; public string DeviceTokenHash { get; set; } = string.Empty; public bool IsActive { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset? LastSeenAtUtc { get; set; } }
 public sealed class PairingCodeRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public Guid CreatedByUserId { get; set; } public string CodeHash { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset ExpiresAtUtc { get; set; } public DateTimeOffset? UsedAtUtc { get; set; } }
-public sealed class ProductRecord { public Guid Id { get; set; } public string Code { get; set; } = string.Empty; public string NormalizedCode { get; set; } = string.Empty; public string Description { get; set; } = string.Empty; public decimal Price { get; set; } public decimal Cost { get; set; } public decimal WholesalePrice { get; set; } public decimal WholesaleMinimumQuantity { get; set; } public decimal Stock { get; set; } public bool IsKit { get; set; } public bool IsActive { get; set; } }
+public sealed class ProductRecord { public Guid Id { get; set; } public string Code { get; set; } = string.Empty; public string NormalizedCode { get; set; } = string.Empty; public string Description { get; set; } = string.Empty; public string Category { get; set; } = string.Empty; public string UnitOfMeasure { get; set; } = "Pieza"; public decimal Price { get; set; } public decimal Cost { get; set; } public decimal WholesalePrice { get; set; } public decimal WholesaleMinimumQuantity { get; set; } public decimal Stock { get; set; } public decimal MinimumStock { get; set; } public decimal MaximumStock { get; set; } public Guid? PrimarySupplierId { get; set; } public bool IsKit { get; set; } public bool IsActive { get; set; } }
+public sealed class ImportBatchRecord { public Guid Id { get; set; } public Guid OperationId { get; set; } public Guid UserId { get; set; } public string SourceFileName { get; set; } = string.Empty; public string DuplicateRule { get; set; } = "Skip"; public int CreatedCount { get; set; } public int UpdatedCount { get; set; } public int SkippedCount { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class PromotionRecord { public Guid Id { get; set; } public Guid ProductId { get; set; } public string Name { get; set; } = string.Empty; public decimal Percent { get; set; } public DateTimeOffset StartsAtUtc { get; set; } public DateTimeOffset EndsAtUtc { get; set; } public bool IsActive { get; set; } }
 public sealed class KitComponentRecord { public Guid Id { get; set; } public Guid KitProductId { get; set; } public Guid ComponentProductId { get; set; } public decimal Quantity { get; set; } }
 public sealed class SessionRecord { public Guid Id { get; set; } public Guid UserId { get; set; } public string TokenHash { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset ExpiresAtUtc { get; set; } public DateTimeOffset? RevokedAtUtc { get; set; } }

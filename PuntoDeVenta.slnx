@@ -11,6 +11,7 @@
     <Project Path="src/Pos.Worker/Pos.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Pos.DesktopTests/Pos.DesktopTests.csproj" />
     <Project Path="tests/Pos.IntegrationTests/Pos.IntegrationTests.csproj" />
     <Project Path="tests/Pos.UnitTests/Pos.UnitTests.csproj" />
   </Folder>
