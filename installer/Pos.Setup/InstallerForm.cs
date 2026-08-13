@@ -31,11 +31,43 @@ public sealed class InstallerForm : Form
     {
         if (!uninstall && !terms.Checked) { status.Text = "Debes aceptar los términos y condiciones."; return; } run.Enabled=false;
         try { if (uninstall) { await Ps(Path.Combine(root,"install-production.ps1"),"-Uninstall"); Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PuntoDeVenta",false); Set(100,"Desinstalación terminada. Tus datos se conservaron."); }
-            else { var temp=Path.Combine(Path.GetTempPath(),"PuntoDeVenta-Setup",Guid.NewGuid().ToString("N")); Directory.CreateDirectory(temp); try { await Extract(temp); await Copy(temp); } finally { try{Directory.Delete(temp,true);}catch{} } Set(76,"Instalando Microsoft Visual C++..."); await Run(Path.Combine(root,"vc_redist.x64.exe"),"/install /quiet /norestart"); Set(82,"Configurando PostgreSQL y la API..."); await Ps(Path.Combine(root,"install-production.ps1"),""); await SetupAdmin(); Register(); MakeLinks(); Set(100,"Instalación terminada correctamente."); } }
+            else { var temp=Path.Combine(Path.GetTempPath(),"PuntoDeVenta-Setup",Guid.NewGuid().ToString("N")); Directory.CreateDirectory(temp); try { await Extract(temp); await StopServicesForUpdate(); await Copy(temp); } finally { try{Directory.Delete(temp,true);}catch{} } Set(76,"Instalando Microsoft Visual C++..."); await Run(Path.Combine(root,"vc_redist.x64.exe"),"/install /quiet /norestart"); Set(82,"Configurando PostgreSQL y la API..."); await Ps(Path.Combine(root,"install-production.ps1"),""); await SetupAdmin(); Register(); MakeLinks(); Set(100,"Instalación terminada correctamente."); } }
         catch(Exception ex) { status.Text="Error: "+ex.Message; Directory.CreateDirectory(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"PuntoDeVenta","logs")); File.AppendAllText(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"PuntoDeVenta","logs","setup-error.log"),ex+Environment.NewLine); run.Enabled=true; }
     }
     async Task Extract(string dest) { await using var s=typeof(InstallerForm).Assembly.GetManifestResourceStream("PuntoDeVenta.Payload.zip")??throw new InvalidOperationException("No se encontró el paquete interno."); using var z=new ZipArchive(s); var total=z.Entries.Sum(e=>Math.Max(0,e.Length)); long done=0; foreach(var e in z.Entries){var t=Path.GetFullPath(Path.Combine(dest,e.FullName.Replace('/',Path.DirectorySeparatorChar)));if(!t.StartsWith(Path.GetFullPath(dest)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Paquete inválido.");if(e.Name.Length==0){Directory.CreateDirectory(t);continue;}Directory.CreateDirectory(Path.GetDirectoryName(t)!);await using var i=e.Open();await using var o=File.Create(t);var b=new byte[65536];int n;while((n=await i.ReadAsync(b))>0){await o.WriteAsync(b.AsMemory(0,n));done+=n;Set(3+(int)(done*55/Math.Max(1,total)),"Copiando: "+e.FullName);}} }
-    async Task Copy(string src){var f=Directory.GetFiles(src,"*",SearchOption.AllDirectories);for(int n=0;n<f.Length;n++){var rel=Path.GetRelativePath(src,f[n]);var t=Path.Combine(root,rel);Directory.CreateDirectory(Path.GetDirectoryName(t)!);File.Copy(f[n],t,true);Set(58+n*15/Math.Max(1,f.Length),"Instalando: "+rel);await Task.Yield();}}
+    async Task StopServicesForUpdate()
+    {
+        Set(58, "Deteniendo servicios de la instalación anterior...");
+        var powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe");
+        await Run(powershell, "-NoProfile -ExecutionPolicy Bypass -Command \"Stop-Service -Name 'PuntoDeVentaApi','PuntoDeVentaPostgreSQL' -Force -ErrorAction SilentlyContinue\"");
+        await Task.Delay(TimeSpan.FromSeconds(2));
+    }
+
+    async Task Copy(string src)
+    {
+        var files = Directory.GetFiles(src, "*", SearchOption.AllDirectories);
+        for (var n = 0; n < files.Length; n++)
+        {
+            var relative = Path.GetRelativePath(src, files[n]);
+            var target = Path.Combine(root, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            await CopyWithRetry(files[n], target, relative);
+            Set(60 + n * 15 / Math.Max(1, files.Length), "Instalando: " + relative);
+        }
+    }
+
+    async Task CopyWithRetry(string source, string target, string relative)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try { File.Copy(source, target, true); return; }
+            catch (IOException) when (attempt < 16)
+            {
+                Set(59, "Esperando que se libere: " + relative);
+                await Task.Delay(TimeSpan.FromSeconds(1));
+            }
+        }
+    }
     async Task Ps(string script,string extra)=>await Run(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),@"WindowsPowerShell\v1.0\powershell.exe"),$"-NoProfile -ExecutionPolicy Bypass -File {Program.QuoteArgument(script)} -InstallRoot {Program.QuoteArgument(root)} {extra}");
     async Task Run(string file,string args){using var p=Process.Start(new ProcessStartInfo(file,args){WorkingDirectory=root,UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true,CreateNoWindow=true})??throw new InvalidOperationException("No se pudo iniciar "+Path.GetFileName(file));p.OutputDataReceived+=(_,e)=>{if(!string.IsNullOrWhiteSpace(e.Data))BeginInvoke(()=>status.Text=e.Data);};p.BeginOutputReadLine();p.BeginErrorReadLine();await p.WaitForExitAsync();if(p.ExitCode!=0)throw new InvalidOperationException(Path.GetFileName(file)+" terminó con código "+p.ExitCode);}
     async Task SetupAdmin(){using var c=new HttpClient{BaseAddress=new Uri("http://127.0.0.1:5000"),Timeout=TimeSpan.FromSeconds(10)};for(int n=0;n<20;n++){try{var s=await c.GetFromJsonAsync<SetupStatus>("/api/setup/status");if(s?.Configured==true)return;if(s is not null){var r=await c.PostAsJsonAsync("/api/setup/initial",new{storeName=store.Text,businessType="Comercio general",userName="admin",password=password.Text,administratorName=admin.Text,registerName="Caja 1"});if(!r.IsSuccessStatusCode&&r.StatusCode!=System.Net.HttpStatusCode.Conflict)throw new InvalidOperationException("No se pudo crear el administrador.");return;}}catch(HttpRequestException){await Task.Delay(1000);}}throw new InvalidOperationException("La API no respondió.");}
