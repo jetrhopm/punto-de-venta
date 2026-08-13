@@ -3,7 +3,17 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Pos.Infrastructure;
 
+var startupLog = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "logs", "api-startup.log");
+void WriteStartupLog(string message)
+{
+    Directory.CreateDirectory(Path.GetDirectoryName(startupLog)!);
+    File.AppendAllText(startupLog, $"[{DateTimeOffset.Now:O}] {message}{Environment.NewLine}");
+}
+
+AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) => WriteStartupLog($"ERROR NO CONTROLADO: {eventArgs.ExceptionObject}");
+WriteStartupLog("Iniciando API.");
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseWindowsService();
 builder.WebHost.UseUrls(Environment.GetEnvironmentVariable("POS_API_URLS") ?? "http://127.0.0.1:5000");
 var connectionString = PosDbContextFactory.ReadConfiguredConnectionString();
 builder.Services.AddDbContext<PosDbContext>(options => options.UseNpgsql(connectionString).ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning)));
@@ -34,6 +44,7 @@ await using (var migrationScope = app.Services.CreateAsyncScope())
     var database = migrationScope.ServiceProvider.GetRequiredService<PosDbContext>();
     await database.Database.MigrateAsync();
 }
+WriteStartupLog("Migraciones aplicadas. API lista para recibir solicitudes.");
 
 app.MapGet("/health", () =>
 {
