@@ -4,6 +4,12 @@
     <ProjectReference Include="..\Pos.Application\Pos.Application.csproj" />
     <PackageReference Include="ClosedXML" />
     <PackageReference Include="CsvHelper" />
+    <PackageReference Include="MahApps.Metro.IconPacks.Material" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\Icons\app-icon-48.png" />
+    <Resource Include="Assets\Icons\app-icon-64.png" />
   </ItemGroup>
 
   <PropertyGroup>

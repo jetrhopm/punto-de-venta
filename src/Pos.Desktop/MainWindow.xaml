@@ -1,29 +1,147 @@
-<Window x:Class="Pos.Desktop.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Punto de Venta" Width="1360" Height="820" MinWidth="1100" MinHeight="680" WindowStartupLocation="CenterScreen" PreviewKeyDown="OnPreviewKeyDown" Loaded="OnLoaded">
+<Window x:Class="Pos.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
+        Title="Punto de Venta" Width="1360" Height="820" MinWidth="1100" MinHeight="680"
+        WindowStartupLocation="CenterScreen" PreviewKeyDown="OnPreviewKeyDown" Loaded="OnLoaded">
     <Window.Resources>
-        <SolidColorBrush x:Key="BorderBrush" Color="#D7E1E8"/><SolidColorBrush x:Key="PrimaryBrush" Color="#146CB0"/><SolidColorBrush x:Key="GreenBrush" Color="#159447"/>
-        <Style TargetType="Button"><Setter Property="Margin" Value="4"/><Setter Property="Padding" Value="12,9"/><Setter Property="FontSize" Value="14"/><Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Cursor" Value="Hand"/></Style>
-        <Style x:Key="NavButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="MinWidth" Value="92"/><Setter Property="Height" Value="48"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
-        <Style x:Key="ActionButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Height" Value="78"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="HorizontalContentAlignment" Value="Center"/></Style>
-        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Background" Value="{StaticResource GreenBrush}"/><Setter Property="Foreground" Value="White"/><Setter Property="BorderBrush" Value="{StaticResource GreenBrush}"/><Setter Property="FontWeight" Value="Bold"/><Setter Property="FontSize" Value="18"/></Style>
+        <Style x:Key="TopNavButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="MinWidth" Value="92"/>
+            <Setter Property="Height" Value="54"/>
+            <Setter Property="Margin" Value="3"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style x:Key="RailButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Height" Value="74"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Padding" Value="8,7"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style x:Key="PaymentButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Height" Value="64"/>
+            <Setter Property="Padding" Value="5"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+        <Style x:Key="IconOnlyButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="38"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="MinHeight" Value="38"/>
+            <Setter Property="Padding" Value="7"/>
+        </Style>
     </Window.Resources>
-    <Grid Background="#F3F7FA">
+
+    <Grid Background="{StaticResource AppBackgroundBrush}">
         <Grid.RowDefinitions><RowDefinition Height="76"/><RowDefinition Height="*"/><RowDefinition Height="34"/></Grid.RowDefinitions>
-        <Border Grid.Row="0" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
-            <Grid Margin="14,0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Source="Assets/Icons/app-icon-48.png" Width="42" Height="42" Margin="0,0,12,0"/><StackPanel><TextBlock Text="Punto de Venta" FontSize="18" FontWeight="Bold" Foreground="#17324D"/><TextBlock x:Name="StoreNameText" Text="Conectando..." FontSize="12" Foreground="#607080"/></StackPanel></StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center"><Button Style="{StaticResource NavButton}" Tag="Ventas" Click="OnNavigateClick">Ventas  F1</Button><Button Style="{StaticResource NavButton}" Tag="Productos" Click="OnNavigateClick">Productos  F3</Button><Button Style="{StaticResource NavButton}" Tag="Kits" Click="OnNavigateClick">Kits</Button><Button Style="{StaticResource NavButton}" Tag="Clientes" Click="OnNavigateClick">Clientes  F2</Button><Button Style="{StaticResource NavButton}" Tag="Inventario" Click="OnNavigateClick">Inventario  F4</Button><Button Style="{StaticResource NavButton}" Tag="Reportes" Click="OnNavigateClick">Reportes</Button></StackPanel>
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"><Button Tag="Configuracion" Click="OnNavigateClick">Configuración</Button><Button ToolTip="Minimizar" Click="OnMinimizeClick">_</Button><Button ToolTip="Salir" Click="OnExitClick">Salir</Button></StackPanel>
+
+        <Border Grid.Row="0" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1">
+            <Grid Margin="16,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="230"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Image Source="/Assets/Icons/app-icon-48.png" Width="44" Height="44" Margin="0,0,11,0"/>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Punto de Venta" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextBrush}"/>
+                        <TextBlock x:Name="StoreNameText" Text="Conectando..." FontSize="12" Foreground="{StaticResource TextMutedBrush}" TextTrimming="CharacterEllipsis" MaxWidth="165"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Button Style="{StaticResource TopNavButton}" Tag="Ventas" Click="OnNavigateClick" ToolTip="Ventas (F1)"><StackPanel><icons:PackIconMaterial Kind="CartOutline" Width="23" Height="23" HorizontalAlignment="Center" Foreground="{StaticResource PrimaryBrush}"/><TextBlock Text="Ventas  F1" Margin="0,3,0,0"/></StackPanel></Button>
+                    <Button Style="{StaticResource TopNavButton}" Tag="Productos" Click="OnNavigateClick" ToolTip="Productos (F3)"><StackPanel><icons:PackIconMaterial Kind="PackageVariantClosed" Width="23" Height="23" HorizontalAlignment="Center" Foreground="{StaticResource PrimaryBrush}"/><TextBlock Text="Productos  F3" Margin="0,3,0,0"/></StackPanel></Button>
+                    <Button Style="{StaticResource TopNavButton}" Tag="Kits" Click="OnNavigateClick"><StackPanel><icons:PackIconMaterial Kind="PackageVariant" Width="23" Height="23" HorizontalAlignment="Center" Foreground="{StaticResource WarningBrush}"/><TextBlock Text="Kits" Margin="0,3,0,0"/></StackPanel></Button>
+                    <Button Style="{StaticResource TopNavButton}" Tag="Clientes" Click="OnNavigateClick" ToolTip="Clientes (F2)"><StackPanel><icons:PackIconMaterial Kind="AccountGroupOutline" Width="23" Height="23" HorizontalAlignment="Center" Foreground="{StaticResource PrimaryBrush}"/><TextBlock Text="Clientes  F2" Margin="0,3,0,0"/></StackPanel></Button>
+                    <Button Style="{StaticResource TopNavButton}" Tag="Inventario" Click="OnNavigateClick" ToolTip="Inventario (F4)"><StackPanel><icons:PackIconMaterial Kind="Warehouse" Width="23" Height="23" HorizontalAlignment="Center" Foreground="{StaticResource SuccessBrush}"/><TextBlock Text="Inventario  F4" Margin="0,3,0,0"/></StackPanel></Button>
+                    <Button Style="{StaticResource TopNavButton}" Tag="Reportes" Click="OnNavigateClick"><StackPanel><icons:PackIconMaterial Kind="ChartBoxOutline" Width="23" Height="23" HorizontalAlignment="Center" Foreground="#7C5799"/><TextBlock Text="Reportes" Margin="0,3,0,0"/></StackPanel></Button>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Tag="Configuracion" Click="OnNavigateClick" Height="42" Padding="11,6" ToolTip="Configuración"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="CogOutline" Width="20" Height="20" Margin="0,0,7,0"/><TextBlock Text="Configuración" VerticalAlignment="Center"/></StackPanel></Button>
+                    <Button Style="{StaticResource IconOnlyButton}" ToolTip="Minimizar" Click="OnMinimizeClick"><icons:PackIconMaterial Kind="WindowMinimize" Width="19" Height="19"/></Button>
+                    <Button Style="{StaticResource IconOnlyButton}" ToolTip="Salir" Click="OnExitClick"><icons:PackIconMaterial Kind="LogoutVariant" Width="20" Height="20" Foreground="{StaticResource DangerBrush}"/></Button>
+                </StackPanel>
             </Grid>
         </Border>
-        <Grid Grid.Row="1" Margin="14,12"><Grid.ColumnDefinitions><ColumnDefinition Width="112"/><ColumnDefinition Width="*"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions>
-            <StackPanel Grid.Column="0"><Button Style="{StaticResource ActionButton}" Click="OnSalesActionClick">Nuevo ticket</Button><Button Style="{StaticResource ActionButton}" Click="OnSalesActionClick">Guardar orden</Button><Button Style="{StaticResource ActionButton}" Click="OnCancelLastSaleClick">Cancelar ticket</Button><Button Style="{StaticResource ActionButton}" Click="OnSalesActionClick">Buscar cliente</Button><Button Style="{StaticResource ActionButton}" Click="OnReturnLastSaleClick">Devolver</Button><Button Style="{StaticResource ActionButton}" Click="OnPairingCodeClick">Codigo de caja</Button></StackPanel>
-            <Border Grid.Column="1" Margin="10,0" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="16"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                <DockPanel><StackPanel><TextBlock x:Name="WorkspaceTitleText" Text="Venta en curso" FontSize="21" FontWeight="SemiBold" Foreground="#17324D"/><TextBlock x:Name="WorkspaceDetailText" Text="Escanea un código o busca un producto." Foreground="#607080" Margin="0,4,0,0"/></StackPanel><TextBlock DockPanel.Dock="Right" x:Name="CurrentSectionText" Text="Nueva venta" FontSize="16" VerticalAlignment="Center" Foreground="#526577"/></DockPanel>
-                <ListView Grid.Row="1" x:Name="CartList" Margin="0,16,0,12" BorderBrush="{StaticResource BorderBrush}" Background="#FBFDFF" DisplayMemberPath="DisplayText" KeyDown="OnCartKeyDown"/>
-                <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Código o producto" FontWeight="SemiBold" Foreground="#526577"/><TextBox x:Name="ProductSearchTextBox" Height="42" FontSize="17" Padding="10,5" TextChanged="OnProductSearchTextChanged" KeyDown="OnProductSearchKeyDown" ToolTip="Código de barras o descripción"/><ListBox x:Name="ProductResultsList" Height="140" DisplayMemberPath="DisplayText" Visibility="Collapsed" MouseDoubleClick="OnProductSelected"/></StackPanel><Button Grid.Column="1" Height="42" Width="80" Margin="10,22,0,0" Click="OnSearchButtonClick">Buscar</Button></Grid>
-            </Grid></Border>
-            <Border Grid.Column="2" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="16"><StackPanel><TextBlock Text="Venta en curso" FontSize="18" FontWeight="SemiBold" Foreground="#17324D"/><TextBlock Text="Total de la venta" Margin="0,28,0,2" HorizontalAlignment="Center" Foreground="#526577"/><TextBlock x:Name="SaleTotalText" Text="$0.00" FontSize="34" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#111827"/><TextBlock x:Name="SaleItemsText" Text="Artículos: 0" HorizontalAlignment="Center" Foreground="#526577" Margin="0,2,0,18"/><UniformGrid Columns="3"><Button Click="OnChargeClick">Efectivo</Button><Button Click="OnChargeClick">Tarjeta</Button><Button Click="OnChargeClick">Transferencia</Button></UniformGrid><TextBlock Text="Cliente actual" FontWeight="SemiBold" Margin="0,22,0,5"/><Button Click="OnSalesActionClick">Seleccionar cliente</Button><Button Style="{StaticResource PrimaryButton}" Height="68" Margin="4,20,4,4" Click="OnChargeClick">COBRAR  F12</Button><UniformGrid Columns="2"><Button Click="OnChargeClick">Ticket rápido</Button><Button Click="OnSalesActionClick">Imp. último</Button></UniformGrid><Separator Margin="0,18"/><Button Click="OnOpenShiftClick">Abrir turno</Button><Button Click="OnCashMovementClick">Movimientos de efectivo</Button><Button Click="OnCloseShiftClick">Corte</Button></StackPanel></Border>
+
+        <Grid Grid.Row="1" Margin="14,12">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="132"/><ColumnDefinition Width="*"/><ColumnDefinition Width="310"/></Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <Button Style="{StaticResource RailButton}" Click="OnSalesActionClick"><StackPanel><icons:PackIconMaterial Kind="PlusBoxOutline" Width="25" Height="25" HorizontalAlignment="Center" Foreground="{StaticResource PrimaryBrush}"/><TextBlock Text="Nuevo ticket" Margin="0,4,0,0"/></StackPanel></Button>
+                <Button Style="{StaticResource RailButton}" Click="OnSalesActionClick"><StackPanel><icons:PackIconMaterial Kind="ContentSaveOutline" Width="25" Height="25" HorizontalAlignment="Center" Foreground="{StaticResource PrimaryBrush}"/><TextBlock Text="Guardar orden" Margin="0,4,0,0"/></StackPanel></Button>
+                <Button Style="{StaticResource RailButton}" Click="OnCancelLastSaleClick"><StackPanel><icons:PackIconMaterial Kind="Cancel" Width="25" Height="25" HorizontalAlignment="Center" Foreground="{StaticResource DangerBrush}"/><TextBlock Text="Cancelar ticket" Margin="0,4,0,0"/></StackPanel></Button>
+                <Button Style="{StaticResource RailButton}" Click="OnSalesActionClick"><StackPanel><icons:PackIconMaterial Kind="AccountSearchOutline" Width="25" Height="25" HorizontalAlignment="Center" Foreground="{StaticResource PrimaryBrush}"/><TextBlock Text="Buscar cliente" Margin="0,4,0,0"/></StackPanel></Button>
+                <Button Style="{StaticResource RailButton}" Click="OnReturnLastSaleClick"><StackPanel><icons:PackIconMaterial Kind="UndoVariant" Width="25" Height="25" HorizontalAlignment="Center" Foreground="{StaticResource WarningBrush}"/><TextBlock Text="Devolución" Margin="0,4,0,0"/></StackPanel></Button>
+                <Button Style="{StaticResource RailButton}" Click="OnPairingCodeClick"><StackPanel><icons:PackIconMaterial Kind="LinkVariant" Width="25" Height="25" HorizontalAlignment="Center" Foreground="#7C5799"/><TextBlock Text="Código de caja" Margin="0,4,0,0"/></StackPanel></Button>
+            </StackPanel>
+
+            <Border Grid.Column="1" Margin="10,0" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="6" Padding="18">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock x:Name="WorkspaceTitleText" Text="Venta en curso" FontSize="21" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
+                            <TextBlock x:Name="WorkspaceDetailText" Text="Escanea un código o busca un producto." Foreground="{StaticResource TextMutedBrush}" Margin="0,4,0,0"/>
+                        </StackPanel>
+                        <Border Grid.Column="1" Background="{StaticResource PrimarySoftBrush}" CornerRadius="4" Padding="10,5" VerticalAlignment="Center"><TextBlock x:Name="CurrentSectionText" Text="Nueva venta" FontWeight="SemiBold" Foreground="{StaticResource PrimaryBrush}"/></Border>
+                    </Grid>
+
+                    <ListView Grid.Row="1" x:Name="CartList" Margin="0,16,0,14" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Background="#FBFDFF" DisplayMemberPath="DisplayText" KeyDown="OnCartKeyDown"/>
+
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Código o producto" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,5"/>
+                            <Grid>
+                                <icons:PackIconMaterial Kind="BarcodeScan" Width="23" Height="23" Foreground="{StaticResource PrimaryBrush}" Margin="11,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                <TextBox x:Name="ProductSearchTextBox" Height="46" FontSize="17" Padding="43,7,10,7" TextChanged="OnProductSearchTextChanged" KeyDown="OnProductSearchKeyDown" ToolTip="Código de barras o descripción"/>
+                            </Grid>
+                            <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Background="White"><ListBox x:Name="ProductResultsList" Height="140" DisplayMemberPath="DisplayText" Visibility="Collapsed" MouseDoubleClick="OnProductSelected"/></Border>
+                        </StackPanel>
+                        <Button Grid.Column="1" Style="{StaticResource PrimaryButtonStyle}" Height="46" Width="104" Margin="10,24,0,0" Click="OnSearchButtonClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="Magnify" Width="20" Height="20" Margin="0,0,5,0"/><TextBlock Text="Buscar" VerticalAlignment="Center"/></StackPanel></Button>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="2" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="6" Padding="18">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="Venta en curso" FontSize="18" FontWeight="SemiBold"/>
+                        <TextBlock Text="Total de la venta" Margin="0,22,0,2" HorizontalAlignment="Center" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock x:Name="SaleTotalText" Text="$0.00" FontSize="38" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
+                        <TextBlock x:Name="SaleItemsText" Text="Artículos: 0" HorizontalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" Margin="0,2,0,15"/>
+                    </StackPanel>
+                    <UniformGrid Grid.Row="1" Columns="3">
+                        <Button Style="{StaticResource PaymentButton}" Click="OnChargeClick"><StackPanel><icons:PackIconMaterial Kind="Cash" Width="25" Height="25" HorizontalAlignment="Center" Foreground="{StaticResource SuccessBrush}"/><TextBlock Text="Efectivo" Margin="0,3,0,0"/></StackPanel></Button>
+                        <Button Style="{StaticResource PaymentButton}" Click="OnChargeClick"><StackPanel><icons:PackIconMaterial Kind="CreditCardOutline" Width="25" Height="25" HorizontalAlignment="Center" Foreground="{StaticResource PrimaryBrush}"/><TextBlock Text="Tarjeta" Margin="0,3,0,0"/></StackPanel></Button>
+                        <Button Style="{StaticResource PaymentButton}" Click="OnChargeClick"><StackPanel><icons:PackIconMaterial Kind="BankTransfer" Width="25" Height="25" HorizontalAlignment="Center" Foreground="#2B8C7F"/><TextBlock Text="Transferencia" Margin="0,3,0,0"/></StackPanel></Button>
+                    </UniformGrid>
+                    <StackPanel Grid.Row="2" Margin="0,18,0,0">
+                        <TextBlock Text="Cliente actual" FontWeight="SemiBold" Margin="3,0,0,5"/>
+                        <Button Click="OnSalesActionClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="AccountOutline" Width="20" Height="20" Margin="0,0,7,0"/><TextBlock Text="Seleccionar cliente" VerticalAlignment="Center"/></StackPanel></Button>
+                        <Button Style="{StaticResource SuccessButtonStyle}" Height="72" Margin="3,15,3,4" Click="OnChargeClick"><StackPanel><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><icons:PackIconMaterial Kind="CashRegister" Width="24" Height="24" Margin="0,0,8,0"/><TextBlock Text="COBRAR" FontSize="18" FontWeight="Bold"/></StackPanel><TextBlock Text="F12" FontSize="12" HorizontalAlignment="Center" Margin="0,2,0,0"/></StackPanel></Button>
+                        <UniformGrid Columns="2">
+                            <Button Click="OnChargeClick"><StackPanel><icons:PackIconMaterial Kind="ReceiptTextOutline" Width="21" Height="21" HorizontalAlignment="Center"/><TextBlock Text="Ticket rápido" FontSize="11"/></StackPanel></Button>
+                            <Button Click="OnSalesActionClick"><StackPanel><icons:PackIconMaterial Kind="PrinterOutline" Width="21" Height="21" HorizontalAlignment="Center"/><TextBlock Text="Último ticket" FontSize="11"/></StackPanel></Button>
+                        </UniformGrid>
+                    </StackPanel>
+                    <StackPanel Grid.Row="4">
+                        <Separator Margin="0,14,0,10"/>
+                        <Button Click="OnOpenShiftClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ClockOutline" Width="19" Height="19" Margin="0,0,7,0"/><TextBlock Text="Abrir turno"/></StackPanel></Button>
+                        <Button Click="OnCashMovementClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="SwapHorizontal" Width="19" Height="19" Margin="0,0,7,0"/><TextBlock Text="Movimientos de efectivo"/></StackPanel></Button>
+                        <Button Click="OnCloseShiftClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ClipboardCheckOutline" Width="19" Height="19" Margin="0,0,7,0"/><TextBlock Text="Realizar corte"/></StackPanel></Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
         </Grid>
-        <Border Grid.Row="2" Background="#17324D" Padding="14,0"><DockPanel><TextBlock x:Name="StatusText" Text="Listo." Foreground="White" VerticalAlignment="Center"/><TextBlock DockPanel.Dock="Right" x:Name="RegisterStatusText" Text="Caja: sin configurar" Foreground="#DDEAF2" VerticalAlignment="Center"/></DockPanel></Border>
+
+        <Border Grid.Row="2" Background="#17384E" Padding="14,0">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal"><Ellipse Width="8" Height="8" Fill="#50D890" Margin="0,0,8,0"/><TextBlock x:Name="StatusText" Text="Listo." Foreground="White" VerticalAlignment="Center"/></StackPanel>
+                <TextBlock DockPanel.Dock="Right" x:Name="RegisterStatusText" Text="Caja: sin configurar" Foreground="#DDEAF2" VerticalAlignment="Center"/>
+            </DockPanel>
+        </Border>
     </Grid>
 </Window>

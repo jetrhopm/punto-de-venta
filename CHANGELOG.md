@@ -2,6 +2,9 @@
 
 ## Sin liberar
 
+- Se renueva el sistema visual WPF con jerarquia, espaciado, estados de foco y colores operativos consistentes.
+- Se integran iconos Material para WPF mediante MahApps.Metro.IconPacks 6.2.1 con licencia MIT.
+- Se redisenan Ventas, inicio de sesion, configuracion inicial, respaldos, impresoras, tienda y usuarios sin cambiar sus permisos ni flujos.
 - Se agrega un centro de configuracion local para tienda, usuarios, impresoras, respaldos e importacion de inventario.
 - Se permite administrar cajeros con permiso granular sin permitir que un cajero modifique administradores.
 - Se enumeran impresoras instaladas en Windows, se guarda una por caja y se agrega impresion de prueba.
