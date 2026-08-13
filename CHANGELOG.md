@@ -2,6 +2,7 @@
 
 ## Sin liberar
 
+- Se corrige el inicio tras reiniciar Windows con dependencia y recuperación del servicio API, reintentos y diagnóstico visible en el login.
 - Se corrige la reparacion del instalador para resincronizar la credencial tecnica de PostgreSQL y actualizar correctamente el servicio API.
 - Se agrega prompt maestro del proyecto.
 - Se documentan requisitos de desarrollo.

@@ -47,9 +47,22 @@ var app = builder.Build();
 
 try
 {
-    await using var migrationScope = app.Services.CreateAsyncScope();
-    var database = migrationScope.ServiceProvider.GetRequiredService<PosDbContext>();
-    await database.Database.MigrateAsync();
+    const int migrationAttempts = 12;
+    for (var attempt = 1; attempt <= migrationAttempts; attempt++)
+    {
+        try
+        {
+            await using var migrationScope = app.Services.CreateAsyncScope();
+            var database = migrationScope.ServiceProvider.GetRequiredService<PosDbContext>();
+            await database.Database.MigrateAsync();
+            break;
+        }
+        catch (Exception exception) when (attempt < migrationAttempts)
+        {
+            WriteStartupLog($"PostgreSQL todavía no está disponible. Reintento {attempt}/{migrationAttempts}: {exception.Message}");
+            await Task.Delay(TimeSpan.FromSeconds(2));
+        }
+    }
 }
 catch (Exception exception)
 {

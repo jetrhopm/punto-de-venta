@@ -255,19 +255,23 @@ if (-not (Get-NetFirewallRule -DisplayName 'Punto de Venta API LAN' -ErrorAction
 
 if (-not (Get-Service $apiService -ErrorAction SilentlyContinue)) {
     Write-InstallLog 'Etapa 6/8: registrando el servicio de Windows de la API.'
-    New-Service -Name $apiService -BinaryPathName $apiBinaryPath -DisplayName 'Punto de Venta - API' -Description 'API local del sistema Punto de Venta' -StartupType Automatic
+    New-Service -Name $apiService -BinaryPathName $apiBinaryPath -DisplayName 'Punto de Venta - API' -Description 'API local del sistema Punto de Venta' -StartupType Automatic -DependsOn $postgresService
 } else {
     Write-InstallLog 'Etapa 6/8: servicio de API existente detectado; actualizando su ejecutable y configuración.'
     Stop-Service $apiService -Force -ErrorAction SilentlyContinue
     $serviceUpdate = Invoke-CimMethod -InputObject (Get-CimInstance Win32_Service -Filter "Name='$apiService'") -MethodName Change -Arguments @{
         PathName = $apiBinaryPath
         StartMode = 'Automatic'
+        ServiceDependencies = @($postgresService)
     }
     if ($serviceUpdate.ReturnValue -ne 0) {
         throw "Windows no pudo actualizar el servicio PuntoDeVentaApi. Código: $($serviceUpdate.ReturnValue)."
     }
     Write-InstallLog "Servicio PuntoDeVentaApi actualizado. Ejecutable: $apiBinaryPath"
 }
+& (Join-Path $env:SystemRoot 'System32\sc.exe') failure $apiService 'reset=' '86400' 'actions=' 'restart/5000/restart/15000/restart/30000' | ForEach-Object { Write-InstallLog "  $_" }
+if ($LASTEXITCODE -ne 0) { throw "No se pudo configurar la recuperación automática de $apiService." }
+Write-InstallLog 'Dependencia de PostgreSQL y recuperación automática de la API configuradas.'
 Write-InstallLog 'Etapa 7/8: iniciando la API y comprobando el servicio.'
 Start-Service $apiService -ErrorAction SilentlyContinue
 $apiReady = $false

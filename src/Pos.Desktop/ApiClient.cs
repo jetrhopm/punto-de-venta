@@ -34,6 +34,27 @@ public static class ApiClient
 
     public static void ApplySession(string? accessToken) => ClientInstance.DefaultRequestHeaders.Authorization = string.IsNullOrWhiteSpace(accessToken) ? null : new AuthenticationHeaderValue("Bearer", accessToken);
 
+    public static async Task<bool> WaitUntilAvailableAsync(Action<int, int>? reportAttempt = null, CancellationToken cancellationToken = default)
+    {
+        const int maximumAttempts = 15;
+        for (var attempt = 1; attempt <= maximumAttempts; attempt++)
+        {
+            reportAttempt?.Invoke(attempt, maximumAttempts);
+            try
+            {
+                using var requestTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                requestTimeout.CancelAfter(TimeSpan.FromSeconds(2));
+                using var response = await ClientInstance.GetAsync("health", requestTimeout.Token);
+                if (response.IsSuccessStatusCode) return true;
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { }
+            catch (HttpRequestException) { }
+
+            if (attempt < maximumAttempts) await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+        }
+        return false;
+    }
+
     public static void SaveDeviceIdentity(Guid deviceId, Guid storeId, Guid registerId, string deviceToken)
     {
         DeviceId = deviceId; StoreId = storeId; RegisterId = registerId;

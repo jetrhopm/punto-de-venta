@@ -37,6 +37,10 @@ Si existe una conexión protegida válida, la reparación recupera su contraseñ
 
 El servicio `PuntoDeVentaApi` se actualiza mediante la API de administración de servicios de Windows. Esto conserva el servicio y evita errores de interpretación de comillas en rutas con espacios.
 
+La API depende del servicio `PuntoDeVentaPostgreSQL`, reintenta la conexión mientras PostgreSQL termina de arrancar y tiene recuperación automática configurada en Windows. Después de reiniciar el equipo, el cliente también espera al servidor local antes de habilitar el inicio de sesión.
+
+La pantalla de inicio de sesión mantiene el diagnóstico visible y diferencia credenciales incorrectas, demora, falta de conexión y errores del servidor. Cuando el servicio no puede arrancar indica la ubicación de `api-startup.log`.
+
 ## Registros
 
 - `setup-launch.log`: elevación y arranque del instalador.
@@ -55,6 +59,7 @@ Todos se almacenan en `C:\ProgramData\PuntoDeVenta\logs`.
 - La raíz de contenido del servicio es `AppContext.BaseDirectory`, no `C:\Windows\System32`.
 - El servicio recibe rutas absolutas en su `binPath`.
 - El instalador actualiza el `binPath` durante reparación.
+- El servicio API declara dependencia de PostgreSQL y acciones de reinicio automático.
 - Los permisos usan SID universales y funcionan en Windows en español.
 - PostgreSQL se registra con `pg_ctl register` y conserva su clúster existente.
 
