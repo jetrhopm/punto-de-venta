@@ -10,6 +10,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     public DbSet<UserRecord> Users => Set<UserRecord>();
     public DbSet<RegisterRecord> Registers => Set<RegisterRecord>();
     public DbSet<ProductRecord> Products => Set<ProductRecord>();
+    public DbSet<DepartmentRecord> Departments => Set<DepartmentRecord>();
     public DbSet<SessionRecord> Sessions => Set<SessionRecord>();
     public DbSet<PermissionRecord> Permissions => Set<PermissionRecord>();
     public DbSet<ShiftRecord> Shifts => Set<ShiftRecord>();
@@ -85,6 +86,8 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             entity.Property(product => product.NormalizedCode).HasMaxLength(80).IsRequired();
             entity.Property(product => product.Description).HasMaxLength(200).IsRequired();
             entity.Property(product => product.Category).HasMaxLength(100);
+            entity.Property(product => product.ProfitPercent).HasPrecision(5, 2);
+            entity.Property(product => product.WholesaleProfitPercent).HasPrecision(5, 2);
             entity.Property(product => product.UnitOfMeasure).HasMaxLength(30).HasDefaultValue("Pieza");
             entity.Property(product => product.Price).HasPrecision(18, 2);
             entity.Property(product => product.WholesalePrice).HasPrecision(18, 2);
@@ -94,6 +97,16 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             entity.HasIndex(product => product.NormalizedCode).IsUnique();
             entity.HasIndex(product => product.PrimarySupplierId);
             entity.HasOne<SupplierRecord>().WithMany().HasForeignKey(product => product.PrimarySupplierId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(product => product.Department).WithMany().HasForeignKey(product => product.DepartmentId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<DepartmentRecord>(entity =>
+        {
+            entity.ToTable("department");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.NormalizedName).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.CreatedAtUtc).HasColumnType("timestamp with time zone");
+            entity.HasIndex(item => item.NormalizedName).IsUnique();
         });
         modelBuilder.Entity<ImportBatchRecord>(entity =>
         {
@@ -107,7 +120,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
         });
         modelBuilder.Entity<PromotionRecord>(entity =>
         {
-            entity.ToTable("promotion"); entity.HasKey(item => item.Id); entity.Property(item => item.Name).HasMaxLength(120).IsRequired(); entity.Property(item => item.Percent).HasPrecision(5, 2); entity.Property(item => item.StartsAtUtc).HasColumnType("timestamp with time zone"); entity.Property(item => item.EndsAtUtc).HasColumnType("timestamp with time zone"); entity.HasOne<ProductRecord>().WithMany().HasForeignKey(item => item.ProductId).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable("promotion"); entity.HasKey(item => item.Id); entity.Property(item => item.Name).HasMaxLength(120).IsRequired(); entity.Property(item => item.Percent).HasPrecision(5, 2); entity.Property(item => item.DiscountAmount).HasPrecision(18, 2); entity.Property(item => item.BuyQuantity).HasPrecision(18, 3); entity.Property(item => item.PayQuantity).HasPrecision(18, 3); entity.Property(item => item.StartsAtUtc).HasColumnType("timestamp with time zone"); entity.Property(item => item.EndsAtUtc).HasColumnType("timestamp with time zone"); entity.HasIndex(item => item.Name).IsUnique(); entity.HasOne<ProductRecord>().WithMany().HasForeignKey(item => item.ProductId).OnDelete(DeleteBehavior.Restrict);
         });
         modelBuilder.Entity<KitComponentRecord>(entity =>
         {
@@ -238,9 +251,10 @@ public sealed class UserRecord { public Guid Id { get; set; } public string Norm
 public sealed class RegisterRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public string Name { get; set; } = string.Empty; public bool IsActive { get; set; } }
 public sealed class DeviceRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public Guid RegisterId { get; set; } public string Name { get; set; } = string.Empty; public string DeviceType { get; set; } = "Register"; public string DeviceTokenHash { get; set; } = string.Empty; public bool IsActive { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset? LastSeenAtUtc { get; set; } }
 public sealed class PairingCodeRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public Guid CreatedByUserId { get; set; } public string CodeHash { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset ExpiresAtUtc { get; set; } public DateTimeOffset? UsedAtUtc { get; set; } }
-public sealed class ProductRecord { public Guid Id { get; set; } public string Code { get; set; } = string.Empty; public string NormalizedCode { get; set; } = string.Empty; public string Description { get; set; } = string.Empty; public string Category { get; set; } = string.Empty; public string UnitOfMeasure { get; set; } = "Pieza"; public decimal Price { get; set; } public decimal Cost { get; set; } public decimal WholesalePrice { get; set; } public decimal WholesaleMinimumQuantity { get; set; } public decimal Stock { get; set; } public decimal MinimumStock { get; set; } public decimal MaximumStock { get; set; } public Guid? PrimarySupplierId { get; set; } public bool IsKit { get; set; } public bool IsActive { get; set; } }
+public sealed class ProductRecord { public Guid Id { get; set; } public string Code { get; set; } = string.Empty; public string NormalizedCode { get; set; } = string.Empty; public string Description { get; set; } = string.Empty; public string Category { get; set; } = string.Empty; public Guid? DepartmentId { get; set; } public DepartmentRecord? Department { get; set; } public string UnitOfMeasure { get; set; } = "Pieza"; public decimal Price { get; set; } public decimal Cost { get; set; } public decimal ProfitPercent { get; set; } = 20m; public decimal WholesalePrice { get; set; } public decimal WholesaleProfitPercent { get; set; } public decimal WholesaleMinimumQuantity { get; set; } public decimal Stock { get; set; } public decimal MinimumStock { get; set; } public decimal MaximumStock { get; set; } public Guid? PrimarySupplierId { get; set; } public bool IsKit { get; set; } public bool IsActive { get; set; } }
+public sealed class DepartmentRecord { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string NormalizedName { get; set; } = string.Empty; public bool IsActive { get; set; } = true; public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class ImportBatchRecord { public Guid Id { get; set; } public Guid OperationId { get; set; } public Guid UserId { get; set; } public string SourceFileName { get; set; } = string.Empty; public string DuplicateRule { get; set; } = "Skip"; public int CreatedCount { get; set; } public int UpdatedCount { get; set; } public int SkippedCount { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } }
-public sealed class PromotionRecord { public Guid Id { get; set; } public Guid ProductId { get; set; } public string Name { get; set; } = string.Empty; public decimal Percent { get; set; } public DateTimeOffset StartsAtUtc { get; set; } public DateTimeOffset EndsAtUtc { get; set; } public bool IsActive { get; set; } }
+public sealed class PromotionRecord { public Guid Id { get; set; } public Guid ProductId { get; set; } public string Name { get; set; } = string.Empty; public decimal Percent { get; set; } public decimal DiscountAmount { get; set; } public decimal BuyQuantity { get; set; } public decimal PayQuantity { get; set; } public DateTimeOffset? StartsAtUtc { get; set; } public DateTimeOffset? EndsAtUtc { get; set; } public bool IsActive { get; set; } }
 public sealed class KitComponentRecord { public Guid Id { get; set; } public Guid KitProductId { get; set; } public Guid ComponentProductId { get; set; } public decimal Quantity { get; set; } }
 public sealed class SessionRecord { public Guid Id { get; set; } public Guid UserId { get; set; } public string TokenHash { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset ExpiresAtUtc { get; set; } public DateTimeOffset? RevokedAtUtc { get; set; } }
 public sealed class PermissionRecord { public Guid Id { get; set; } public Guid UserId { get; set; } public string Code { get; set; } = string.Empty; }

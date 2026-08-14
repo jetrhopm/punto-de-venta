@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Globalization;
 using System.Net.Http.Json;
 using System.Windows;
@@ -7,63 +8,118 @@ namespace Pos.Desktop;
 
 public partial class ProductCatalogWindow : Window
 {
-    private CancellationTokenSource? _searchCancellation;
-    private ProductRow? _selected;
+    private CancellationTokenSource? _loadCancellation;
+    private CatalogProductRow? _selected;
+    private List<DepartmentRow> _departments = [];
+    private int _page = 1;
+    private bool _loadingForm;
+    private bool _autoSalePrice = true;
+    private bool _autoWholesalePrice = true;
 
     public ProductCatalogWindow()
     {
         InitializeComponent();
-        Loaded += (_, _) => SearchBox.Focus();
+        Loaded += async (_, _) => { await LoadDepartmentsAsync(); await LoadCatalogAsync(); SearchBox.Focus(); };
     }
 
-    private async void OnSearchChanged(object sender, TextChangedEventArgs e)
+    private async Task LoadDepartmentsAsync()
     {
-        _searchCancellation?.Cancel();
-        _searchCancellation = new CancellationTokenSource();
-        var token = _searchCancellation.Token;
-        var query = SearchBox.Text.Trim();
-        if (query.Length == 0) { ProductsGrid.ItemsSource = null; StatusText.Text = "Escribe un codigo o descripcion para buscar."; return; }
         try
         {
-            await Task.Delay(180, token);
-            var rows = await ApiClient.Client.GetFromJsonAsync<List<ProductRow>>($"/api/products/search?q={Uri.EscapeDataString(query)}", token) ?? [];
-            ProductsGrid.ItemsSource = rows;
-            StatusText.Text = rows.Count == 0 ? "No se encontraron productos." : $"{rows.Count} producto(s) encontrado(s). Selecciona uno para editar.";
+            _departments = await ApiClient.Client.GetFromJsonAsync<List<DepartmentRow>>("/api/departments") ?? [];
+            var filter = new List<DepartmentRow> { new(Guid.Empty, "Todos los departamentos", true) };
+            filter.AddRange(_departments);
+            DepartmentFilterBox.ItemsSource = filter;
+            DepartmentFilterBox.SelectedIndex = 0;
+            DepartmentBox.ItemsSource = _departments;
+        }
+        catch (Exception exception) { StatusText.Text = $"No se pudieron cargar los departamentos: {exception.Message}"; }
+    }
+
+    public async Task ReloadDepartmentsAsync() => await LoadDepartmentsAsync();
+
+    private async Task LoadCatalogAsync()
+    {
+        _loadCancellation?.Cancel();
+        _loadCancellation = new CancellationTokenSource();
+        var token = _loadCancellation.Token;
+        try
+        {
+            var query = new List<string> { $"page={_page}", $"sort={Uri.EscapeDataString(CurrentSort())}", $"descending={DescendingBox.IsChecked == true}" };
+            if (!string.IsNullOrWhiteSpace(SearchBox.Text)) query.Add($"q={Uri.EscapeDataString(SearchBox.Text.Trim())}");
+            if (DepartmentFilterBox.SelectedValue is Guid department && department != Guid.Empty) query.Add($"departmentId={department}");
+            if (TryDecimal(MinimumPriceBox.Text, out var minimumPrice)) query.Add($"minimumPrice={minimumPrice.ToString(CultureInfo.InvariantCulture)}");
+            if (TryDecimal(MaximumPriceBox.Text, out var maximumPrice)) query.Add($"maximumPrice={maximumPrice.ToString(CultureInfo.InvariantCulture)}");
+            if (TryDecimal(MinimumProfitBox.Text, out var minimumProfit)) query.Add($"minimumProfit={minimumProfit.ToString(CultureInfo.InvariantCulture)}");
+            var result = await ApiClient.Client.GetFromJsonAsync<CatalogPage>("/api/products/catalog?" + string.Join('&', query), token);
+            ProductsGrid.ItemsSource = result?.Items ?? [];
+            var total = result?.TotalCount ?? 0;
+            PageText.Text = result is null ? string.Empty : $"Página {result.Page} de {result.TotalPages} · {total:N0} productos";
+            PreviousPageButton.IsEnabled = result is not null && result.Page > 1;
+            NextPageButton.IsEnabled = result is not null && result.Page < result.TotalPages;
+            StatusText.Text = total == 0 ? "No hay productos que coincidan con los filtros." : "Selecciona un producto para editarlo. La página muestra hasta 500 productos.";
         }
         catch (OperationCanceledException) { }
-        catch (Exception exception) { StatusText.Text = $"No se pudo buscar: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = $"No se pudo cargar el catálogo: {exception.Message}"; }
+    }
+
+    private string CurrentSort() => (SortBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "description";
+    private async void OnApplyFiltersClick(object sender, RoutedEventArgs e) { _page = 1; await LoadCatalogAsync(); }
+    private async void OnPreviousPageClick(object sender, RoutedEventArgs e) { if (_page > 1) { _page--; await LoadCatalogAsync(); } }
+    private async void OnNextPageClick(object sender, RoutedEventArgs e) { if (NextPageButton.IsEnabled) { _page++; await LoadCatalogAsync(); } }
+
+    private async void OnGridSorting(object sender, DataGridSortingEventArgs e)
+    {
+        e.Handled = true;
+        if (e.Column.SortMemberPath is null) return;
+        SortBox.SelectedItem = SortBox.Items.OfType<ComboBoxItem>().FirstOrDefault(item => string.Equals(item.Tag?.ToString(), e.Column.SortMemberPath, StringComparison.OrdinalIgnoreCase)) ?? SortBox.SelectedItem;
+        DescendingBox.IsChecked = !(DescendingBox.IsChecked == true);
+        _page = 1;
+        await LoadCatalogAsync();
     }
 
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (ProductsGrid.SelectedItem is not ProductRow row) return;
+        if (ProductsGrid.SelectedItem is not CatalogProductRow row) return;
         _selected = row;
+        _loadingForm = true;
+        _autoSalePrice = false;
+        _autoWholesalePrice = false;
         FormTitleText.Text = "Editar producto";
         CodeBox.Text = row.Code;
         DescriptionBox.Text = row.Description;
-        PriceBox.Text = row.Price.ToString("0.00", CultureInfo.InvariantCulture);
-        CostBox.Text = row.Cost.ToString("0.00", CultureInfo.InvariantCulture);
-        WholesalePriceBox.Text = row.WholesalePrice.ToString("0.00", CultureInfo.InvariantCulture);
-        WholesaleMinimumBox.Text = row.WholesaleMinimumQuantity.ToString("0.###", CultureInfo.InvariantCulture);
-        UnitBox.SelectedItem = string.IsNullOrWhiteSpace(row.UnitOfMeasure) ? "Pieza" : row.UnitOfMeasure;
+        DepartmentBox.SelectedValue = row.DepartmentId;
+        UnitBox.SelectedItem = row.UnitOfMeasure;
+        CostBox.Text = Money(row.Cost);
+        ProfitPercentBox.Text = Percent(row.ProfitPercent);
+        PriceBox.Text = Money(row.Price);
+        ProfitAmountBox.Text = Money(row.ProfitAmount);
+        WholesalePriceBox.Text = Money(row.WholesalePrice);
+        WholesaleProfitPercentBox.Text = Percent(row.WholesaleProfitPercent);
+        WholesaleProfitAmountBox.Text = Money(row.WholesaleProfitAmount);
+        WholesaleMinimumBox.Text = Quantity(row.WholesaleMinimumQuantity);
         IsKitBox.IsChecked = row.IsKit;
+        _loadingForm = false;
     }
 
     private void OnNewClick(object sender, RoutedEventArgs e) => ClearForm();
+    private void OnPricingChanged(object sender, RoutedEventArgs e) { if (!_loadingForm && _autoSalePrice) CalculateSalePrice(); }
+    private void OnWholesalePricingChanged(object sender, RoutedEventArgs e) { if (!_loadingForm && _autoWholesalePrice) CalculateWholesalePrice(); }
+    private void OnPriceChanged(object sender, TextChangedEventArgs e) { if (!_loadingForm && PriceBox.IsKeyboardFocusWithin) _autoSalePrice = false; UpdateProfitAmount(); }
+    private void OnWholesalePriceChanged(object sender, TextChangedEventArgs e) { if (!_loadingForm && WholesalePriceBox.IsKeyboardFocusWithin) _autoWholesalePrice = false; UpdateWholesaleProfitAmount(); }
+    private void CalculateSalePrice() { if (TryDecimal(CostBox.Text, out var cost) && TryDecimal(ProfitPercentBox.Text, out var profit)) PriceBox.Text = Money(cost * (1m + profit / 100m)); UpdateProfitAmount(); }
+    private void CalculateWholesalePrice() { if (TryDecimal(CostBox.Text, out var cost) && TryDecimal(WholesaleProfitPercentBox.Text, out var profit) && profit > 0m) WholesalePriceBox.Text = Money(cost * (1m + profit / 100m)); else WholesalePriceBox.Text = "0.00"; UpdateWholesaleProfitAmount(); }
+    private void UpdateProfitAmount() { if (TryDecimal(PriceBox.Text, out var price) && TryDecimal(CostBox.Text, out var cost)) ProfitAmountBox.Text = Money(price - cost); }
+    private void UpdateWholesaleProfitAmount() { if (TryDecimal(WholesalePriceBox.Text, out var price) && TryDecimal(CostBox.Text, out var cost) && price > 0m) WholesaleProfitAmountBox.Text = Money(price - cost); else WholesaleProfitAmountBox.Text = "0.00"; }
 
     private async void OnSaveClick(object sender, RoutedEventArgs e)
     {
         if (!TryReadForm(out var command)) return;
         try
         {
-            using var response = _selected is null
-                ? await ApiClient.Client.PostAsJsonAsync("/api/products", command)
-                : await ApiClient.Client.PutAsJsonAsync($"/api/products/{_selected.Id}", command);
+            using var response = _selected is null ? await ApiClient.Client.PostAsJsonAsync("/api/products", command) : await ApiClient.Client.PutAsJsonAsync($"/api/products/{_selected.Id}", command);
             if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
-            StatusText.Text = _selected is null ? "Producto creado correctamente." : "Producto actualizado correctamente.";
-            var query = CodeBox.Text.Trim();
-            ClearForm();
-            SearchBox.Text = query;
+            var code = CodeBox.Text.Trim(); ClearForm(); SearchBox.Text = code; _page = 1; await LoadCatalogAsync(); StatusText.Text = "Producto guardado correctamente.";
         }
         catch (Exception exception) { StatusText.Text = $"No se pudo guardar el producto: {exception.Message}"; }
     }
@@ -71,14 +127,12 @@ public partial class ProductCatalogWindow : Window
     private async void OnDeactivateClick(object sender, RoutedEventArgs e)
     {
         if (_selected is null) { StatusText.Text = "Selecciona un producto para desactivarlo."; return; }
-        if (MessageBox.Show($"Se desactivara {_selected.Code} - {_selected.Description}. El historial se conservara.", "Desactivar producto", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show($"Se desactivará {_selected.Code} - {_selected.Description}. El historial se conservará.", "Desactivar producto", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         try
         {
             using var response = await ApiClient.Client.DeleteAsync($"/api/products/{_selected.Id}");
             if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
-            StatusText.Text = "Producto desactivado. Ya no aparecera en ventas.";
-            ClearForm();
-            SearchBox.Text = string.Empty;
+            ClearForm(); await LoadCatalogAsync(); StatusText.Text = "Producto desactivado. El historial se conserva.";
         }
         catch (Exception exception) { StatusText.Text = $"No se pudo desactivar el producto: {exception.Message}"; }
     }
@@ -86,24 +140,21 @@ public partial class ProductCatalogWindow : Window
     private bool TryReadForm(out object command)
     {
         command = new { };
-        if (string.IsNullOrWhiteSpace(CodeBox.Text) || string.IsNullOrWhiteSpace(DescriptionBox.Text)) { StatusText.Text = "Codigo y descripcion son obligatorios."; return false; }
-        if (!TryDecimal(PriceBox.Text, out var price) || !TryDecimal(CostBox.Text, out var cost) || !TryDecimal(WholesalePriceBox.Text, out var wholesalePrice) || !TryDecimal(WholesaleMinimumBox.Text, out var wholesaleMinimum)) { StatusText.Text = "Costo, precio y mayoreo deben ser numeros validos."; return false; }
-        if (price < 0 || cost < 0 || wholesalePrice < 0 || wholesaleMinimum < 0) { StatusText.Text = "Los importes no pueden ser negativos."; return false; }
-        var unitOfMeasure = UnitBox.SelectedItem?.ToString() ?? "Pieza";
-        command = new { code = CodeBox.Text.Trim(), description = DescriptionBox.Text.Trim(), price, cost, wholesalePrice, wholesaleMinimumQuantity = wholesaleMinimum, isKit = IsKitBox.IsChecked == true, unitOfMeasure };
+        if (string.IsNullOrWhiteSpace(CodeBox.Text) || string.IsNullOrWhiteSpace(DescriptionBox.Text)) { StatusText.Text = "Código y descripción son obligatorios."; return false; }
+        if (!TryDecimal(CostBox.Text, out var cost) || !TryDecimal(ProfitPercentBox.Text, out var profit) || !TryDecimal(PriceBox.Text, out var price) || !TryDecimal(WholesalePriceBox.Text, out var wholesalePrice) || !TryDecimal(WholesaleProfitPercentBox.Text, out var wholesaleProfit) || !TryDecimal(WholesaleMinimumBox.Text, out var wholesaleMinimum)) { StatusText.Text = "Costo, porcentajes, precios y cantidades deben ser números válidos."; return false; }
+        if (cost < 0 || profit < 0 || price < 0 || wholesalePrice < 0 || wholesaleProfit < 0 || wholesaleMinimum < 0) { StatusText.Text = "Los importes y porcentajes no pueden ser negativos."; return false; }
+        command = new { code = CodeBox.Text.Trim(), description = DescriptionBox.Text.Trim(), price, cost, profitPercent = profit, wholesalePrice, wholesaleProfitPercent = wholesaleProfit, wholesaleMinimumQuantity = wholesaleMinimum, isKit = IsKitBox.IsChecked == true, unitOfMeasure = UnitBox.SelectedItem?.ToString() ?? "Pieza", departmentId = DepartmentBox.SelectedValue is Guid department && department != Guid.Empty ? department : (Guid?)null };
         return true;
     }
 
-    private static bool TryDecimal(string value, out decimal result) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out result) || decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
-
-    private void ClearForm()
-    {
-        _selected = null;
-        ProductsGrid.SelectedItem = null;
-        FormTitleText.Text = "Nuevo producto";
-        CodeBox.Clear(); DescriptionBox.Clear(); CostBox.Text = "0.00"; PriceBox.Text = "0.00"; WholesalePriceBox.Text = "0.00"; WholesaleMinimumBox.Text = "0"; UnitBox.SelectedIndex = 0; IsKitBox.IsChecked = false;
-        CodeBox.Focus();
-    }
-
-    private sealed record ProductRow(Guid Id, string Code, string Description, decimal Price, decimal Cost, decimal WholesalePrice, decimal WholesaleMinimumQuantity, bool IsKit, string UnitOfMeasure, bool IsActive);
+    private void OnDepartmentsClick(object sender, RoutedEventArgs e) { var window = new DepartmentManagerWindow { Owner = this }; window.Closed += async (_, _) => await LoadDepartmentsAsync(); window.ShowDialog(); }
+    private void OnPromotionsClick(object sender, RoutedEventArgs e) { new PromotionWindow { Owner = this }.ShowDialog(); }
+    private void ClearForm() { _selected = null; _loadingForm = true; _autoSalePrice = true; _autoWholesalePrice = true; ProductsGrid.SelectedItem = null; FormTitleText.Text = "Nuevo producto"; CodeBox.Clear(); DescriptionBox.Clear(); DepartmentBox.SelectedIndex = -1; UnitBox.SelectedIndex = 0; CostBox.Text = "0.00"; ProfitPercentBox.Text = "20"; PriceBox.Text = "0.00"; ProfitAmountBox.Text = "0.00"; WholesalePriceBox.Text = "0.00"; WholesaleProfitPercentBox.Text = "0"; WholesaleProfitAmountBox.Text = "0.00"; WholesaleMinimumBox.Text = "0"; IsKitBox.IsChecked = false; _loadingForm = false; CodeBox.Focus(); }
+    private static bool TryDecimal(string? value, out decimal result) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out result) || decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
+    private static string Money(decimal value) => value.ToString("0.00", CultureInfo.InvariantCulture);
+    private static string Percent(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+    private static string Quantity(decimal value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+    private sealed record DepartmentRow(Guid Id, string Name, bool IsActive);
+    private sealed record CatalogProductRow(Guid Id, string Code, string Description, string Department, Guid? DepartmentId, decimal Cost, decimal Price, decimal ProfitPercent, decimal ProfitAmount, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleProfitAmount, decimal WholesaleMinimumQuantity, decimal Stock, decimal MinimumStock, decimal MaximumStock, string UnitOfMeasure, bool IsKit, bool IsActive);
+    private sealed record CatalogPage(List<CatalogProductRow> Items, int Page, int PageSize, int TotalCount, int TotalPages);
 }

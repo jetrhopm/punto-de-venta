@@ -1,6 +1,9 @@
 # Changelog
 
 ## Sin liberar
+- Se completa el catálogo de productos con páginas de 500 registros, filtros por nombre, departamento, precio y utilidad, ordenamiento por columnas, departamentos administrables y edición de costo, utilidad, precios de venta y mayoreo.
+- Se agrega cálculo automático de precio de venta con utilidad predeterminada del 20%, utilidad monetaria visible y cálculo equivalente para mayoreo cuando se captura su porcentaje.
+- Se agregan promociones con nombre único, descuento porcentual, descuento fijo, compra N y paga M, vigencia opcional y desactivación auditada.
 - Se agrega historial de ventas por periodo, cajero y búsqueda, con detalle de partidas, formas de pago, reimpresión como copia, devoluciones y cancelación auditada desde la misma pantalla.
 - Se agregan tickets en atencion persistentes con pestañas, recuperacion despues de un cierre inesperado y cobro idempotente.
 - Los tickets pendientes no modifican inventario, ventas, pagos, movimientos de caja ni totales de corte hasta su confirmacion.
