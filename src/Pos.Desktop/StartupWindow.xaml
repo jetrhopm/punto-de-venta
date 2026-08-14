@@ -1,0 +1,103 @@
+<Window x:Class="Pos.Desktop.StartupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
+        Title="JetVenta" Width="540" Height="650"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
+        WindowStyle="None" Background="Transparent" AllowsTransparency="True"
+        Loaded="OnLoaded">
+    <Border Background="White" BorderBrush="#D8E4EC" BorderThickness="1" CornerRadius="14">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.22"/>
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="310"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Border CornerRadius="14,14,0,0">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#EAF7FF" Offset="0"/>
+                        <GradientStop Color="#FFFFFF" Offset="0.58"/>
+                        <GradientStop Color="#E9FAF4" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+                <Grid Margin="40,34,40,24">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="76" Height="76" Background="White" CornerRadius="12" BorderBrush="#D8E4EC" BorderThickness="1">
+                            <Image Source="/Assets/Icons/app-icon-128.png" Width="64" Height="64"/>
+                        </Border>
+                        <StackPanel Margin="16,7,0,0">
+                            <TextBlock Text="JetVenta" FontSize="34" FontWeight="Bold" Foreground="#102F46"/>
+                            <TextBlock x:Name="VersionText" Text="Version" FontSize="13" Foreground="#607987"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Grid Grid.Row="1" Margin="0,16,0,0">
+                        <Border Width="290" Height="174" CornerRadius="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#071F35" Offset="0"/>
+                                    <GradientStop Color="#0A66C2" Offset="0.62"/>
+                                    <GradientStop Color="#071F35" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Image Source="/Assets/Icons/app-icon-512.png" Width="250" Height="150" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </Grid>
+
+                    <TextBlock Grid.Row="2" x:Name="StoreNameText" Text="Preparando tienda" FontSize="18" FontWeight="SemiBold" Foreground="#102F46" HorizontalAlignment="Center"/>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1" Margin="40,28,40,32">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="Revisando que todo este listo" FontSize="22" FontWeight="SemiBold" Foreground="#102F46"/>
+                <TextBlock x:Name="CurrentStatusText" Grid.Row="1" Margin="0,8,0,0" Text="Preparando JetVenta..." FontSize="14" Foreground="#607987" TextWrapping="Wrap"/>
+
+                <StackPanel Grid.Row="2" Margin="0,24,0,0">
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <icons:PackIconMaterial Kind="DatabaseCheckOutline" Width="22" Height="22" Foreground="#1E78B8"/>
+                        <TextBlock Grid.Column="1" Text="Datos de la tienda" FontSize="14" Foreground="#102F46"/>
+                        <TextBlock Grid.Column="2" x:Name="DataStatusText" Text="Pendiente" FontSize="13" Foreground="#607987"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <icons:PackIconMaterial Kind="CogSyncOutline" Width="22" Height="22" Foreground="#1E78B8"/>
+                        <TextBlock Grid.Column="1" Text="Servicios de JetVenta" FontSize="14" Foreground="#102F46"/>
+                        <TextBlock Grid.Column="2" x:Name="ServiceStatusText" Text="Pendiente" FontSize="13" Foreground="#607987"/>
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <icons:PackIconMaterial Kind="StoreCheckOutline" Width="22" Height="22" Foreground="#1E78B8"/>
+                        <TextBlock Grid.Column="1" Text="Tienda y caja" FontSize="14" Foreground="#102F46"/>
+                        <TextBlock Grid.Column="2" x:Name="StoreStatusText" Text="Pendiente" FontSize="13" Foreground="#607987"/>
+                    </Grid>
+                </StackPanel>
+
+                <ProgressBar Grid.Row="3" x:Name="StartupProgress" Height="12" Margin="0,26,0,0" Minimum="0" Maximum="100" Value="8"/>
+
+                <StackPanel Grid.Row="4" x:Name="ErrorPanel" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Visibility="Collapsed">
+                    <Button Width="118" Height="38" Margin="0,0,10,0" Content="Intentar de nuevo" Click="OnRetryClick"/>
+                    <Button Width="90" Height="38" Content="Cerrar" Click="OnCloseClick"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

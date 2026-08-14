@@ -10,6 +10,9 @@
   <ItemGroup>
     <Resource Include="Assets\Icons\app-icon-48.png" />
     <Resource Include="Assets\Icons\app-icon-64.png" />
+    <Resource Include="Assets\Icons\app-icon-128.png" />
+    <Resource Include="Assets\Icons\app-icon-256.png" />
+    <Resource Include="Assets\Icons\app-icon-512.png" />
   </ItemGroup>
 
   <PropertyGroup>

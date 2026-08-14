@@ -11,7 +11,7 @@ El producto se distribuye en un solo `Setup.exe` autocontenido para Windows x64.
 3. Extraer el paquete interno en una carpeta temporal.
 4. Detectar Microsoft Visual C++ x64 e instalarlo solo cuando falte.
 5. Detectar una instalación anterior y detener sus servicios.
-6. Copiar o actualizar archivos en `C:\Program Files\Punto de Venta`.
+6. Copiar o actualizar archivos en `C:\Program Files\JetVenta`.
 7. Copiar el propio `Setup.exe` para reparación y desinstalación.
 8. Crear o conservar el clúster PostgreSQL en `C:\ProgramData\PuntoDeVenta\postgresql\data`.
 9. Crear o conservar la base `punto_venta`, el usuario técnico y la conexión protegida con DPAPI.
@@ -19,7 +19,7 @@ El producto se distribuye en un solo `Setup.exe` autocontenido para Windows x64.
 11. Pasar al servicio API la ruta absoluta de `connection.bin` y el puerto, sin depender de variables creadas durante la misma instalación.
 12. Esperar una respuesta correcta de `http://127.0.0.1:5000/health`.
 13. Registrar el producto en Aplicaciones instaladas y crear los accesos elegidos.
-14. Mostrar `Abrir Punto de Venta` solamente después de completar toda la instalación.
+14. Mostrar `Abrir JetVenta` solamente después de completar toda la instalación.
 
 La aplicación, no el instalador, presenta el asistente inicial. El asistente crea transaccionalmente la tienda, caja y administrador. Después permite decidir si el inventario se importará, se capturará manualmente o se omitirá.
 

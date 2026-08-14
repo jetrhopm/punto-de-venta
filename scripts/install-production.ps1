@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$InstallRoot = "$env:ProgramFiles\Punto de Venta",
+    [string]$InstallRoot = "$env:ProgramFiles\JetVenta",
     [string]$DataRoot = "$env:ProgramData\PuntoDeVenta",
     [switch]$Uninstall
 )
@@ -246,16 +246,16 @@ if ($preserveApplicationConnection) {
 }
 [Environment]::SetEnvironmentVariable('POS_CONNECTION_FILE', $secretPath, 'Machine')
 [Environment]::SetEnvironmentVariable('POS_API_URLS', 'http://0.0.0.0:5000', 'Machine')
-if (-not (Get-NetFirewallRule -DisplayName 'Punto de Venta API LAN' -ErrorAction SilentlyContinue)) {
+if (-not (Get-NetFirewallRule -DisplayName 'JetVenta API LAN' -ErrorAction SilentlyContinue)) {
     Write-InstallLog 'Etapa 5/8: creando regla de Firewall solo para perfil privado, puerto 5000.'
-    New-NetFirewallRule -DisplayName 'Punto de Venta API LAN' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5000 -Profile Private | Out-Null
+    New-NetFirewallRule -DisplayName 'JetVenta API LAN' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5000 -Profile Private | Out-Null
 } else {
     Write-InstallLog 'Etapa 5/8: regla de Firewall existente detectada; se conserva.'
 }
 
 if (-not (Get-Service $apiService -ErrorAction SilentlyContinue)) {
     Write-InstallLog 'Etapa 6/8: registrando el servicio de Windows de la API.'
-    New-Service -Name $apiService -BinaryPathName $apiBinaryPath -DisplayName 'Punto de Venta - API' -Description 'API local del sistema Punto de Venta' -StartupType Automatic -DependsOn $postgresService
+    New-Service -Name $apiService -BinaryPathName $apiBinaryPath -DisplayName 'JetVenta - API' -Description 'API local del sistema JetVenta' -StartupType Automatic -DependsOn $postgresService
 } else {
     Write-InstallLog 'Etapa 6/8: servicio de API existente detectado; actualizando su ejecutable y configuración.'
     Stop-Service $apiService -Force -ErrorAction SilentlyContinue

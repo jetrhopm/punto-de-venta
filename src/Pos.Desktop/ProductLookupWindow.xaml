@@ -1,0 +1,31 @@
+<Window x:Class="Pos.Desktop.ProductLookupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Buscador de productos" Width="980" Height="620"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize">
+    <Grid Margin="22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="Buscador de productos" FontSize="24" FontWeight="SemiBold" Foreground="#17324D"/>
+            <TextBlock Text="F10 consulta productos por código, descripción o palabra parcial. No agrega productos a la venta." Foreground="#526577" Margin="0,5,0,0"/>
+        </StackPanel>
+        <TextBox Grid.Row="1" x:Name="SearchBox" Height="40" Margin="0,18,0,10" FontSize="16" Padding="10,5" TextChanged="OnSearchChanged" KeyDown="OnSearchKeyDown" ToolTip="Buscar por código o descripción"/>
+        <DataGrid Grid.Row="2" x:Name="ProductsGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Código" Binding="{Binding Code}" Width="140"/>
+                <DataGridTextColumn Header="Descripción" Binding="{Binding Description}" Width="2*"/>
+                <DataGridTextColumn Header="Categoría" Binding="{Binding Category}" Width="150"/>
+                <DataGridTextColumn Header="Unidad" Binding="{Binding UnitOfMeasure}" Width="100"/>
+                <DataGridTextColumn Header="Precio" Binding="{Binding PriceText}" Width="110"/>
+                <DataGridTextColumn Header="Mayoreo" Binding="{Binding WholesaleText}" Width="130"/>
+                <DataGridTextColumn Header="Existencia" Binding="{Binding StockText}" Width="110"/>
+            </DataGrid.Columns>
+        </DataGrid>
+        <TextBlock Grid.Row="3" x:Name="StatusText" Margin="0,12,0,0" Foreground="#526577" TextWrapping="Wrap"/>
+    </Grid>
+</Window>

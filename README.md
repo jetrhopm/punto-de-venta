@@ -1,6 +1,6 @@
-# Punto de Venta
+# JetVenta
 
-Sistema de punto de venta de escritorio para Windows 10 y Windows 11 x64, desarrollado por fases verificables con C#, .NET 10 LTS, WPF, ASP.NET Core y PostgreSQL.
+Sistema de JetVenta de escritorio para Windows 10 y Windows 11 x64, desarrollado por fases verificables con C#, .NET 10 LTS, WPF, ASP.NET Core y PostgreSQL.
 
 ## Estado actual
 

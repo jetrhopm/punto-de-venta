@@ -9,7 +9,7 @@ namespace Pos.Setup;
 
 public sealed class InstallerForm : Form
 {
-    private const string ProductTitle = "Punto de Venta";
+    private const string ProductTitle = "JetVenta";
     private readonly string _installRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), ProductTitle);
     private readonly string _dataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta");
     private readonly bool _uninstall;
@@ -26,7 +26,7 @@ public sealed class InstallerForm : Form
     public InstallerForm(bool uninstall)
     {
         _uninstall = uninstall;
-        Text = uninstall ? "Desinstalar Punto de Venta" : "Instalación de Punto de Venta";
+        Text = uninstall ? "Desinstalar JetVenta" : "Instalación de JetVenta";
         ClientSize = new Size(760, 650);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -86,7 +86,7 @@ public sealed class InstallerForm : Form
         {
             if (_uninstall) await UninstallAsync(); else await InstallAsync();
             _completed = true;
-            _action.Text = _uninstall ? "Cerrar" : "Abrir Punto de Venta";
+            _action.Text = _uninstall ? "Cerrar" : "Abrir JetVenta";
             _action.Enabled = true;
         }
         catch (Exception exception)
@@ -298,8 +298,8 @@ public sealed class InstallerForm : Form
         return runtime?.GetValue("Installed") is not null && Convert.ToInt32(runtime.GetValue("Installed")) == 1;
     }
 
-    private string DesktopShortcutPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Punto de Venta.lnk");
-    private string StartShortcutPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "Punto de Venta.lnk");
+    private string DesktopShortcutPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "JetVenta.lnk");
+    private string StartShortcutPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "JetVenta.lnk");
 
     private void SetProgress(int value, string message)
     {

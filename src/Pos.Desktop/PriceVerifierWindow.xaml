@@ -1,0 +1,28 @@
+<Window x:Class="Pos.Desktop.PriceVerifierWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Verificador de precios" Width="560" Height="410"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="Verificador de precios" FontSize="24" FontWeight="SemiBold" Foreground="#17324D"/>
+            <TextBlock Text="F9 lee un código de barras y muestra precio. No agrega nada a la venta." Foreground="#526577" Margin="0,5,0,0"/>
+        </StackPanel>
+        <TextBox Grid.Row="1" x:Name="CodeBox" Height="42" Margin="0,20,0,16" FontSize="18" Padding="10,5" KeyDown="OnCodeKeyDown" ToolTip="Escanea o escribe el código y presiona Enter"/>
+        <Border Grid.Row="2" Background="#F3F8FB" BorderBrush="#D8E4EC" BorderThickness="1" CornerRadius="6" Padding="18">
+            <StackPanel>
+                <TextBlock x:Name="ProductNameText" Text="Escanea un producto" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                <TextBlock x:Name="ProductCodeText" Text="" FontSize="14" Foreground="#526577" Margin="0,8,0,0"/>
+                <TextBlock x:Name="ProductPriceText" Text="$0.00" FontSize="42" FontWeight="Bold" Foreground="#146CB0" Margin="0,20,0,0"/>
+                <TextBlock x:Name="ProductDetailText" Text="" FontSize="14" Foreground="#526577" Margin="0,8,0,0"/>
+            </StackPanel>
+        </Border>
+        <TextBlock Grid.Row="3" x:Name="StatusText" Margin="0,12,0,0" Foreground="#B42318" TextWrapping="Wrap"/>
+    </Grid>
+</Window>

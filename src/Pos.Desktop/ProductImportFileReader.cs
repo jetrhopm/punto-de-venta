@@ -12,17 +12,47 @@ public sealed class ProductImportPreviewRow
     public int RowNumber { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
-    public decimal Price { get; set; }
-    public decimal Cost { get; set; }
-    public decimal Stock { get; set; }
-    public decimal WholesalePrice { get; set; }
-    public decimal WholesaleMinimumQuantity { get; set; }
+    public string PriceText { get; set; } = "0";
+    public string CostText { get; set; } = "0";
+    public string StockText { get; set; } = "0";
+    public string WholesalePriceText { get; set; } = "0";
+    public string WholesaleMinimumQuantityText { get; set; } = "0";
+    public decimal Price { get => ParseEditableNumber(PriceText); set => PriceText = FormatNumber(value); }
+    public decimal Cost { get => ParseEditableNumber(CostText); set => CostText = FormatNumber(value); }
+    public decimal Stock { get => ParseEditableInventoryNumber(StockText); set => StockText = FormatNumber(value); }
+    public decimal WholesalePrice { get => ParseEditableNumber(WholesalePriceText); set => WholesalePriceText = FormatNumber(value); }
+    public decimal WholesaleMinimumQuantity { get => ParseEditableInventoryNumber(WholesaleMinimumQuantityText); set => WholesaleMinimumQuantityText = FormatNumber(value); }
     public string Category { get; set; } = string.Empty;
-    public decimal MinimumStock { get; set; }
-    public decimal MaximumStock { get; set; }
-    public string UnitOfMeasure { get; set; } = string.Empty;
+    public string MinimumStockText { get; set; } = "0";
+    public string MaximumStockText { get; set; } = "0";
+    public decimal MinimumStock { get => ParseEditableInventoryNumber(MinimumStockText); set => MinimumStockText = FormatNumber(value); }
+    public decimal MaximumStock { get => ParseEditableInventoryNumber(MaximumStockText); set => MaximumStockText = FormatNumber(value); }
+    public string UnitOfMeasure { get; set; } = "Pieza";
     public string SupplierName { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
+
+    private static decimal ParseEditableNumber(string value)
+    {
+        var parsed = ParseDecimal(value);
+        return parsed ?? decimal.MinValue;
+    }
+
+    private static decimal ParseEditableInventoryNumber(string value)
+    {
+        var parsed = ParseDecimal(value);
+        return parsed is null || parsed < 0 ? 0m : parsed.Value;
+    }
+
+    private static decimal? ParseDecimal(string value)
+    {
+        var cleaned = (value ?? string.Empty).Trim().Replace("$", string.Empty).Replace(" ", string.Empty);
+        if (string.IsNullOrEmpty(cleaned) || cleaned == "-") return 0m;
+        if (decimal.TryParse(cleaned, NumberStyles.Number | NumberStyles.AllowCurrencySymbol, CultureInfo.GetCultureInfo("es-MX"), out var mexican)) return mexican;
+        if (decimal.TryParse(cleaned, NumberStyles.Number | NumberStyles.AllowCurrencySymbol, CultureInfo.InvariantCulture, out var invariant)) return invariant;
+        return null;
+    }
+
+    private static string FormatNumber(decimal value) => value == decimal.MinValue ? string.Empty : value.ToString("0.###", CultureInfo.GetCultureInfo("es-MX"));
 }
 
 public static class ProductImportFileReader
@@ -50,7 +80,7 @@ public static class ProductImportFileReader
             var description = Text(row, headers, "producto", "descripcion", "nombre");
             if (string.IsNullOrWhiteSpace(code) && string.IsNullOrWhiteSpace(description)) continue;
             var wholesale = Number(row, headers, "pmayoreo", "preciomayoreo", "mayoreo");
-            result.Add(new ProductImportPreviewRow { RowNumber = row.RowNumber(), Code = code, Description = description, Price = Number(row, headers, "pventa", "precioventa", "precio"), Cost = Number(row, headers, "pcosto", "costo", "preciocosto"), Stock = InventoryNumber(row, headers, "existencia", "stock", "inventario"), WholesalePrice = wholesale, WholesaleMinimumQuantity = wholesale > 0 ? defaultWholesaleMinimum : 0m, Category = Text(row, headers, "departamento", "categoria"), MinimumStock = InventoryNumber(row, headers, "invminimo", "inventariominimo", "minimo"), MaximumStock = InventoryNumber(row, headers, "invmaximo", "inventariomaximo", "maximo"), UnitOfMeasure = Text(row, headers, "tipodeventa", "unidad", "unidaddemedida"), SupplierName = Text(row, headers, "proveedor", "proveedorprincipal") });
+            result.Add(new ProductImportPreviewRow { RowNumber = row.RowNumber(), Code = code, Description = description, Price = Number(row, headers, "pventa", "precioventa", "precio"), Cost = Number(row, headers, "pcosto", "costo", "preciocosto"), Stock = InventoryNumber(row, headers, "existencia", "stock", "inventario"), WholesalePrice = wholesale, WholesaleMinimumQuantity = wholesale > 0 ? defaultWholesaleMinimum : 0m, Category = Text(row, headers, "departamento", "categoria"), MinimumStock = InventoryNumber(row, headers, "invminimo", "inventariominimo", "minimo"), MaximumStock = InventoryNumber(row, headers, "invmaximo", "inventariomaximo", "maximo"), UnitOfMeasure = NormalizeUnit(Text(row, headers, "tipodeventa", "unidad", "unidaddemedida")), SupplierName = Text(row, headers, "proveedor", "proveedorprincipal") });
         }
         return result;
     }
@@ -73,7 +103,7 @@ public static class ProductImportFileReader
             var description = Text(csv, headers, "producto", "descripcion", "nombre");
             if (string.IsNullOrWhiteSpace(code) && string.IsNullOrWhiteSpace(description)) continue;
             var wholesale = Number(csv, headers, "pmayoreo", "preciomayoreo", "mayoreo");
-            result.Add(new ProductImportPreviewRow { RowNumber = csv.Parser.Row, Code = code, Description = description, Price = Number(csv, headers, "pventa", "precioventa", "precio"), Cost = Number(csv, headers, "pcosto", "costo", "preciocosto"), Stock = InventoryNumber(csv, headers, "existencia", "stock", "inventario"), WholesalePrice = wholesale, WholesaleMinimumQuantity = wholesale > 0 ? defaultWholesaleMinimum : 0m, Category = Text(csv, headers, "departamento", "categoria"), MinimumStock = InventoryNumber(csv, headers, "invminimo", "inventariominimo", "minimo"), MaximumStock = InventoryNumber(csv, headers, "invmaximo", "inventariomaximo", "maximo"), UnitOfMeasure = Text(csv, headers, "tipodeventa", "unidad", "unidaddemedida"), SupplierName = Text(csv, headers, "proveedor", "proveedorprincipal") });
+            result.Add(new ProductImportPreviewRow { RowNumber = csv.Parser.Row, Code = code, Description = description, Price = Number(csv, headers, "pventa", "precioventa", "precio"), Cost = Number(csv, headers, "pcosto", "costo", "preciocosto"), Stock = InventoryNumber(csv, headers, "existencia", "stock", "inventario"), WholesalePrice = wholesale, WholesaleMinimumQuantity = wholesale > 0 ? defaultWholesaleMinimum : 0m, Category = Text(csv, headers, "departamento", "categoria"), MinimumStock = InventoryNumber(csv, headers, "invminimo", "inventariominimo", "minimo"), MaximumStock = InventoryNumber(csv, headers, "invmaximo", "inventariomaximo", "maximo"), UnitOfMeasure = NormalizeUnit(Text(csv, headers, "tipodeventa", "unidad", "unidaddemedida")), SupplierName = Text(csv, headers, "proveedor", "proveedorprincipal") });
         }
         return result;
     }
@@ -105,7 +135,7 @@ public static class ProductImportFileReader
     {
         if (string.IsNullOrWhiteSpace(row.Code)) return "ERROR: código vacío";
         if (string.IsNullOrWhiteSpace(row.Description)) return "ERROR: descripción vacía";
-        if (row.Price == decimal.MinValue || row.Cost == decimal.MinValue || row.Stock == decimal.MinValue || row.WholesalePrice == decimal.MinValue || row.MinimumStock == decimal.MinValue || row.MaximumStock == decimal.MinValue) return "ERROR: número inválido";
+        if (row.Price == decimal.MinValue || row.Cost == decimal.MinValue || row.WholesalePrice == decimal.MinValue) return "ERROR: número inválido";
         if (row.Price < 0 || row.Cost < 0 || row.Stock < 0 || row.WholesalePrice < 0 || row.MinimumStock < 0 || row.MaximumStock < 0) return "ERROR: valor negativo";
         if (row.MaximumStock > 0 && row.MaximumStock < row.MinimumStock) return "ERROR: máximo menor al mínimo";
         if (duplicates.Contains(row.Code.Trim())) return "ERROR: código repetido en archivo";
@@ -116,5 +146,22 @@ public static class ProductImportFileReader
     {
         var normalized = value.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD);
         return new string(normalized.Where(character => CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark && char.IsLetterOrDigit(character)).ToArray());
+    }
+
+    public static string NormalizeUnit(string value)
+    {
+        var normalized = NormalizeHeader(value);
+        return normalized switch
+        {
+            "" => "Pieza",
+            "pieza" or "pza" or "pz" or "piezas" or "unidad" or "unidades" => "Pieza",
+            "kg" or "kilo" or "kilos" or "kilogramo" or "kilogramos" or "peso" or "granel" => "Kilogramo",
+            "g" or "gr" or "gramo" or "gramos" => "Gramo",
+            "l" or "lt" or "lts" or "litro" or "litros" => "Litro",
+            "ml" or "mililitro" or "mililitros" => "Mililitro",
+            "m" or "metro" or "metros" => "Metro",
+            "servicio" or "servicios" => "Servicio",
+            _ => value.Trim().Length == 0 ? "Pieza" : value.Trim()
+        };
     }
 }

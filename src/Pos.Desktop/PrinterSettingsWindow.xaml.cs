@@ -45,7 +45,7 @@ public partial class PrinterSettingsWindow : Window
             }
             if (dialog.ShowDialog() != true) return;
             var document = new FlowDocument(new Paragraph(new Run("PUNTO DE VENTA\nPrueba de impresión\n" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")))) { FontFamily = new FontFamily("Consolas"), FontSize = 12, PagePadding = new Thickness(18), ColumnWidth = double.PositiveInfinity };
-            dialog.PrintDocument(((IDocumentPaginatorSource)document).DocumentPaginator, "Prueba Punto de Venta");
+            dialog.PrintDocument(((IDocumentPaginatorSource)document).DocumentPaginator, "Prueba JetVenta");
             StatusText.Text = "Página de prueba enviada a Windows.";
         }
         catch (Exception exception) { StatusText.Text = $"No se pudo imprimir: {exception.Message}"; }

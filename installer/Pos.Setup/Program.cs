@@ -39,7 +39,7 @@ public static class Program
             WriteLaunchLog($"ERROR de arranque: {exception}");
             System.Windows.Forms.MessageBox.Show(
                 $"No se pudo abrir el instalador.\r\n\r\n{exception.Message}\r\n\r\nRevisa C:\\ProgramData\\PuntoDeVenta\\logs\\setup-launch.log",
-                "Punto de Venta",
+                "JetVenta",
                 System.Windows.Forms.MessageBoxButtons.OK,
                 System.Windows.Forms.MessageBoxIcon.Error);
             return 1;

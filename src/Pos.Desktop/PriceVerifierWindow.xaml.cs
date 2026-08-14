@@ -1,0 +1,68 @@
+using System.Net.Http;
+using System.Net.Http.Json;
+using System.Windows;
+using System.Windows.Input;
+
+namespace Pos.Desktop;
+
+public partial class PriceVerifierWindow : Window
+{
+    public PriceVerifierWindow()
+    {
+        InitializeComponent();
+        Loaded += (_, _) => CodeBox.Focus();
+    }
+
+    private async void OnCodeKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            Close();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key != Key.Enter) return;
+        e.Handled = true;
+        await VerifyAsync();
+    }
+
+    private async Task VerifyAsync()
+    {
+        var code = CodeBox.Text.Trim();
+        if (code.Length == 0)
+        {
+            StatusText.Text = "Escanea o escribe un código.";
+            return;
+        }
+
+        try
+        {
+            var products = await ApiClient.Client.GetFromJsonAsync<List<ProductLookupResult>>($"/api/products/search?q={Uri.EscapeDataString(code)}") ?? [];
+            var product = products.FirstOrDefault(item => string.Equals(item.Code, code, StringComparison.OrdinalIgnoreCase)) ?? products.FirstOrDefault();
+            if (product is null)
+            {
+                ProductNameText.Text = "Producto no encontrado";
+                ProductCodeText.Text = code;
+                ProductPriceText.Text = "$0.00";
+                ProductDetailText.Text = "";
+                StatusText.Text = "No se encontró un producto con ese código.";
+                CodeBox.SelectAll();
+                return;
+            }
+
+            ProductNameText.Text = product.Description;
+            ProductCodeText.Text = $"Código: {product.Code}";
+            ProductPriceText.Text = $"${product.Price:0.00}";
+            ProductDetailText.Text = $"Unidad: {product.UnitOfMeasure}  |  Existencia: {product.Stock:0.###}";
+            StatusText.Text = "";
+            CodeBox.SelectAll();
+        }
+        catch (HttpRequestException)
+        {
+            StatusText.Text = "No se pudo consultar el catálogo.";
+        }
+    }
+
+    private sealed record ProductLookupResult(Guid Id, string Code, string Description, decimal Price, decimal Stock, string UnitOfMeasure);
+}

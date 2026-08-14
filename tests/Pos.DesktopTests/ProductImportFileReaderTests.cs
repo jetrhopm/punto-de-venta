@@ -69,4 +69,53 @@ public sealed class ProductImportFileReaderTests
         }
         finally { File.Delete(path); }
     }
+
+    [Fact]
+    public void EditablePreviewConvertsInvalidInventoryTextToZero()
+    {
+        var row = new ProductImportPreviewRow
+        {
+            Code = "EDIT1",
+            Description = "Producto editado",
+            PriceText = "12.50",
+            CostText = "8",
+            StockText = "-",
+            MinimumStockText = "sin dato",
+            MaximumStockText = "N/A"
+        };
+
+        Assert.Equal(12.50m, row.Price);
+        Assert.Equal(8m, row.Cost);
+        Assert.Equal(0m, row.Stock);
+        Assert.Equal(0m, row.MinimumStock);
+        Assert.Equal(0m, row.MaximumStock);
+    }
+
+    [Fact]
+    public void EditablePreviewMarksInvalidPriceText()
+    {
+        var row = new ProductImportPreviewRow
+        {
+            Code = "EDIT2",
+            Description = "Producto con precio invalido",
+            PriceText = "precio",
+            CostText = "8"
+        };
+
+        Assert.Equal(decimal.MinValue, row.Price);
+        Assert.Equal(8m, row.Cost);
+    }
+
+    [Theory]
+    [InlineData("", "Pieza")]
+    [InlineData("pieza", "Pieza")]
+    [InlineData("kg", "Kilogramo")]
+    [InlineData("kilo", "Kilogramo")]
+    [InlineData("granel", "Kilogramo")]
+    [InlineData("gramos", "Gramo")]
+    [InlineData("litro", "Litro")]
+    public void NormalizesImportedUnitOfMeasure(string source, string expected)
+    {
+        Assert.Equal(expected, ProductImportFileReader.NormalizeUnit(source));
+    }
 }

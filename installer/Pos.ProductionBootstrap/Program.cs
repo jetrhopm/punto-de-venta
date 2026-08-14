@@ -11,8 +11,8 @@ void Log(string message) => File.AppendAllText(bootstrapLog, $"[{DateTime.Now:yy
 
 var candidates = new[]
 {
-    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Punto de Venta"),
-    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Punto de Venta")
+    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "JetVenta"),
+    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "JetVenta")
 };
 var installRoot = candidates.FirstOrDefault(path => File.Exists(Path.Combine(path, "api", "Pos.Api.exe")))
     ?? candidates[0];
