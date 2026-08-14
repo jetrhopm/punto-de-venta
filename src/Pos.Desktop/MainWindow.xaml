@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
         Title="JetVenta" Width="1360" Height="820" MinWidth="1100" MinHeight="680"
-        WindowStartupLocation="CenterScreen" PreviewKeyDown="OnPreviewKeyDown" Loaded="OnLoaded">
+        WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="NoResize" WindowState="Maximized"
+        PreviewKeyDown="OnPreviewKeyDown" Loaded="OnLoaded">
     <Window.Resources>
         <Style x:Key="TopNavButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="MinWidth" Value="86"/>

@@ -13,8 +13,6 @@ public partial class ProductCatalogWindow : Window
     private List<DepartmentRow> _departments = [];
     private int _page = 1;
     private bool _loadingForm;
-    private bool _autoSalePrice = true;
-    private bool _autoWholesalePrice = true;
 
     public ProductCatalogWindow()
     {
@@ -83,19 +81,17 @@ public partial class ProductCatalogWindow : Window
         if (ProductsGrid.SelectedItem is not CatalogProductRow row) return;
         _selected = row;
         _loadingForm = true;
-        _autoSalePrice = false;
-        _autoWholesalePrice = false;
         FormTitleText.Text = "Editar producto";
         CodeBox.Text = row.Code;
         DescriptionBox.Text = row.Description;
         DepartmentBox.SelectedValue = row.DepartmentId;
         UnitBox.SelectedItem = row.UnitOfMeasure;
         CostBox.Text = Money(row.Cost);
-        ProfitPercentBox.Text = Percent(row.ProfitPercent);
+        ProfitPercentBox.Text = row.ProfitPercent > 0m ? Percent(row.ProfitPercent) : string.Empty;
         PriceBox.Text = Money(row.Price);
         ProfitAmountBox.Text = Money(row.ProfitAmount);
         WholesalePriceBox.Text = Money(row.WholesalePrice);
-        WholesaleProfitPercentBox.Text = Percent(row.WholesaleProfitPercent);
+        WholesaleProfitPercentBox.Text = row.WholesaleProfitPercent > 0m ? Percent(row.WholesaleProfitPercent) : string.Empty;
         WholesaleProfitAmountBox.Text = Money(row.WholesaleProfitAmount);
         WholesaleMinimumBox.Text = Quantity(row.WholesaleMinimumQuantity);
         IsKitBox.IsChecked = row.IsKit;
@@ -103,12 +99,12 @@ public partial class ProductCatalogWindow : Window
     }
 
     private void OnNewClick(object sender, RoutedEventArgs e) => ClearForm();
-    private void OnPricingChanged(object sender, RoutedEventArgs e) { if (!_loadingForm && _autoSalePrice) CalculateSalePrice(); }
-    private void OnWholesalePricingChanged(object sender, RoutedEventArgs e) { if (!_loadingForm && _autoWholesalePrice) CalculateWholesalePrice(); }
-    private void OnPriceChanged(object sender, TextChangedEventArgs e) { if (!_loadingForm && PriceBox.IsKeyboardFocusWithin) _autoSalePrice = false; UpdateProfitAmount(); }
-    private void OnWholesalePriceChanged(object sender, TextChangedEventArgs e) { if (!_loadingForm && WholesalePriceBox.IsKeyboardFocusWithin) _autoWholesalePrice = false; UpdateWholesaleProfitAmount(); }
+    private void OnPricingChanged(object sender, RoutedEventArgs e) { if (!_loadingForm) CalculateSalePrice(); }
+    private void OnWholesalePricingChanged(object sender, RoutedEventArgs e) { if (!_loadingForm) CalculateWholesalePrice(); }
+    private void OnPriceChanged(object sender, TextChangedEventArgs e) { UpdateProfitAmount(); }
+    private void OnWholesalePriceChanged(object sender, TextChangedEventArgs e) { UpdateWholesaleProfitAmount(); }
     private void CalculateSalePrice() { if (TryDecimal(CostBox.Text, out var cost) && TryDecimal(ProfitPercentBox.Text, out var profit)) PriceBox.Text = Money(cost * (1m + profit / 100m)); UpdateProfitAmount(); }
-    private void CalculateWholesalePrice() { if (TryDecimal(CostBox.Text, out var cost) && TryDecimal(WholesaleProfitPercentBox.Text, out var profit) && profit > 0m) WholesalePriceBox.Text = Money(cost * (1m + profit / 100m)); else WholesalePriceBox.Text = "0.00"; UpdateWholesaleProfitAmount(); }
+    private void CalculateWholesalePrice() { if (TryDecimal(CostBox.Text, out var cost) && TryDecimal(WholesaleProfitPercentBox.Text, out var profit)) WholesalePriceBox.Text = Money(cost * (1m + profit / 100m)); UpdateWholesaleProfitAmount(); }
     private void UpdateProfitAmount()
     {
         if (PriceBox is null || CostBox is null || ProfitAmountBox is null) return;
@@ -149,7 +145,11 @@ public partial class ProductCatalogWindow : Window
     {
         command = new { };
         if (string.IsNullOrWhiteSpace(CodeBox.Text) || string.IsNullOrWhiteSpace(DescriptionBox.Text)) { StatusText.Text = "Código y descripción son obligatorios."; return false; }
-        if (!TryDecimal(CostBox.Text, out var cost) || !TryDecimal(ProfitPercentBox.Text, out var profit) || !TryDecimal(PriceBox.Text, out var price) || !TryDecimal(WholesalePriceBox.Text, out var wholesalePrice) || !TryDecimal(WholesaleProfitPercentBox.Text, out var wholesaleProfit) || !TryDecimal(WholesaleMinimumBox.Text, out var wholesaleMinimum)) { StatusText.Text = "Costo, porcentajes, precios y cantidades deben ser números válidos."; return false; }
+        if (!TryDecimal(CostBox.Text, out var cost) || !TryDecimal(PriceBox.Text, out var price)) { StatusText.Text = "Costo y precio de venta deben ser números válidos."; return false; }
+        var profit = TryDecimal(ProfitPercentBox.Text, out var parsedProfit) ? parsedProfit : 0m;
+        var wholesalePrice = TryDecimal(WholesalePriceBox.Text, out var parsedWholesalePrice) ? parsedWholesalePrice : 0m;
+        var wholesaleProfit = TryDecimal(WholesaleProfitPercentBox.Text, out var parsedWholesaleProfit) ? parsedWholesaleProfit : 0m;
+        var wholesaleMinimum = TryDecimal(WholesaleMinimumBox.Text, out var parsedWholesaleMinimum) ? parsedWholesaleMinimum : 0m;
         if (cost < 0 || profit < 0 || price < 0 || wholesalePrice < 0 || wholesaleProfit < 0 || wholesaleMinimum < 0) { StatusText.Text = "Los importes y porcentajes no pueden ser negativos."; return false; }
         command = new { code = CodeBox.Text.Trim(), description = DescriptionBox.Text.Trim(), price, cost, profitPercent = profit, wholesalePrice, wholesaleProfitPercent = wholesaleProfit, wholesaleMinimumQuantity = wholesaleMinimum, isKit = IsKitBox.IsChecked == true, unitOfMeasure = UnitBox.SelectedItem?.ToString() ?? "Pieza", departmentId = DepartmentBox.SelectedValue is Guid department && department != Guid.Empty ? department : (Guid?)null };
         return true;
@@ -157,7 +157,7 @@ public partial class ProductCatalogWindow : Window
 
     private void OnDepartmentsClick(object sender, RoutedEventArgs e) { var window = new DepartmentManagerWindow { Owner = this }; window.Closed += async (_, _) => await LoadDepartmentsAsync(); window.ShowDialog(); }
     private void OnPromotionsClick(object sender, RoutedEventArgs e) { new PromotionWindow { Owner = this }.ShowDialog(); }
-    private void ClearForm() { _selected = null; _loadingForm = true; _autoSalePrice = true; _autoWholesalePrice = true; ProductsGrid.SelectedItem = null; FormTitleText.Text = "Nuevo producto"; CodeBox.Clear(); DescriptionBox.Clear(); DepartmentBox.SelectedIndex = -1; UnitBox.SelectedIndex = 0; CostBox.Text = "0.00"; ProfitPercentBox.Text = "20"; PriceBox.Text = "0.00"; ProfitAmountBox.Text = "0.00"; WholesalePriceBox.Text = "0.00"; WholesaleProfitPercentBox.Text = "0"; WholesaleProfitAmountBox.Text = "0.00"; WholesaleMinimumBox.Text = "0"; IsKitBox.IsChecked = false; _loadingForm = false; CodeBox.Focus(); }
+    private void ClearForm() { _selected = null; _loadingForm = true; ProductsGrid.SelectedItem = null; FormTitleText.Text = "Nuevo producto"; CodeBox.Clear(); DescriptionBox.Clear(); DepartmentBox.SelectedIndex = -1; UnitBox.SelectedIndex = 0; CostBox.Text = "0.00"; ProfitPercentBox.Text = "20"; PriceBox.Text = "0.00"; ProfitAmountBox.Text = "0.00"; WholesalePriceBox.Text = "0.00"; WholesaleProfitPercentBox.Text = string.Empty; WholesaleProfitAmountBox.Text = "0.00"; WholesaleMinimumBox.Text = "0"; IsKitBox.IsChecked = false; _loadingForm = false; CodeBox.Focus(); }
     private static bool TryDecimal(string? value, out decimal result) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out result) || decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
     private static string Money(decimal value) => value.ToString("0.00", CultureInfo.InvariantCulture);
     private static string Percent(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);

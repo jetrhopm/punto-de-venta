@@ -1,6 +1,8 @@
 # Changelog
 
 ## Sin liberar
+- Se corrige el cálculo de precio y utilidad al editar productos: un porcentaje numérico recalcula el precio, mientras un porcentaje vacío conserva el precio manual sin mostrar errores.
+- La ventana principal de ventas ahora inicia maximizada, sin bordes ni barra de tareas visible; la pantalla inicial y el login conservan su diseño.
 - Se corrige la apertura de F3/Productos: el cálculo automático de utilidad ya no se ejecuta antes de que la ventana termine de inicializar sus controles.
 - Se completa el catálogo de productos con páginas de 500 registros, filtros por nombre, departamento, precio y utilidad, ordenamiento por columnas, departamentos administrables y edición de costo, utilidad, precios de venta y mayoreo.
 - Se agrega cálculo automático de precio de venta con utilidad predeterminada del 20%, utilidad monetaria visible y cálculo equivalente para mayoreo cuando se captura su porcentaje.
