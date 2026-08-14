@@ -109,8 +109,16 @@ public partial class ProductCatalogWindow : Window
     private void OnWholesalePriceChanged(object sender, TextChangedEventArgs e) { if (!_loadingForm && WholesalePriceBox.IsKeyboardFocusWithin) _autoWholesalePrice = false; UpdateWholesaleProfitAmount(); }
     private void CalculateSalePrice() { if (TryDecimal(CostBox.Text, out var cost) && TryDecimal(ProfitPercentBox.Text, out var profit)) PriceBox.Text = Money(cost * (1m + profit / 100m)); UpdateProfitAmount(); }
     private void CalculateWholesalePrice() { if (TryDecimal(CostBox.Text, out var cost) && TryDecimal(WholesaleProfitPercentBox.Text, out var profit) && profit > 0m) WholesalePriceBox.Text = Money(cost * (1m + profit / 100m)); else WholesalePriceBox.Text = "0.00"; UpdateWholesaleProfitAmount(); }
-    private void UpdateProfitAmount() { if (TryDecimal(PriceBox.Text, out var price) && TryDecimal(CostBox.Text, out var cost)) ProfitAmountBox.Text = Money(price - cost); }
-    private void UpdateWholesaleProfitAmount() { if (TryDecimal(WholesalePriceBox.Text, out var price) && TryDecimal(CostBox.Text, out var cost) && price > 0m) WholesaleProfitAmountBox.Text = Money(price - cost); else WholesaleProfitAmountBox.Text = "0.00"; }
+    private void UpdateProfitAmount()
+    {
+        if (PriceBox is null || CostBox is null || ProfitAmountBox is null) return;
+        if (TryDecimal(PriceBox.Text, out var price) && TryDecimal(CostBox.Text, out var cost)) ProfitAmountBox.Text = Money(price - cost);
+    }
+    private void UpdateWholesaleProfitAmount()
+    {
+        if (WholesalePriceBox is null || CostBox is null || WholesaleProfitAmountBox is null) return;
+        if (TryDecimal(WholesalePriceBox.Text, out var price) && TryDecimal(CostBox.Text, out var cost) && price > 0m) WholesaleProfitAmountBox.Text = Money(price - cost); else WholesaleProfitAmountBox.Text = "0.00";
+    }
 
     private async void OnSaveClick(object sender, RoutedEventArgs e)
     {

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se corrige la apertura de F3/Productos: el cálculo automático de utilidad ya no se ejecuta antes de que la ventana termine de inicializar sus controles.
 - Se completa el catálogo de productos con páginas de 500 registros, filtros por nombre, departamento, precio y utilidad, ordenamiento por columnas, departamentos administrables y edición de costo, utilidad, precios de venta y mayoreo.
 - Se agrega cálculo automático de precio de venta con utilidad predeterminada del 20%, utilidad monetaria visible y cálculo equivalente para mayoreo cuando se captura su porcentaje.
 - Se agregan promociones con nombre único, descuento porcentual, descuento fijo, compra N y paga M, vigencia opcional y desactivación auditada.
