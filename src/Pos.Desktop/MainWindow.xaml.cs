@@ -656,7 +656,7 @@ public partial class MainWindow : Window
             {
                 var decisionWindow = new ExitShiftWindow { Owner = this };
                 if (decisionWindow.ShowDialog() != true || decisionWindow.Decision == ExitShiftDecision.Cancel) return;
-                if (decisionWindow.Decision == ExitShiftDecision.CloseShiftAndExit)
+                if (decisionWindow.Decision is ExitShiftDecision.CloseShiftAndExit or ExitShiftDecision.CloseShiftAndSignOut)
                 {
                     var closed = await CloseShiftFromDialogAsync();
                     if (!closed)
@@ -669,6 +669,12 @@ public partial class MainWindow : Window
                     if (stillOpen is not false)
                     {
                         MessageBox.Show("El servidor no confirmó el cierre del turno. JetVenta permanece abierto para proteger el corte.", "Cierre sin confirmar", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    if (decisionWindow.Decision == ExitShiftDecision.CloseShiftAndSignOut)
+                    {
+                        CompleteSignOut();
                         return;
                     }
                 }
@@ -689,6 +695,19 @@ public partial class MainWindow : Window
         Closing -= OnClosing;
         Close();
         System.Windows.Application.Current.Shutdown(0);
+    }
+
+    private void CompleteSignOut()
+    {
+        _exitConfirmed = true;
+        Closing -= OnClosing;
+        SessionContext.Clear();
+        ApiClient.ApplySession(null);
+
+        var login = new LoginWindow();
+        System.Windows.Application.Current.MainWindow = login;
+        login.Show();
+        Close();
     }
 
     private void NavigateTo(string section)

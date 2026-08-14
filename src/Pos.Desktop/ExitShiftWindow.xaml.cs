@@ -6,7 +6,8 @@ public enum ExitShiftDecision
 {
     Cancel,
     LeaveOpenAndExit,
-    CloseShiftAndExit
+    CloseShiftAndExit,
+    CloseShiftAndSignOut
 }
 
 public partial class ExitShiftWindow : Window
@@ -18,6 +19,12 @@ public partial class ExitShiftWindow : Window
     private void OnCloseShiftAndExitClick(object sender, RoutedEventArgs e)
     {
         Decision = ExitShiftDecision.CloseShiftAndExit;
+        DialogResult = true;
+    }
+
+    private void OnCloseShiftAndSignOutClick(object sender, RoutedEventArgs e)
+    {
+        Decision = ExitShiftDecision.CloseShiftAndSignOut;
         DialogResult = true;
     }
 

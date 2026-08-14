@@ -8,4 +8,12 @@ public static class SessionContext
     public static HashSet<string> Permissions { get; } = new(StringComparer.Ordinal);
 
     public static bool HasPermission(string permission) => Permissions.Contains(permission);
+
+    public static void Clear()
+    {
+        AccessToken = null;
+        DisplayName = null;
+        IsAdministrator = false;
+        Permissions.Clear();
+    }
 }
