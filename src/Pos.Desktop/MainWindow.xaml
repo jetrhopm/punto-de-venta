@@ -108,7 +108,18 @@
                         <Button Style="{StaticResource SalesToolbarButton}" Click="OnPriceVerifierClick" ToolTip="F9 - Verificador"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="BarcodeScan" Width="18" Height="18" Margin="0,0,5,0" Foreground="#7C5799"/><TextBlock Text="F9 Verificador"/></StackPanel></Button>
                     </DockPanel>
 
-                    <ListView Grid.Row="2" x:Name="CartList" Margin="0,14,0,14" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Background="#FBFDFF" DisplayMemberPath="DisplayText" KeyDown="OnCartKeyDown"/>
+                    <ListView Grid.Row="2" x:Name="CartList" Margin="0,14,0,14" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Background="#FBFDFF" KeyDown="OnCartKeyDown">
+                        <ListView.View>
+                            <GridView AllowsColumnReorder="True">
+                                <GridViewColumn Header="Código de barras" DisplayMemberBinding="{Binding Code}" Width="125" />
+                                <GridViewColumn Header="Descripción" DisplayMemberBinding="{Binding Description}" Width="220" />
+                                <GridViewColumn Header="Precio venta" DisplayMemberBinding="{Binding UnitPrice, StringFormat={}{0:C2}}" Width="105" />
+                                <GridViewColumn Header="Cantidad" DisplayMemberBinding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="80" />
+                                <GridViewColumn Header="Importe" DisplayMemberBinding="{Binding Total, StringFormat={}{0:C2}}" Width="100" />
+                                <GridViewColumn Header="Existencia" DisplayMemberBinding="{Binding Stock, StringFormat={}{0:0.###}}" Width="90" />
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
 
                     <Grid Grid.Row="3">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>

@@ -430,7 +430,7 @@ public partial class MainWindow : Window
     private void AddProductToCart(ProductSearchResult product)
     {
         var existing = _cart.FirstOrDefault(item => item.ProductId == product.Id);
-        if (existing is null) _cart.Add(new CartLineView(product.Id, product.Description, product.Price, 1));
+        if (existing is null) _cart.Add(new CartLineView(product.Id, product.Code, product.Description, product.Price, product.Stock, 1));
         else { existing.Quantity++; CartList.Items.Refresh(); }
         ProductSearchTextBox.Clear();
         ProductResultsList.Visibility = Visibility.Collapsed;
@@ -490,15 +490,15 @@ public partial class MainWindow : Window
         SaleItemsText.Text = $"Artículos: {_cart.Sum(item => item.Quantity):0.###}";
     }
 
-    private sealed record ProductSearchResult(Guid Id, string Code, string Description, decimal Price);
+    private sealed record ProductSearchResult(Guid Id, string Code, string Description, decimal Price, decimal Stock = 0m);
     private sealed record ProductSearchRow(ProductSearchResult Product)
     {
         public string DisplayText => $"{Product.Code} | {Product.Description} | ${Product.Price:0.00}";
     }
 
-    private sealed class CartLineView(Guid productId, string description, decimal unitPrice, decimal quantity)
+    private sealed class CartLineView(Guid productId, string code, string description, decimal unitPrice, decimal stock, decimal quantity)
     {
-        public Guid ProductId { get; } = productId; public string Description { get; } = description; public decimal UnitPrice { get; } = unitPrice; public decimal Quantity { get; set; } = quantity; public decimal Total => decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Description} x {Quantity:0.###} = ${Total:0.00}";
+        public Guid ProductId { get; } = productId; public string Code { get; } = code; public string Description { get; } = description; public decimal UnitPrice { get; } = unitPrice; public decimal Stock { get; } = stock; public decimal Quantity { get; set; } = quantity; public decimal Total => decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Code} | {Description} x {Quantity:0.###} = ${Total:0.00}";
     }
 
     private sealed record SaleResponse(Guid SaleId, decimal Total, decimal Change);
