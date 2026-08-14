@@ -574,17 +574,20 @@ public partial class MainWindow : Window
         await OpenShiftFromDialogAsync();
     }
 
-    private async Task<bool> HasOpenShiftAsync()
+    private async Task<bool?> HasOpenShiftAsync()
     {
         try
         {
             using var response = await Client.GetAsync("/api/shifts/current");
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode) return true;
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return false;
+            StatusText.Text = await ReadApiMessageAsync(response);
+            return null;
         }
         catch (HttpRequestException)
         {
             StatusText.Text = "No se pudo consultar el turno abierto.";
-            return false;
+            return null;
         }
     }
 
@@ -608,20 +611,50 @@ public partial class MainWindow : Window
         _exitDialogOpen = true;
         try
         {
-            if (await HasOpenShiftAsync())
+            var hasOpenShift = await HasOpenShiftAsync();
+            if (hasOpenShift is null)
+            {
+                MessageBox.Show("No se pudo comprobar el estado de la caja. JetVenta permanece abierto para evitar un cierre incierto.", "No se puede salir", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (hasOpenShift.Value)
             {
                 var decisionWindow = new ExitShiftWindow { Owner = this };
                 if (decisionWindow.ShowDialog() != true || decisionWindow.Decision == ExitShiftDecision.Cancel) return;
                 if (decisionWindow.Decision == ExitShiftDecision.CloseShiftAndExit)
                 {
                     var closed = await CloseShiftFromDialogAsync();
-                    if (!closed) return;
+                    if (!closed)
+                    {
+                        MessageBox.Show(StatusText.Text, "No se pudo cerrar el turno", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    var stillOpen = await HasOpenShiftAsync();
+                    if (stillOpen is not false)
+                    {
+                        MessageBox.Show("El servidor no confirmó el cierre del turno. JetVenta permanece abierto para proteger el corte.", "Cierre sin confirmar", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
                 }
             }
-            _exitConfirmed = true;
-            await Dispatcher.InvokeAsync(System.Windows.Application.Current.Shutdown);
+            CompleteExit();
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"No se pudo cerrar JetVenta: {exception.Message}";
+            MessageBox.Show(StatusText.Text, "No se puede salir", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally { _exitDialogOpen = false; }
+    }
+
+    private void CompleteExit()
+    {
+        _exitConfirmed = true;
+        Closing -= OnClosing;
+        Close();
+        System.Windows.Application.Current.Shutdown(0);
     }
 
     private void NavigateTo(string section)

@@ -135,7 +135,9 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             entity.Property(shift => shift.InitialCash).HasPrecision(18, 2);
             entity.Property(shift => shift.Status).HasMaxLength(20).IsRequired();
             entity.Property(shift => shift.OpenedAtUtc).HasColumnType("timestamp with time zone");
-            entity.HasIndex(shift => new { shift.RegisterId, shift.Status }).IsUnique();
+            entity.HasIndex(shift => new { shift.RegisterId, shift.Status })
+                .IsUnique()
+                .HasFilter("\"Status\" = 'Open'");
         });
         modelBuilder.Entity<SaleRecord>(entity =>
         {

@@ -40,7 +40,9 @@ public sealed class CashRegisterService(PosDbContext database)
 
     private async Task<ShiftSummary> SummaryAsync(ShiftRecord shift, decimal? counted, CancellationToken cancellationToken)
     {
-        var salesCash = await database.Payments.Where(payment => database.Sales.Any(sale => sale.Id == payment.SaleId && sale.ShiftId == shift.Id)).SumAsync(payment => payment.Amount, cancellationToken);
+        var salesCash = await database.Payments
+            .Where(payment => payment.Method == "Cash" && database.Sales.Any(sale => sale.Id == payment.SaleId && sale.ShiftId == shift.Id && sale.Status == "Completed"))
+            .SumAsync(payment => payment.Amount, cancellationToken);
         var movementsIn = await database.CashMovements.Where(item => item.ShiftId == shift.Id && item.Type == "In").SumAsync(item => item.Amount, cancellationToken);
         var movementsOut = await database.CashMovements.Where(item => item.ShiftId == shift.Id && item.Type == "Out").SumAsync(item => item.Amount, cancellationToken);
         var expected = decimal.Round(shift.InitialCash + salesCash + movementsIn - movementsOut, 2);

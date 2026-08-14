@@ -32,6 +32,11 @@ Estado actualizado: 2026-08-14
 
 ## Pendiente por fases
 
+Mejoras locales verificadas antes de continuar multicaja:
+
+- Correccion del corte para permitir historicos ilimitados por caja, mantener un solo turno abierto y contar exclusivamente efectivo fisico.
+- Base local de desarrollo poblada con un ano de operacion ficticia y repetible para probar reportes, inventario, compras y cortes a profundidad.
+
 ### Fase 0: base tecnica restante
 
 - Completado: inicio de sesion conectado a la ventana WPF.

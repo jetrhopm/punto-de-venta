@@ -1,6 +1,11 @@
 # Changelog
 
 ## Sin liberar
+- Se corrige la restriccion de turnos para permitir multiples cortes historicos y conservar un solo turno abierto por caja.
+- Se valida el cierre del turno antes de terminar JetVenta y se muestran errores visibles si el servidor no confirma el corte.
+- Se corrige el efectivo esperado del corte para sumar unicamente pagos en efectivo, sin contar tarjeta o transferencia como dinero fisico.
+- Se agrega una carga idempotente de datos de desarrollo con un ano de ventas, partidas, pagos, turnos, movimientos, clientes, proveedores y compras.
+- Se completan inventarios minimo y maximo de los 7,422 productos locales usando existencia y unidad de medida.
 - Se alinea la barra principal con el flujo operativo conocido: F1 Ventas, F2 Créditos, Clientes, F3 Productos, F4 Inventario, Compras, Configuración, Facturas, Corte y Reportes.
 - Se agrega barra rápida en Ventas con Enter agregar, INS varios, Ctrl+P artículo común, F10 buscar, F11 mayoreo, F7 entradas, F8 salidas, DEL borrar y F9 verificador.
 - Se muestran avisos claros de función pendiente para módulos visibles que todavía no tienen implementación completa.
