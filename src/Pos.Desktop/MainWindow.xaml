@@ -134,11 +134,7 @@
                         <TextBlock x:Name="SaleTotalText" Text="$0.00" FontSize="38" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
                         <TextBlock x:Name="SaleItemsText" Text="Artículos: 0" HorizontalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" Margin="0,2,0,15"/>
                     </StackPanel>
-                    <UniformGrid Grid.Row="1" Columns="3">
-                        <Button Style="{StaticResource PaymentButton}" Click="OnChargeClick"><StackPanel><icons:PackIconMaterial Kind="Cash" Width="25" Height="25" HorizontalAlignment="Center" Foreground="{StaticResource SuccessBrush}"/><TextBlock Text="Efectivo" Margin="0,3,0,0"/></StackPanel></Button>
-                        <Button Style="{StaticResource PaymentButton}" Click="OnChargeClick"><StackPanel><icons:PackIconMaterial Kind="CreditCardOutline" Width="25" Height="25" HorizontalAlignment="Center" Foreground="{StaticResource PrimaryBrush}"/><TextBlock Text="Tarjeta" Margin="0,3,0,0"/></StackPanel></Button>
-                        <Button Style="{StaticResource PaymentButton}" Click="OnChargeClick"><StackPanel><icons:PackIconMaterial Kind="BankTransfer" Width="25" Height="25" HorizontalAlignment="Center" Foreground="#2B8C7F"/><TextBlock Text="Transferencia" Margin="0,3,0,0"/></StackPanel></Button>
-                    </UniformGrid>
+                    <Button Grid.Row="1" Style="{StaticResource PaymentButton}" Height="64" Click="OnChargeClick"><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><icons:PackIconMaterial Kind="CashRegister" Width="25" Height="25" Margin="0,0,8,0" Foreground="{StaticResource SuccessBrush}"/><TextBlock Text="Seleccionar forma de pago" VerticalAlignment="Center"/></StackPanel></Button>
                     <StackPanel Grid.Row="2" Margin="0,18,0,0">
                         <TextBlock Text="Cliente actual" FontWeight="SemiBold" Margin="3,0,0,5"/>
                         <Button Click="OnSalesActionClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="AccountOutline" Width="20" Height="20" Margin="0,0,7,0"/><TextBlock Text="Seleccionar cliente" VerticalAlignment="Center"/></StackPanel></Button>

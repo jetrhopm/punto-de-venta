@@ -28,6 +28,9 @@
 - Se pagina la vista previa de importacion en bloques de 1000 productos sin limitar la importacion completa.
 - Se agrega soporte visible para unidades de venta por pieza y granel: Kilogramo, Gramo, Litro, Mililitro, Metro y Servicio.
 - Se permite elegir unidad de venta al crear o editar productos manualmente.
+- Se centraliza el cobro en un dialogo con efectivo, tarjeta, transferencia y pago mixto.
+- Se calcula y muestra el cambio en tiempo real y se registran correctamente varias formas de pago en una venta.
+- Se reemplaza el icono por el logotipo JetVenta con fondo transparente y resoluciones compatibles con Windows.
 - Se muestra el efectivo esperado, el efectivo contado y la diferencia antes y después de cerrar un turno.
 - Se amplia el dialogo de salida con turno abierto para que las tres opciones sean visibles.
 - Se permite ordenar de menor a mayor o mayor a menor cada columna de la vista previa de importacion de inventario.

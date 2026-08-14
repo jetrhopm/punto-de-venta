@@ -513,9 +513,9 @@ public partial class MainWindow : Window
         if (cashWindow.ShowDialog() != true || cashWindow.Received is null) return;
         try
         {
-            var command = new { operationId = Guid.NewGuid(), lines = _cart.Select(item => new { productId = item.ProductId, quantity = item.Quantity }).ToArray(), cashReceived = cashWindow.CreditRequested ? 0m : cashWindow.Received.Value, customerId = cashWindow.CustomerId, paymentMethod = cashWindow.CreditRequested ? "Credit" : "Cash" };
+            var command = new { operationId = Guid.NewGuid(), lines = _cart.Select(item => new { productId = item.ProductId, quantity = item.Quantity }).ToArray(), cashReceived = cashWindow.CreditRequested ? 0m : cashWindow.Received.Value, cardAmount = cashWindow.CreditRequested ? 0m : cashWindow.CardAmount, transferAmount = cashWindow.CreditRequested ? 0m : cashWindow.TransferAmount, customerId = cashWindow.CustomerId, paymentMethod = cashWindow.PaymentMethod };
             using var response = await Client.PostAsJsonAsync("/api/sales/complete", command);
-            if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
+            if (!response.IsSuccessStatusCode) { StatusText.Text = await ReadApiMessageAsync(response); MessageBox.Show(StatusText.Text, "No se pudo confirmar la venta", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
             var result = await response.Content.ReadFromJsonAsync<SaleResponse>();
             _lastSaleId = result?.SaleId;
             _cart.Clear(); CartList.Items.Refresh(); UpdateSaleSummary(); StatusText.Text = result is null ? "Venta confirmada." : cashWindow.CreditRequested ? "Venta a credito confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
