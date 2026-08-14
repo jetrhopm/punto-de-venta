@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se agrega historial de ventas por periodo, cajero y búsqueda, con detalle de partidas, formas de pago, reimpresión como copia, devoluciones y cancelación auditada desde la misma pantalla.
 - Se agregan tickets en atencion persistentes con pestañas, recuperacion despues de un cierre inesperado y cobro idempotente.
 - Los tickets pendientes no modifican inventario, ventas, pagos, movimientos de caja ni totales de corte hasta su confirmacion.
 - El corte bloquea el cierre cuando existen tickets con partidas pendientes para evitar omitir ventas en atencion.

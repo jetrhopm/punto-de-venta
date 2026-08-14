@@ -32,6 +32,7 @@ builder.Services.AddScoped<ShiftService>();
 builder.Services.AddScoped<ProductCatalogService>();
 builder.Services.AddScoped<SaleService>();
 builder.Services.AddScoped<SaleDraftService>();
+builder.Services.AddScoped<SalesHistoryService>();
 builder.Services.AddScoped<CashRegisterService>();
 builder.Services.AddScoped<InventoryService>();
 builder.Services.AddScoped<TicketService>();
@@ -361,6 +362,29 @@ app.MapPost("/api/sales/cancel", async (HttpRequest request, CancelSaleCommand c
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["sale"] = [exception.Message] }); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+app.MapGet("/api/sales/history", async (DateTimeOffset from, DateTimeOffset to, Guid? userId, string? q, HttpRequest request, SalesHistoryService history, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await history.ListAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), new SalesHistoryFilter(from, to, userId, q), cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (ArgumentException exception) { return Results.BadRequest(new { message = exception.Message }); }
+});
+app.MapGet("/api/sales/history/cashiers", async (HttpRequest request, SalesHistoryService history, CancellationToken cancellationToken) =>
+{
+    var result = await history.CashiersAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapGet("/api/sales/history/{saleId:guid}", async (Guid saleId, HttpRequest request, SalesHistoryService history, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await history.DetailAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), saleId, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
 app.MapPost("/api/sales/return", async (HttpRequest request, ReturnSaleCommand command, SaleReturnService returns, CancellationToken cancellationToken) =>
 {

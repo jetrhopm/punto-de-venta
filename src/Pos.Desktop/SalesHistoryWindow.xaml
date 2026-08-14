@@ -1,0 +1,39 @@
+<Window x:Class="Pos.Desktop.SalesHistoryWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks" Title="Historial de ventas" Width="1240" Height="760" MinWidth="1000" MinHeight="620" WindowStartupLocation="CenterOwner" Loaded="OnLoaded">
+    <Grid Margin="18" Background="#F5F8FB">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <DockPanel>
+            <TextBlock Text="Historial de ventas" FontSize="25" FontWeight="SemiBold" Foreground="#17324D"/>
+            <TextBlock x:Name="ResultText" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="#526577"/>
+        </DockPanel>
+        <Border Grid.Row="1" Margin="0,14,0,12" Padding="12" Background="White" BorderBrush="#D9E3EA" BorderThickness="1" CornerRadius="7">
+            <WrapPanel VerticalAlignment="Center">
+                <StackPanel Margin="0,0,12,0"><TextBlock Text="Desde" Foreground="#526577"/><DatePicker x:Name="FromPicker" Width="140"/></StackPanel>
+                <StackPanel Margin="0,0,12,0"><TextBlock Text="Hasta" Foreground="#526577"/><DatePicker x:Name="ToPicker" Width="140"/></StackPanel>
+                <StackPanel Margin="0,0,12,0"><TextBlock Text="Cajero" Foreground="#526577"/><ComboBox x:Name="CashierCombo" Width="210" DisplayMemberPath="DisplayName"/></StackPanel>
+                <StackPanel Margin="0,0,12,0"><TextBlock Text="Buscar folio, usuario o cajero" Foreground="#526577"/><TextBox x:Name="SearchTextBox" Width="230" Height="30"/></StackPanel>
+                <Button Height="34" Width="120" Margin="0,17,0,0" Click="OnSearchClick"><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><icons:PackIconMaterial Kind="Magnify" Width="17" Height="17" Margin="0,0,6,0"/><TextBlock Text="Buscar"/></StackPanel></Button>
+            </WrapPanel>
+        </Border>
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="420"/></Grid.ColumnDefinitions>
+            <ListView x:Name="SalesList" SelectionChanged="OnSaleSelected" Margin="0,0,12,0">
+                <ListView.View><GridView AllowsColumnReorder="True">
+                    <GridViewColumn Header="Fecha" DisplayMemberBinding="{Binding DateText}" Width="145"/>
+                    <GridViewColumn Header="Folio" DisplayMemberBinding="{Binding ShortId}" Width="105"/>
+                    <GridViewColumn Header="Cajero" DisplayMemberBinding="{Binding Cashier}" Width="170"/>
+                    <GridViewColumn Header="Artículos" DisplayMemberBinding="{Binding Items}" Width="70"/>
+                    <GridViewColumn Header="Total" DisplayMemberBinding="{Binding TotalText}" Width="95"/>
+                    <GridViewColumn Header="Estado" DisplayMemberBinding="{Binding Status}" Width="100"/>
+                </GridView></ListView.View>
+            </ListView>
+            <Border Grid.Column="1" Background="White" BorderBrush="#D9E3EA" BorderThickness="1" CornerRadius="7" Padding="16">
+                <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <StackPanel><TextBlock Text="Detalle del ticket" FontSize="20" FontWeight="SemiBold" Foreground="#17324D"/><TextBlock x:Name="DetailText" Text="Selecciona una venta para consultar sus partidas." TextWrapping="Wrap" Foreground="#526577" Margin="0,5,0,12"/></StackPanel>
+                    <ListView Grid.Row="1" x:Name="LinesList"><ListView.View><GridView><GridViewColumn Header="Cant." DisplayMemberBinding="{Binding Quantity}" Width="55"/><GridViewColumn Header="Producto" DisplayMemberBinding="{Binding Description}" Width="180"/><GridViewColumn Header="Importe" DisplayMemberBinding="{Binding TotalText}" Width="90"/></GridView></ListView.View></ListView>
+                    <TextBlock Grid.Row="2" x:Name="PaymentText" Margin="0,12,0,10" TextWrapping="Wrap" Foreground="#526577"/>
+                    <WrapPanel Grid.Row="3" HorizontalAlignment="Right"><Button Margin="0,0,8,0" Click="OnReturnClick"><icons:PackIconMaterial Kind="UndoVariant" Width="17" Height="17"/></Button><Button Margin="0,0,8,0" Click="OnCancelClick"><icons:PackIconMaterial Kind="Cancel" Width="17" Height="17"/></Button><Button Click="OnPrintClick"><icons:PackIconMaterial Kind="PrinterOutline" Width="17" Height="17"/></Button></WrapPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

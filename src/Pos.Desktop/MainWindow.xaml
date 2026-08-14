@@ -63,6 +63,7 @@
                     <Button Style="{StaticResource TopNavButton}" Tag="Facturas" Click="OnNavigateClick"><StackPanel><icons:PackIconMaterial Kind="FileDocumentOutline" Width="23" Height="23" HorizontalAlignment="Center" Foreground="{StaticResource WarningBrush}"/><TextBlock Text="Facturas" Margin="0,3,0,0"/></StackPanel></Button>
                     <Button Style="{StaticResource TopNavButton}" Tag="Corte" Click="OnNavigateClick"><StackPanel><icons:PackIconMaterial Kind="ClipboardCheckOutline" Width="23" Height="23" HorizontalAlignment="Center" Foreground="{StaticResource DangerBrush}"/><TextBlock Text="Corte" Margin="0,3,0,0"/></StackPanel></Button>
                     <Button Style="{StaticResource TopNavButton}" Tag="Reportes" Click="OnNavigateClick"><StackPanel><icons:PackIconMaterial Kind="ChartBoxOutline" Width="23" Height="23" HorizontalAlignment="Center" Foreground="#7C5799"/><TextBlock Text="Reportes" Margin="0,3,0,0"/></StackPanel></Button>
+                    <Button Style="{StaticResource TopNavButton}" Tag="Historial" Click="OnNavigateClick" ToolTip="Historial de ventas"><StackPanel><icons:PackIconMaterial Kind="History" Width="23" Height="23" HorizontalAlignment="Center" Foreground="#2B8C7F"/><TextBlock Text="Historial" Margin="0,3,0,0"/></StackPanel></Button>
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">

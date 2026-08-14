@@ -77,6 +77,7 @@ public partial class MainWindow : Window
             if (section == "Clientes" || section == "Creditos") { OpenCustomers(); return; }
             if (section == "Compras") { var window = new PurchaseWindow { Owner = this }; window.ShowDialog(); return; }
             if (section == "Reportes") { var window = new ReportsWindow { Owner = this }; window.ShowDialog(); return; }
+            if (section == "Historial") { var window = new SalesHistoryWindow { Owner = this }; window.ShowDialog(); return; }
             if (section == "Facturas") { ShowPendingFeature("Facturas CFDI"); return; }
             if (section == "Promociones") { var window = new PromotionWindow { Owner = this }; window.ShowDialog(); return; }
             if (section == "Configuracion") { var window = new ConfigurationWindow { Owner = this }; window.ShowDialog(); return; }
@@ -937,6 +938,7 @@ public partial class MainWindow : Window
         "Compras" => SessionContext.HasPermission("ManageSuppliersAndPurchases"),
         "Facturas" => true,
         "Reportes" => SessionContext.HasPermission("ViewReports"),
+        "Historial" => SessionContext.HasPermission("ViewSalesHistory"),
         "Promociones" => SessionContext.HasPermission("ManageProducts"),
         "Kits" => SessionContext.HasPermission("ManageProducts"),
         _ => false
