@@ -13,6 +13,7 @@
     <Resource Include="Assets\Icons\app-icon-128.png" />
     <Resource Include="Assets\Icons\app-icon-256.png" />
     <Resource Include="Assets\Icons\app-icon-512.png" />
+    <Resource Include="Assets\jetventa-banner.png" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -5,16 +5,9 @@
         Title="Iniciar sesión - JetVenta" Width="500" Height="590"
         WindowStartupLocation="CenterScreen" ResizeMode="NoResize">
     <Grid Background="{StaticResource AppBackgroundBrush}">
-        <Grid.RowDefinitions><RowDefinition Height="126"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="150"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <Border Background="#17384E">
-            <Grid Margin="32,0">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                <Border Width="66" Height="66" Background="White" CornerRadius="6" VerticalAlignment="Center"><Image Source="/Assets/Icons/app-icon-64.png" Width="54" Height="54"/></Border>
-                <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Text="JetVenta" FontSize="25" FontWeight="Bold" Foreground="White"/>
-                    <TextBlock Text="Acceso seguro a la caja" FontSize="14" Foreground="#CFE0EA" Margin="0,4,0,0"/>
-                </StackPanel>
-            </Grid>
+            <Grid Margin="20,0"><Image Source="/Assets/jetventa-banner.png" Width="440" Height="122" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid>
         </Border>
         <Grid Grid.Row="1" Margin="38,26,38,28">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
