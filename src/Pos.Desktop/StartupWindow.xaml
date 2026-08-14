@@ -24,19 +24,16 @@
                         <GradientStop Color="#E9FAF4" Offset="1"/>
                     </LinearGradientBrush>
                 </Border.Background>
-                <Grid Margin="40,34,40,24">
+                <Grid Margin="40,28,40,22">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="132"/>
+                        <RowDefinition Height="24"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <StackPanel>
-                        <Image Source="/Assets/jetventa-banner.png" Width="430" Height="165" Stretch="Uniform" HorizontalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" SnapsToDevicePixels="True"/>
-                        <TextBlock x:Name="VersionText" Text="Version" FontSize="13" Foreground="#607987" HorizontalAlignment="Center" Margin="0,8,0,0"/>
-                    </StackPanel>
-
-                    <TextBlock Grid.Row="1" x:Name="StoreNameText" Text="Preparando tienda" FontSize="18" FontWeight="SemiBold" Foreground="#102F46" HorizontalAlignment="Center" VerticalAlignment="Bottom"/>
+                    <Image Source="/Assets/jetventa-banner.png" Width="400" Height="132" Stretch="Uniform" HorizontalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" SnapsToDevicePixels="True"/>
+                    <TextBlock Grid.Row="1" x:Name="VersionText" Text="Version" FontSize="13" Foreground="#607987" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Row="2" x:Name="StoreNameText" Text="Preparando tienda" FontSize="18" FontWeight="SemiBold" Foreground="#102F46" HorizontalAlignment="Center" Margin="0,14,0,0"/>
                 </Grid>
             </Border>
 

@@ -2,8 +2,10 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using System.Windows;
 
 namespace Pos.Desktop;
@@ -140,6 +142,13 @@ public partial class StartupWindow : Window
 
     private async Task TryStartLocalServicesAsync()
     {
+        var developmentRoot = FindDevelopmentRoot();
+        if (developmentRoot is not null)
+        {
+            await TryStartDevelopmentServicesAsync(developmentRoot);
+            return;
+        }
+
         await TryRunAsync("sc.exe", $"start {PostgreSqlServiceName}");
         var postgresPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "postgresql", "pgsql", "bin", "pg_ctl.exe"));
         var postgresData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "postgresql", "data");
@@ -182,6 +191,112 @@ public partial class StartupWindow : Window
         catch (Exception exception)
         {
             Log($"No se pudo iniciar directamente la API: {exception}");
+        }
+    }
+
+    private async Task TryStartDevelopmentServicesAsync(string root)
+    {
+        var settingsPath = Path.Combine(root, ".postgres", "development-settings.json");
+        var dataPath = Path.Combine(root, ".postgres", "data");
+        var logPath = Path.Combine(root, ".postgres", "logs", "postgresql.log");
+        var toolsPath = Path.Combine(root, ".tools");
+        var port = ReadDevelopmentPort(settingsPath);
+        var pgCtlPath = Directory.Exists(toolsPath)
+            ? Directory.EnumerateFiles(toolsPath, "pg_ctl.exe", SearchOption.AllDirectories).FirstOrDefault()
+            : null;
+
+        if (!await IsTcpPortOpenAsync(port) && !string.IsNullOrWhiteSpace(pgCtlPath) && Directory.Exists(dataPath))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+            await TryRunAsync(
+                pgCtlPath,
+                $"-D \"{dataPath}\" -l \"{logPath}\" -o \"-p {port} -c listen_addresses=127.0.0.1 -c fsync=on -c synchronous_commit=on -c full_page_writes=on\" -w start");
+        }
+
+        if (await CheckApiAsync()) return;
+
+        var dotnetPath = Path.Combine(root, ".tools", "dotnet", "dotnet.exe");
+        var apiAssembly = Path.Combine(root, "src", "Pos.Api", "bin", "Debug", "net10.0", "Pos.Api.dll");
+        var apiProject = Path.Combine(root, "src", "Pos.Api", "Pos.Api.csproj");
+
+        try
+        {
+            var startInfo = File.Exists(dotnetPath) && File.Exists(apiAssembly)
+                ? new ProcessStartInfo
+                {
+                    FileName = dotnetPath,
+                    Arguments = $"\"{apiAssembly}\"",
+                    WorkingDirectory = root,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+                : new ProcessStartInfo
+                {
+                    FileName = dotnetPath,
+                    Arguments = $"run --project \"{apiProject}\" --no-launch-profile --no-restore",
+                    WorkingDirectory = root,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+            if (!File.Exists(startInfo.FileName))
+            {
+                Log($"No se encontro el ejecutable para iniciar la API de desarrollo: {startInfo.FileName}");
+                return;
+            }
+
+            _fallbackApiProcess = Process.Start(startInfo);
+            Log($"API de desarrollo iniciada desde: {startInfo.FileName}");
+        }
+        catch (Exception exception)
+        {
+            Log($"No se pudo iniciar la API de desarrollo: {exception}");
+        }
+    }
+
+    private static string? FindDevelopmentRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "PuntoDeVenta.slnx")) &&
+                File.Exists(Path.Combine(directory.FullName, "src", "Pos.Api", "Pos.Api.csproj")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        return null;
+    }
+
+    private static int ReadDevelopmentPort(string settingsPath)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(settingsPath));
+            return document.RootElement.TryGetProperty("Port", out var port) ? port.GetInt32() : 55432;
+        }
+        catch (Exception exception) when (exception is IOException or JsonException)
+        {
+            Log($"No se pudo leer el puerto de desarrollo; se usara 55432. {exception.Message}");
+            return 55432;
+        }
+    }
+
+    private static async Task<bool> IsTcpPortOpenAsync(int port)
+    {
+        try
+        {
+            using var client = new TcpClient();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(600));
+            await client.ConnectAsync("127.0.0.1", port, timeout.Token);
+            return true;
+        }
+        catch (Exception exception) when (exception is SocketException or OperationCanceledException)
+        {
+            return false;
         }
     }
 
