@@ -18,7 +18,7 @@
             <TextBlock Text="La vista previa usa una venta de ejemplo. No registra movimientos ni imprime." Margin="0,18,0,0" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
         </StackPanel>
         <Border Grid.Row="1" Grid.Column="2" Margin="0,20,0,0" Background="#EEF2F4" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="5" Padding="20">
-            <ScrollViewer VerticalScrollBarVisibility="Auto"><Border x:Name="TicketPaper" Width="260" Padding="18" Background="White" BorderBrush="#CCD6DD" BorderThickness="1" HorizontalAlignment="Center"><TextBlock x:Name="PreviewText" FontFamily="Consolas" FontSize="12" TextAlignment="Center" TextWrapping="Wrap"/></Border></ScrollViewer>
+            <ScrollViewer VerticalScrollBarVisibility="Auto"><Border x:Name="TicketPaper" Width="260" Padding="18" Background="White" BorderBrush="#CCD6DD" BorderThickness="1" HorizontalAlignment="Center"><TextBlock x:Name="PreviewText" FontFamily="Consolas" FontSize="12" TextAlignment="Left" TextWrapping="NoWrap"/></Border></ScrollViewer>
         </Border>
         <Grid Grid.Row="2" Grid.ColumnSpan="3" Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/><Button Grid.Column="1" Style="{StaticResource PrimaryButtonStyle}" Padding="22,8" Click="OnSaveClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ContentSaveOutline" Width="18" Height="18" Margin="0,0,7,0"/><TextBlock Text="Guardar formato"/></StackPanel></Button></Grid>
     </Grid>

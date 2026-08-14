@@ -16,9 +16,28 @@ public sealed class TicketService(PosDbContext database)
         var sale = await database.Sales.AsNoTracking().SingleOrDefaultAsync(item => item.Id == saleId, cancellationToken);
         if (sale is null) throw new KeyNotFoundException("Venta no encontrada.");
         var lines = await (from line in database.SaleLines.AsNoTracking() join product in database.Products.AsNoTracking() on line.ProductId equals product.Id where line.SaleId == saleId select new TicketPdfLine(product.Description, line.Quantity, line.UnitPrice, line.LineTotal)).ToListAsync(cancellationToken);
-        var payments = await database.Payments.AsNoTracking().Where(item => item.SaleId == saleId).ToListAsync(cancellationToken);
-        var store = await database.Stores.AsNoTracking().OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
-        var content = TicketPdfWriter.Create(new TicketPdfData(store.Name, store.TicketHeader, store.TicketFooter, store.TicketWidthMm, sale.Id, sale.CreatedAtUtc, lines, sale.Total, payments.Sum(item => item.Received), payments.Sum(item => item.Change)));
+        var payments = await database.Payments.AsNoTracking().Where(item => item.SaleId == saleId).Select(item => new TicketPdfPayment(item.Method, item.Amount, item.Received, item.Change)).ToListAsync(cancellationToken);
+        var shift = await database.Shifts.AsNoTracking().SingleAsync(item => item.Id == sale.ShiftId, cancellationToken);
+        var register = await database.Registers.AsNoTracking().SingleAsync(item => item.Id == shift.RegisterId, cancellationToken);
+        var cashier = await database.Users.AsNoTracking().SingleAsync(item => item.Id == shift.UserId, cancellationToken);
+        var store = await database.Stores.AsNoTracking().SingleAsync(item => item.Id == register.StoreId, cancellationToken);
+        var content = TicketPdfWriter.Create(new TicketPdfData(
+            store.Name,
+            store.LegalName,
+            store.TaxId,
+            store.Address,
+            store.Phone,
+            store.TicketHeader,
+            store.TicketFooter,
+            store.TicketWidthMm,
+            sale.Id,
+            shift.Id,
+            register.Name,
+            cashier.DisplayName,
+            sale.CreatedAtUtc,
+            lines,
+            payments,
+            sale.Total));
         var job = await database.PrintJobs.SingleOrDefaultAsync(item => item.SaleId == saleId && item.Status == "Pending", cancellationToken);
         if (job is not null) { job.Status = "Generated"; job.Attempts++; job.CompletedAtUtc = DateTimeOffset.UtcNow; await database.SaveChangesAsync(cancellationToken); }
         return new TicketResult(content, $"Ticket-{sale.Id:N}.pdf");

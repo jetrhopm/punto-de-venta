@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se rediseña el ticket PDF para papel térmico de 58 y 80 mm con altura automática, datos de tienda, venta, caja, cajero, partidas, pagos y cambio sin recortes.
 - Se corrige la restriccion de turnos para permitir multiples cortes historicos y conservar un solo turno abierto por caja.
 - Se valida el cierre del turno antes de terminar JetVenta y se muestran errores visibles si el servidor no confirma el corte.
 - Se corrige el efectivo esperado del corte para sumar unicamente pagos en efectivo, sin contar tarjeta o transferencia como dinero fisico.
