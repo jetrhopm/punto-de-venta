@@ -12,7 +12,7 @@
         </Border.Effect>
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="310"/>
+                <RowDefinition Height="260"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
@@ -32,24 +32,11 @@
                     </Grid.RowDefinitions>
 
                     <StackPanel>
-                        <Image Source="/Assets/jetventa-banner.png" Width="430" Height="118" Stretch="Uniform" HorizontalAlignment="Center"/>
+                        <Image Source="/Assets/jetventa-banner.png" Width="430" Height="165" Stretch="Uniform" HorizontalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" SnapsToDevicePixels="True"/>
                         <TextBlock x:Name="VersionText" Text="Version" FontSize="13" Foreground="#607987" HorizontalAlignment="Center" Margin="0,8,0,0"/>
                     </StackPanel>
 
-                    <Grid Grid.Row="1" Margin="0,16,0,0">
-                        <Border Width="290" Height="174" CornerRadius="12" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                    <GradientStop Color="#071F35" Offset="0"/>
-                                    <GradientStop Color="#0A66C2" Offset="0.62"/>
-                                    <GradientStop Color="#071F35" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.Background>
-                            <Image Source="/Assets/jetventa-banner.png" Width="270" Height="130" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                    </Grid>
-
-                    <TextBlock Grid.Row="2" x:Name="StoreNameText" Text="Preparando tienda" FontSize="18" FontWeight="SemiBold" Foreground="#102F46" HorizontalAlignment="Center"/>
+                    <TextBlock Grid.Row="1" x:Name="StoreNameText" Text="Preparando tienda" FontSize="18" FontWeight="SemiBold" Foreground="#102F46" HorizontalAlignment="Center" VerticalAlignment="Bottom"/>
                 </Grid>
             </Border>
 

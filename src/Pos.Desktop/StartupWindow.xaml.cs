@@ -19,6 +19,7 @@ public partial class StartupWindow : Window
         "startup-check.log");
 
     private bool _isChecking;
+    private Process? _fallbackApiProcess;
 
     public StartupWindow()
     {
@@ -60,6 +61,19 @@ public partial class StartupWindow : Window
 
             SetStatus("Datos listos. Revisando tienda y caja...", 72, "Listo", "Listo", "Revisando");
             var setup = await ReadSetupStatusAsync();
+            if (setup is null)
+            {
+                SetStatus("La base de datos no responde. JetVenta intentara recuperar sus servicios...", 78, "Revisando", "Recuperando", "Pendiente");
+                await TryStartLocalServicesAsync();
+                available = await WaitForApiAsync();
+                setup = available ? await ReadSetupStatusAsync() : null;
+                if (setup is null)
+                {
+                    SetStatus("No se pudo preparar JetVenta. Intenta de nuevo o reinicia la computadora principal.", 100, "Sin respuesta", "Revisar", "Pendiente");
+                    ErrorPanel.Visibility = Visibility.Visible;
+                    return;
+                }
+            }
             if (!string.IsNullOrWhiteSpace(setup?.StoreName)) StoreNameText.Text = setup.StoreName;
             StoreStatusText.Text = setup?.Configured == true ? "Lista" : "Por configurar";
 
@@ -124,11 +138,51 @@ public partial class StartupWindow : Window
         }
     }
 
-    private static async Task TryStartLocalServicesAsync()
+    private async Task TryStartLocalServicesAsync()
     {
         await TryRunAsync("sc.exe", $"start {PostgreSqlServiceName}");
+        var postgresPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "postgresql", "pgsql", "bin", "pg_ctl.exe"));
+        var postgresData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "postgresql", "data");
+        if (File.Exists(postgresPath) && Directory.Exists(postgresData))
+        {
+            await TryRunAsync(postgresPath, $"-D \"{postgresData}\" -o \"-p 5432 -c listen_addresses=127.0.0.1\" -w start");
+        }
         await Task.Delay(TimeSpan.FromSeconds(2));
         await TryRunAsync("sc.exe", $"start {ApiServiceName}");
+        await Task.Delay(TimeSpan.FromSeconds(2));
+
+        if (await CheckApiAsync()) return;
+
+        // Production normally uses Windows services. This fallback also recovers an API
+        // that was copied with the application but whose service registration is missing.
+        var apiPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "api", "Pos.Api.exe"));
+        var connectionFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "config", "connection.bin");
+        if (!File.Exists(apiPath))
+        {
+            apiPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "api", "Pos.Api.exe"));
+        }
+        if (!File.Exists(apiPath))
+        {
+            Log($"No se encontró la API para recuperación directa. Ruta revisada: {apiPath}");
+            return;
+        }
+
+        try
+        {
+            _fallbackApiProcess = Process.Start(new ProcessStartInfo
+            {
+                FileName = apiPath,
+                Arguments = $"--Pos:ConnectionFile=\"{connectionFile}\" --Pos:Urls=http://127.0.0.1:5000",
+                WorkingDirectory = Path.GetDirectoryName(apiPath)!,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+            Log($"API iniciada directamente para recuperación: {apiPath}");
+        }
+        catch (Exception exception)
+        {
+            Log($"No se pudo iniciar directamente la API: {exception}");
+        }
     }
 
     private static async Task TryRunAsync(string fileName, string arguments)

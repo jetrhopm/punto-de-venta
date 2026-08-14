@@ -20,6 +20,7 @@
 - Se conecta el análisis de reportes a PostgreSQL para que ventas, partidas e inventario se conserven en respaldos, restauraciones y cambios de computadora.
 - Se agrega pantalla de arranque JetVenta con logo, tienda, version y revision amigable de servicios antes del login.
 - Se intenta levantar automaticamente los servicios locales cuando JetVenta no responde al abrir.
+- Se corrige la pantalla de arranque para mostrar un solo banner limpio y validar la base de datos antes del inicio de sesion; JetVenta intenta recuperar PostgreSQL y la API cuando no responden.
 - Se reemplaza el icono del EXE, instalador y accesos directos por un ICO multiresolucion generado desde `icono.png`.
 - Se fuerza la apertura de caja al iniciar sesion para cualquier usuario autenticado y se quita el boton manual de abrir turno del menu.
 - Se muestra siempre el estado de caja al iniciar sesion: pide fondo inicial o informa el turno ya abierto.
