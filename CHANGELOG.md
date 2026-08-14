@@ -1,6 +1,38 @@
 # Changelog
 
 ## Sin liberar
+- Se alinea la barra principal con el flujo operativo conocido: F1 Ventas, F2 Créditos, Clientes, F3 Productos, F4 Inventario, Compras, Configuración, Facturas, Corte y Reportes.
+- Se agrega barra rápida en Ventas con Enter agregar, INS varios, Ctrl+P artículo común, F10 buscar, F11 mayoreo, F7 entradas, F8 salidas, DEL borrar y F9 verificador.
+- Se muestran avisos claros de función pendiente para módulos visibles que todavía no tienen implementación completa.
+- Se amplían Reportes con análisis semanal, mensual y anual, más vendidos, productos para surtir, bajo movimiento y productos sin ventas.
+- Se conecta el análisis de reportes a PostgreSQL para que ventas, partidas e inventario se conserven en respaldos, restauraciones y cambios de computadora.
+- Se agrega pantalla de arranque JetVenta con logo, tienda, version y revision amigable de servicios antes del login.
+- Se intenta levantar automaticamente los servicios locales cuando JetVenta no responde al abrir.
+- Se reemplaza el icono del EXE, instalador y accesos directos por un ICO multiresolucion generado desde `icono.png`.
+- Se fuerza la apertura de caja al iniciar sesion para cualquier usuario autenticado y se quita el boton manual de abrir turno del menu.
+- Se muestra siempre el estado de caja al iniciar sesion: pide fondo inicial o informa el turno ya abierto.
+- Se agrega F10 como buscador de productos sin afectar la venta actual.
+- Se agrega F9 como verificador de precios por codigo de barras sin agregar productos al ticket.
+- Se refuerza el cierre de JetVenta despues de realizar corte desde la salida.
+- Se agrega alerta sonora distinta para producto agregado y codigo no encontrado durante ventas.
+- Se agrega dialogo de codigo no encontrado con registro rapido o producto comun cobrable desde la venta.
+- Se mantiene el foco en el campo de codigo de barras en Ventas para operar con lector sin seleccionar el campo cada vez.
+- Se cambia el nombre visible del sistema e instalador a JetVenta.
+- Se actualiza el icono principal de la aplicacion e instalador desde `icono.png`.
+- Se corrige la salida despues de elegir cerrar turno y salir para cerrar toda la aplicacion.
+- Se pagina la vista previa de importacion en bloques de 1000 productos sin limitar la importacion completa.
+- Se agrega soporte visible para unidades de venta por pieza y granel: Kilogramo, Gramo, Litro, Mililitro, Metro y Servicio.
+- Se permite elegir unidad de venta al crear o editar productos manualmente.
+- Se amplia el dialogo de salida con turno abierto para que las tres opciones sean visibles.
+- Se permite ordenar de menor a mayor o mayor a menor cada columna de la vista previa de importacion de inventario.
+- Se estabiliza la edicion de numeros en la vista previa importada desde Excel usando campos editables tolerantes a valores pegados.
+- Se corrige el cierre inesperado al editar campos en la vista previa de importacion XLSX/CSV.
+- Se registra cualquier excepcion de escritorio en `C:\ProgramData\PuntoDeVenta\logs\desktop-error.log` y se muestra un mensaje visible.
+- Se muestran filas y motivos concretos cuando la importacion de inventario contiene errores.
+- Se agrega catalogo WPF para buscar, crear, editar y desactivar productos sin borrar historial.
+- Se evita que errores inesperados de busqueda cierren la aplicacion.
+- Se solicita apertura de turno despues del login y se ofrecen opciones seguras al salir.
+- Se agrega vista previa en vivo al editor de formato de ticket.
 
 - Se permite editar la vista previa de importacion de inventario antes de confirmar la carga.
 - Se convierten a 0 los valores no numericos de existencia, inventario minimo e inventario maximo al leer CSV/XLSX de eleventa.

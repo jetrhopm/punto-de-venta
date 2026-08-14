@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Hosting.WindowsServices;
 using Pos.Infrastructure;
+using System.Security.Cryptography;
+using System.Text;
 
 var startupLog = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "logs", "api-startup.log");
 void WriteStartupLog(string message)
@@ -234,9 +236,44 @@ app.MapGet("/api/products/search", async (string? q, PosDbContext database, Canc
     var products = await database.Products.AsNoTracking()
         .Where(product => product.IsActive && (product.NormalizedCode.Contains(normalized) || product.Description.ToUpper().Contains(normalized)))
         .OrderBy(product => product.Description).Take(30)
-        .Select(product => new { product.Id, product.Code, product.Description, product.Price })
+        .Select(product => new { product.Id, product.Code, product.Description, product.Category, product.Price, product.Cost, product.WholesalePrice, product.WholesaleMinimumQuantity, product.Stock, product.MinimumStock, product.MaximumStock, product.IsKit, product.UnitOfMeasure, product.IsActive })
         .ToListAsync(cancellationToken);
     return Results.Ok(products);
+});
+
+app.MapPost("/api/products/quick-sale", async (HttpRequest request, ProductCommand command, PosDbContext database, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty)));
+    var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
+    if (session is null) return Results.Unauthorized();
+    var user = await database.Users.AsNoTracking().SingleOrDefaultAsync(item => item.Id == session.UserId && item.IsActive, cancellationToken);
+    if (user is null) return Results.Unauthorized();
+    var allowed = user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "Sell", cancellationToken);
+    if (!allowed) return Results.StatusCode(StatusCodes.Status403Forbidden);
+    if (string.IsNullOrWhiteSpace(command.Code) || string.IsNullOrWhiteSpace(command.Description) || command.Price < 0m) return Results.ValidationProblem(new Dictionary<string, string[]> { ["product"] = ["Codigo, descripcion y precio valido son obligatorios."] });
+
+    var normalized = ProductCatalogService.NormalizeCode(command.Code);
+    var existing = await database.Products.AsNoTracking().SingleOrDefaultAsync(item => item.NormalizedCode == normalized && item.IsActive, cancellationToken);
+    if (existing is not null) return Results.Ok(new { existing.Id, existing.Code, existing.Description, existing.Price, existing.UnitOfMeasure });
+
+    var product = new ProductRecord
+    {
+        Id = Guid.NewGuid(),
+        Code = command.Code.Trim(),
+        NormalizedCode = normalized,
+        Description = command.Description.Trim(),
+        Price = decimal.Round(command.Price, 2),
+        Cost = decimal.Round(command.Cost, 2),
+        WholesalePrice = decimal.Round(command.WholesalePrice, 2),
+        WholesaleMinimumQuantity = decimal.Round(command.WholesaleMinimumQuantity, 3),
+        UnitOfMeasure = string.IsNullOrWhiteSpace(command.UnitOfMeasure) ? "Pieza" : command.UnitOfMeasure.Trim(),
+        Stock = 0m,
+        IsActive = true
+    };
+    database.Products.Add(product);
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Created($"/api/products/{product.Id}", new { product.Id, product.Code, product.Description, product.Price, product.UnitOfMeasure });
 });
 
 app.MapPost("/api/products", async (HttpRequest request, ProductCommand command, ProductCatalogService catalog, CancellationToken cancellationToken) =>
@@ -262,6 +299,15 @@ app.MapPut("/api/products/{id:guid}", async (Guid id, HttpRequest request, Produ
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 
+app.MapDelete("/api/products/{id:guid}", async (Guid id, HttpRequest request, ProductCatalogService catalog, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await catalog.DeactivateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), id, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.NoContent();
+    }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+});
 app.MapPost("/api/promotions", async (HttpRequest request, PromotionCommand command, PromotionService promotions, CancellationToken cancellationToken) =>
 {
     try { var result = await promotions.CreateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Created($"/api/promotions/{result.Id}", result); }
@@ -309,6 +355,11 @@ app.MapGet("/api/reports/sales", async (DateTimeOffset from, DateTimeOffset to, 
 app.MapGet("/api/reports/sales.csv", async (DateTimeOffset from, DateTimeOffset to, HttpRequest request, ReportService reports, CancellationToken cancellationToken) =>
 {
     var content = await reports.SalesCsvAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), from, to, cancellationToken); return content is null ? Results.Unauthorized() : Results.File(content, "text/csv", $"ventas-{from:yyyyMMdd}-{to:yyyyMMdd}.csv");
+});
+app.MapGet("/api/reports/analysis", async (HttpRequest request, ReportService reports, CancellationToken cancellationToken) =>
+{
+    var result = await reports.SalesAnalysisAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
 app.MapGet("/api/reports/inventory", async (HttpRequest request, ReportService reports, CancellationToken cancellationToken) =>
 {
@@ -379,6 +430,13 @@ app.MapPost("/api/shifts/open", async (HttpRequest request, OpenShiftCommand com
         return result is null ? Results.Unauthorized() : Results.Ok(result);
     }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+
+app.MapGet("/api/shifts/current", async (HttpRequest request, ShiftService shifts, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    var result = await shifts.CurrentAsync(token, cancellationToken);
+    return result is null ? Results.NotFound() : Results.Ok(result);
 });
 
 app.MapGet("/api/shifts/register", async (PosDbContext database, CancellationToken cancellationToken) =>

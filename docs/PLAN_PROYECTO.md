@@ -1,6 +1,6 @@
 # Plan completo del punto de venta
 
-Estado actualizado: 2026-08-13
+Estado actualizado: 2026-08-14
 
 ## Terminado
 
@@ -27,6 +27,8 @@ Estado actualizado: 2026-08-13
 - Catalogo persistente de productos.
 - Busqueda asincrona por codigo o descripcion.
 - Campo compatible con lectores de codigo de barras que escriben y confirman con Enter.
+- Barra operativa de ventas con atajos visibles compatibles con el flujo conocido del cliente.
+- Reportes con resumen semana/mes/año, mas vendidos, sugerencias de surtido, bajo movimiento y sin ventas, calculados desde PostgreSQL.
 
 ## Pendiente por fases
 
@@ -73,6 +75,8 @@ La implementacion local de la Fase 2 esta terminada. La validacion externa requi
 ### Fase 3: multicaja LAN
 
 - Incremento local previo completado: centro de configuracion para datos de tienda, usuarios y permisos, impresoras de Windows, respaldos e importacion CSV/XLSX.
+- Incremento local previo completado: navegacion principal alineada al flujo conocido y placeholders claros para módulos pendientes.
+- Incremento local previo completado: reportes comerciales previos a multicaja para surtido semanal y analisis de movimiento.
 
 - Incremento 1 completado: servidor configurable por IP/nombre, prueba de conexion, endpoint de compatibilidad, API preparada para escuchar en LAN privada y regla de Firewall restringida al perfil privado.
 - Incremento 2 completado: codigo temporal de emparejamiento, identificadores persistentes y almacenamiento local protegido con DPAPI.

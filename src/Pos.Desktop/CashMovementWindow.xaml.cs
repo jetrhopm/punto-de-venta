@@ -10,9 +10,11 @@ public partial class CashMovementWindow : Window
     public decimal? Amount { get; private set; }
     public string Reason { get; private set; } = string.Empty;
 
-    public CashMovementWindow()
+    public CashMovementWindow(string? presetType = null)
     {
         InitializeComponent();
+        if (presetType == "Out") TypeComboBox.SelectedIndex = 1;
+        else if (presetType == "In") TypeComboBox.SelectedIndex = 0;
         AmountTextBox.Focus();
     }
 

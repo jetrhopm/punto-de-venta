@@ -7,6 +7,9 @@ namespace Pos.Infrastructure;
 public sealed record SalesReportRow(DateTimeOffset CreatedAtUtc, Guid SaleId, string Status, decimal Total, string PaymentMethod, Guid? CustomerId);
 public sealed record InventoryReportRow(Guid ProductId, string Code, string Description, decimal Stock, decimal Cost, decimal Value);
 public sealed record CreditReportRow(Guid CustomerId, string Name, decimal Balance, decimal CreditLimit, decimal Available);
+public sealed record PeriodSummaryRow(string Period, DateTimeOffset FromUtc, DateTimeOffset ToUtc, int SalesCount, decimal Total);
+public sealed record ProductAnalysisRow(Guid ProductId, string Code, string Description, string Category, string UnitOfMeasure, decimal QuantitySold, decimal TotalSold, decimal Stock, decimal MinimumStock, decimal MaximumStock);
+public sealed record SalesAnalysisResult(IReadOnlyList<PeriodSummaryRow> Periods, IReadOnlyList<ProductAnalysisRow> BestSellers, IReadOnlyList<ProductAnalysisRow> RestockNeeded, IReadOnlyList<ProductAnalysisRow> LowMovement, IReadOnlyList<ProductAnalysisRow> NoMovement);
 
 public sealed class ReportService(PosDbContext database)
 {
@@ -35,12 +38,91 @@ public sealed class ReportService(PosDbContext database)
         return await database.Customers.AsNoTracking().OrderBy(item => item.Name).Select(item => new CreditReportRow(item.Id, item.Name, balances.GetValueOrDefault(item.Id), item.CreditLimit, item.CreditLimit - balances.GetValueOrDefault(item.Id))).ToListAsync(cancellationToken);
     }
 
+    public async Task<SalesAnalysisResult?> SalesAnalysisAsync(string token, CancellationToken cancellationToken)
+    {
+        if (await AuthorizedAsync(token, "ViewReports", cancellationToken) is null) return null;
+
+        var now = DateTimeOffset.UtcNow;
+        var weekStart = now.AddDays(-7);
+        var monthStart = now.AddMonths(-1);
+        var yearStart = now.AddYears(-1);
+
+        var periods = new List<PeriodSummaryRow>
+        {
+            await SummaryAsync("Semana", weekStart, now, cancellationToken),
+            await SummaryAsync("Mes", monthStart, now, cancellationToken),
+            await SummaryAsync("Año", yearStart, now, cancellationToken)
+        };
+
+        var soldRows = await (from line in database.SaleLines.AsNoTracking()
+                              join sale in database.Sales.AsNoTracking() on line.SaleId equals sale.Id
+                              join product in database.Products.AsNoTracking() on line.ProductId equals product.Id
+                              where sale.Status == "Completed"
+                              where sale.CreatedAtUtc >= yearStart
+                              where sale.CreatedAtUtc < now
+                              group new { line, product } by new { product.Id, product.Code, product.Description, product.Category, product.UnitOfMeasure, product.Stock, product.MinimumStock, product.MaximumStock } into grouped
+                              select new ProductAnalysisRow(grouped.Key.Id, grouped.Key.Code, grouped.Key.Description, grouped.Key.Category, grouped.Key.UnitOfMeasure, grouped.Sum(item => item.line.Quantity), grouped.Sum(item => item.line.LineTotal), grouped.Key.Stock, grouped.Key.MinimumStock, grouped.Key.MaximumStock))
+            .ToListAsync(cancellationToken);
+
+        var soldByProduct = soldRows.ToDictionary(item => item.ProductId);
+        var products = await database.Products.AsNoTracking()
+            .Where(item => item.IsActive)
+            .OrderBy(item => item.Description)
+            .Select(item => new { item.Id, item.Code, item.Description, item.Category, item.UnitOfMeasure, item.Stock, item.MinimumStock, item.MaximumStock })
+            .ToListAsync(cancellationToken);
+
+        var activeRows = products.Select(item =>
+            soldByProduct.TryGetValue(item.Id, out var sold)
+                ? sold
+                : new ProductAnalysisRow(item.Id, item.Code, item.Description, item.Category, item.UnitOfMeasure, 0m, 0m, item.Stock, item.MinimumStock, item.MaximumStock))
+            .ToList();
+
+        var restockNeeded = activeRows
+            .Where(item => item.MinimumStock > 0m && item.Stock <= item.MinimumStock)
+            .OrderBy(item => item.Stock - item.MinimumStock)
+            .ThenByDescending(item => item.QuantitySold)
+            .Take(60)
+            .ToList();
+
+        var lowMovement = soldRows
+            .Where(item => item.QuantitySold > 0m && item.QuantitySold <= 2m)
+            .OrderBy(item => item.QuantitySold)
+            .ThenBy(item => item.Description)
+            .Take(60)
+            .ToList();
+
+        var noMovement = activeRows
+            .Where(item => item.QuantitySold <= 0m)
+            .Take(60)
+            .ToList();
+
+        return new SalesAnalysisResult(
+            periods,
+            soldRows.OrderByDescending(item => item.QuantitySold).ThenByDescending(item => item.TotalSold).Take(30).ToList(),
+            restockNeeded,
+            lowMovement,
+            noMovement);
+    }
+
     public async Task<byte[]?> SalesCsvAsync(string token, DateTimeOffset startDate, DateTimeOffset endDate, CancellationToken cancellationToken)
     {
         var rows = await SalesAsync(token, startDate, endDate, cancellationToken); if (rows is null) return null;
         var builder = new StringBuilder("Fecha,Venta,Estado,Total,FormaPago,Cliente\r\n");
         foreach (var row in rows) builder.Append(string.Join(',', Csv(row.CreatedAtUtc.ToString("O")), Csv(row.SaleId.ToString()), Csv(row.Status), row.Total.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), Csv(row.PaymentMethod), Csv(row.CustomerId?.ToString() ?? string.Empty))).Append("\r\n");
         return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(builder.ToString())).ToArray();
+    }
+
+    private async Task<PeriodSummaryRow> SummaryAsync(string period, DateTimeOffset startDate, DateTimeOffset endDate, CancellationToken cancellationToken)
+    {
+        var summary = await database.Sales.AsNoTracking()
+            .Where(item => item.Status == "Completed")
+            .Where(item => item.CreatedAtUtc >= startDate)
+            .Where(item => item.CreatedAtUtc < endDate)
+            .GroupBy(_ => 1)
+            .Select(group => new { SalesCount = group.Count(), Total = group.Sum(item => item.Total) })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return new PeriodSummaryRow(period, startDate, endDate, summary?.SalesCount ?? 0, summary?.Total ?? 0m);
     }
 
     private async Task<UserRecord?> AuthorizedAsync(string token, string permission, CancellationToken cancellationToken)
