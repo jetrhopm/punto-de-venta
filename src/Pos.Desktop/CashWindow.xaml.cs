@@ -7,6 +7,7 @@ namespace Pos.Desktop;
 public partial class CashWindow : Window
 {
     private readonly decimal _total;
+    private bool _controlsReady;
     private string _paymentMethod = "Cash";
     public decimal? Received { get; private set; }
     public decimal CardAmount { get; private set; }
@@ -17,7 +18,14 @@ public partial class CashWindow : Window
 
     public CashWindow(decimal total)
     {
-        InitializeComponent(); _total = decimal.Round(total, 2); TotalText.Text = $"Total: ${_total:0.00}"; ReceivedTextBox.Text = _total.ToString("0.00", CultureInfo.InvariantCulture); ReceivedTextBox.Focus(); ReceivedTextBox.SelectAll(); UpdatePaymentView();
+        InitializeComponent();
+        _total = decimal.Round(total, 2);
+        _controlsReady = true;
+        TotalText.Text = $"Total: ${_total:0.00}";
+        ReceivedTextBox.Text = _total.ToString("0.00", CultureInfo.InvariantCulture);
+        ReceivedTextBox.Focus();
+        ReceivedTextBox.SelectAll();
+        UpdatePaymentView();
     }
 
     private void OnPaymentMethodClick(object sender, RoutedEventArgs e) { if (sender is Button { Tag: string method }) { _paymentMethod = method; UpdatePaymentView(); } }
@@ -34,6 +42,7 @@ public partial class CashWindow : Window
 
     private void UpdateAmounts()
     {
+        if (!_controlsReady) return;
         var received = ParseAmount(ReceivedTextBox.Text); var card = _paymentMethod == "Card" ? _total : ParseAmount(CardAmountTextBox.Text); var transfer = _paymentMethod == "Transfer" ? _total : ParseAmount(TransferAmountTextBox.Text);
         var cashDue = _paymentMethod switch { "Card" or "Transfer" => 0m, "Mixed" => _total - card - transfer, _ => _total };
         if (_paymentMethod == "Mixed") MixedCashDueText.Text = cashDue >= 0m ? $"Efectivo requerido: ${cashDue:0.00}" : "Los importes superan el total de la venta.";
