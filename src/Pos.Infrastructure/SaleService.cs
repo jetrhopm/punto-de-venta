@@ -34,7 +34,6 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
             if (line.Quantity <= 0m) throw new ArgumentException("La cantidad debe ser mayor que cero.");
             var product = products[line.ProductId];
             var requested = expanded[line.ProductId];
-            if (!product.IsKit && product.Stock < requested) throw new InvalidOperationException($"Existencia insuficiente para {product.Description}.");
             var stockBefore = product.Stock;
             var unitPrice = product.Price;
             var originalLine = command.Lines.SingleOrDefault(item => item.ProductId == line.ProductId);
@@ -65,7 +64,7 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         }
         var sale = new SaleRecord { Id = Guid.NewGuid(), OperationId = command.OperationId, ShiftId = shift.Id, CustomerId = command.CustomerId, Total = totalSale, CreatedAtUtc = DateTimeOffset.UtcNow };
         foreach (var line in lines) { line.SaleId = sale.Id; if (!products[line.ProductId].IsKit) database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = line.ProductId, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -line.Quantity, StockBefore = line.StockBefore, StockAfter = line.StockAfter, CreatedAtUtc = sale.CreatedAtUtc }); }
-        foreach (var component in expanded.Where(item => !command.Lines.Any(line => line.ProductId == item.Key))) { var product = products[component.Key]; if (product.Stock < component.Value) throw new InvalidOperationException($"Existencia insuficiente para {product.Description}."); var before = product.Stock; product.Stock -= component.Value; database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -component.Value, StockBefore = before, StockAfter = product.Stock, Reason = "KitSale", CreatedAtUtc = sale.CreatedAtUtc }); }
+        foreach (var component in expanded.Where(item => !command.Lines.Any(line => line.ProductId == item.Key))) { var product = products[component.Key]; var before = product.Stock; product.Stock -= component.Value; database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -component.Value, StockBefore = before, StockAfter = product.Stock, Reason = "KitSale", CreatedAtUtc = sale.CreatedAtUtc }); }
         var cashAmountToRecord = command.PaymentMethod switch { "Card" or "Transfer" or "Credit" => 0m, _ => decimal.Round(totalSale - (command.PaymentMethod == "Mixed" ? command.CardAmount + command.TransferAmount : 0m), 2, MidpointRounding.AwayFromZero) };
         var cardAmountToRecord = command.PaymentMethod == "Card" ? totalSale : decimal.Round(command.CardAmount, 2, MidpointRounding.AwayFromZero);
         var transferAmountToRecord = command.PaymentMethod == "Transfer" ? totalSale : decimal.Round(command.TransferAmount, 2, MidpointRounding.AwayFromZero);
