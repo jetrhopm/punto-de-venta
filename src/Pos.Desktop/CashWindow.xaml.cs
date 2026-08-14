@@ -34,7 +34,7 @@ public partial class CashWindow : Window
 
     private void UpdateAmounts()
     {
-        var received = ParseAmount(ReceivedTextBox.Text); var card = ParseAmount(CardAmountTextBox.Text); var transfer = ParseAmount(TransferAmountTextBox.Text);
+        var received = ParseAmount(ReceivedTextBox.Text); var card = _paymentMethod == "Card" ? _total : ParseAmount(CardAmountTextBox.Text); var transfer = _paymentMethod == "Transfer" ? _total : ParseAmount(TransferAmountTextBox.Text);
         var cashDue = _paymentMethod switch { "Card" or "Transfer" => 0m, "Mixed" => _total - card - transfer, _ => _total };
         if (_paymentMethod == "Mixed") MixedCashDueText.Text = cashDue >= 0m ? $"Efectivo requerido: ${cashDue:0.00}" : "Los importes superan el total de la venta.";
         var change = _paymentMethod is "Cash" or "Mixed" ? received - cashDue : 0m;
@@ -43,7 +43,7 @@ public partial class CashWindow : Window
 
     private void OnConfirmClick(object sender, RoutedEventArgs e)
     {
-        var received = ParseAmount(ReceivedTextBox.Text); var card = ParseAmount(CardAmountTextBox.Text); var transfer = ParseAmount(TransferAmountTextBox.Text);
+        var received = ParseAmount(ReceivedTextBox.Text); var card = _paymentMethod == "Card" ? _total : ParseAmount(CardAmountTextBox.Text); var transfer = _paymentMethod == "Transfer" ? _total : ParseAmount(TransferAmountTextBox.Text);
         var cashDue = _paymentMethod switch { "Card" or "Transfer" => 0m, "Mixed" => _total - card - transfer, _ => _total };
         if (cashDue < 0m || card < 0m || transfer < 0m || received < cashDue || decimal.Round(cashDue + card + transfer, 2) != _total) { MessageText.Text = "Verifica que los importes cubran exactamente el total y que el efectivo recibido sea suficiente."; return; }
         Received = decimal.Round(received, 2); CardAmount = decimal.Round(card, 2); TransferAmount = decimal.Round(transfer, 2); DialogResult = true;
