@@ -35,6 +35,10 @@ while ($queue.Count -gt 0) {
 
 $masterPath = Join-Path $desktopAssets 'app-icon-1024.png'
 $bitmap.Save($masterPath, [System.Drawing.Imaging.ImageFormat]::Png)
+$namedDesktopPath = Join-Path $Root 'src\Pos.Desktop\Assets\jetventa-icon.png'
+$namedInstallerPath = Join-Path $installerAssets 'jetventa-icon.png'
+$bitmap.Save($namedDesktopPath, [System.Drawing.Imaging.ImageFormat]::Png)
+$bitmap.Save($namedInstallerPath, [System.Drawing.Imaging.ImageFormat]::Png)
 
 function Save-PngSize([System.Drawing.Bitmap]$sourceBitmap, [int]$size, [string]$path) {
     $target = [System.Drawing.Bitmap]::new($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)

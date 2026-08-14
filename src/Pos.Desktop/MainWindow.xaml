@@ -45,7 +45,7 @@
             <Grid Margin="16,0">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="210"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Image Source="/Assets/Icons/app-icon-48.png" Width="44" Height="44" Margin="0,0,11,0"/>
+                    <Image Source="/Assets/jetventa-icon.png" Width="44" Height="44" Margin="0,0,11,0"/>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="JetVenta" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextBrush}"/>
                         <TextBlock x:Name="StoreNameText" Text="Conectando..." FontSize="12" Foreground="{StaticResource TextMutedBrush}" TextTrimming="CharacterEllipsis" MaxWidth="165"/>
