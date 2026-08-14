@@ -28,6 +28,7 @@
 - Se pagina la vista previa de importacion en bloques de 1000 productos sin limitar la importacion completa.
 - Se agrega soporte visible para unidades de venta por pieza y granel: Kilogramo, Gramo, Litro, Mililitro, Metro y Servicio.
 - Se permite elegir unidad de venta al crear o editar productos manualmente.
+- Se muestra el efectivo esperado, el efectivo contado y la diferencia antes y después de cerrar un turno.
 - Se amplia el dialogo de salida con turno abierto para que las tres opciones sean visibles.
 - Se permite ordenar de menor a mayor o mayor a menor cada columna de la vista previa de importacion de inventario.
 - Se estabiliza la edicion de numeros en la vista previa importada desde Excel usando campos editables tolerantes a valores pegados.

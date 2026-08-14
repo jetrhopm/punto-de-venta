@@ -41,6 +41,10 @@ public sealed class CashRegisterIntegrationTests
                 new CashMovementRecord { Id = Guid.NewGuid(), ShiftId = first.ShiftId, Type = "Out", Amount = 5m, Reason = "Gasto menor", CreatedAtUtc = DateTimeOffset.UtcNow });
             await database.SaveChangesAsync();
 
+            var preview = await cash.CurrentSummaryAsync(token, CancellationToken.None);
+            Assert.NotNull(preview);
+            Assert.Equal(615m, preview.ExpectedCash);
+
             var firstSummary = await cash.CloseAsync(token, new CloseShiftCommand(615m), CancellationToken.None);
             Assert.NotNull(firstSummary);
             Assert.Equal(615m, firstSummary.ExpectedCash);

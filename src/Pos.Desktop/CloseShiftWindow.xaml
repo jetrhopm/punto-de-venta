@@ -1,7 +1,11 @@
-<Window x:Class="Pos.Desktop.CloseShiftWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Cerrar turno" Width="400" Height="280" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+<Window x:Class="Pos.Desktop.CloseShiftWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Cerrar turno" Width="460" Height="360" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
     <Grid Margin="24"><StackPanel>
         <TextBlock Text="Cerrar turno" FontSize="22" FontWeight="SemiBold" Foreground="#17324D" />
+        <TextBlock Text="Efectivo esperado en caja" Margin="0,16,0,2" Foreground="{StaticResource TextMutedBrush}" />
+        <TextBlock x:Name="ExpectedCashText" FontSize="24" FontWeight="Bold" Foreground="{StaticResource PrimaryBrush}" />
         <TextBlock Text="Efectivo contado" Margin="0,16,0,4" /><TextBox x:Name="CountedCashTextBox" Height="36" FontSize="18" />
+        <TextBlock Text="Diferencia" Margin="0,12,0,2" Foreground="{StaticResource TextMutedBrush}" />
+        <TextBlock x:Name="DifferenceText" FontSize="18" FontWeight="SemiBold" />
         <Button Margin="0,16,0,0" Height="38" Background="#146CB0" Foreground="White" FontWeight="Bold" Click="OnConfirmClick">Cerrar turno</Button>
         <TextBlock x:Name="MessageText" Margin="0,12,0,0" Foreground="#B42318" TextWrapping="Wrap" />
     </StackPanel></Grid>

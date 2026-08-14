@@ -408,6 +408,12 @@ app.MapPost("/api/shifts/close", async (HttpRequest request, CloseShiftCommand c
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["cash"] = [exception.Message] }); }
 });
 
+app.MapGet("/api/shifts/summary", async (HttpRequest request, CashRegisterService cash, CancellationToken cancellationToken) =>
+{
+    var result = await cash.CurrentSummaryAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
 app.MapPost("/api/setup/initial", async (InitialSetupCommand command, InitialSetupService setup, CancellationToken cancellationToken) =>
 {
     try { return Results.Created("/api/setup/initial", await setup.ExecuteAsync(command, cancellationToken)); }

@@ -10,6 +10,12 @@ public sealed record ShiftSummary(Guid ShiftId, decimal ExpectedCash, decimal Co
 
 public sealed class CashRegisterService(PosDbContext database)
 {
+    public async Task<ShiftSummary?> CurrentSummaryAsync(string token, CancellationToken cancellationToken)
+    {
+        var shift = await GetOpenShiftAsync(token, cancellationToken);
+        return shift is null ? null : await SummaryAsync(shift, null, cancellationToken);
+    }
+
     public async Task<ShiftSummary?> AddMovementAsync(string token, CashMovementCommand command, CancellationToken cancellationToken)
     {
         var shift = await GetOpenShiftAsync(token, cancellationToken);
