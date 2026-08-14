@@ -6,7 +6,7 @@ using System.Text;
 namespace Pos.Infrastructure;
 
 public sealed record SaleLineCommand(Guid ProductId, decimal Quantity, bool UseWholesale = false);
-public sealed record CompleteSaleCommand(Guid OperationId, IReadOnlyList<SaleLineCommand> Lines, decimal CashReceived, Guid? CustomerId = null, string PaymentMethod = "Cash", decimal CardAmount = 0m, decimal TransferAmount = 0m);
+public sealed record CompleteSaleCommand(Guid OperationId, IReadOnlyList<SaleLineCommand> Lines, decimal CashReceived, Guid? CustomerId = null, string PaymentMethod = "Cash", decimal CardAmount = 0m, decimal TransferAmount = 0m, Guid? DraftId = null);
 public sealed record CompleteSaleResult(Guid SaleId, Guid OperationId, decimal Total, decimal CashReceived, decimal Change, bool Existing);
 
 public sealed class SaleService(PosDbContext database, PromotionService promotions, KitService kits)
@@ -23,6 +23,17 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         var existing = await database.Sales.AsNoTracking().SingleOrDefaultAsync(sale => sale.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new CompleteSaleResult(existing.Id, existing.OperationId, existing.Total, 0m, 0m, true);
         var shift = await database.Shifts.SingleOrDefaultAsync(item => item.UserId == user.Id && item.Status == "Open", cancellationToken) ?? throw new InvalidOperationException("El usuario no tiene un turno abierto.");
+        SaleDraftRecord? draft = null;
+        IReadOnlyDictionary<Guid, SaleDraftLineRecord>? draftLines = null;
+        if (command.DraftId is not null)
+        {
+            draft = await database.SaleDrafts.Include(item => item.Lines).SingleOrDefaultAsync(item => item.Id == command.DraftId && item.ShiftId == shift.Id && item.UserId == user.Id && item.Status == "Open", cancellationToken)
+                ?? throw new InvalidOperationException("El ticket en atención no existe o ya fue finalizado.");
+            if (draft.OperationId != command.OperationId) throw new InvalidOperationException("El identificador del ticket no coincide con la operación de cobro.");
+            draftLines = draft.Lines.ToDictionary(item => item.ProductId);
+            if (draftLines.Count != command.Lines.Count || command.Lines.Any(line => !draftLines.TryGetValue(line.ProductId, out var draftLine) || draftLine.Quantity != decimal.Round(line.Quantity, 3)))
+                throw new InvalidOperationException("Las partidas del ticket cambiaron. Espera a que se guarden antes de cobrar.");
+        }
         var expanded = new Dictionary<Guid, decimal>();
         foreach (var line in command.Lines) { var parts = await kits.ExpandAsync(line.ProductId, line.Quantity, cancellationToken) ?? throw new KeyNotFoundException("Producto no encontrado."); foreach (var part in parts) expanded[part.ProductId] = expanded.GetValueOrDefault(part.ProductId) + part.Quantity; }
         var productIds = expanded.Keys.Concat(command.Lines.Select(item => item.ProductId)).Distinct().ToArray();
@@ -39,7 +50,7 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
             var originalLine = command.Lines.SingleOrDefault(item => item.ProductId == line.ProductId);
             var requestedQuantity = originalLine?.Quantity ?? requested;
             unitPrice = originalLine is not null && originalLine.UseWholesale && product.WholesalePrice > 0m && requestedQuantity >= product.WholesaleMinimumQuantity ? product.WholesalePrice : product.Price;
-            unitPrice = await promotions.DiscountedPriceAsync(product.Id, unitPrice, DateTimeOffset.UtcNow, cancellationToken);
+            unitPrice = draftLines?.GetValueOrDefault(product.Id)?.UnitPrice ?? await promotions.DiscountedPriceAsync(product.Id, unitPrice, DateTimeOffset.UtcNow, cancellationToken);
             var total = originalLine is null ? 0m : decimal.Round(unitPrice * requestedQuantity, 2, MidpointRounding.AwayFromZero);
             if (!product.IsKit) product.Stock -= requested;
             if (originalLine is not null) lines.Add(new SaleLineRecord { Id = Guid.NewGuid(), ProductId = product.Id, Quantity = requestedQuantity, UnitPrice = unitPrice, LineTotal = total, StockBefore = stockBefore, StockAfter = product.Stock });
@@ -76,6 +87,12 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         if (command.PaymentMethod == "Credit") database.Payments.Add(new PaymentRecord { Id = Guid.NewGuid(), SaleId = sale.Id, Method = "Credit", Amount = totalSale, Received = 0m, Change = 0m });
         if (customer is not null) database.CreditTransactions.Add(new CreditTransactionRecord { Id = Guid.NewGuid(), CustomerId = customer.Id, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Type = "Sale", Amount = totalSale, BalanceBefore = currentCredit, BalanceAfter = currentCredit + totalSale, Reason = "Venta a credito", CreatedAtUtc = sale.CreatedAtUtc });
         database.PrintJobs.Add(new PrintJobRecord { Id = Guid.NewGuid(), SaleId = sale.Id, CreatedAtUtc = sale.CreatedAtUtc });
+        if (draft is not null)
+        {
+            draft.Status = "Completed";
+            draft.CompletedAtUtc = sale.CreatedAtUtc;
+            draft.UpdatedAtUtc = sale.CreatedAtUtc;
+        }
         await database.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
         return new CompleteSaleResult(sale.Id, sale.OperationId, totalSale, command.CashReceived, change, false);
     }

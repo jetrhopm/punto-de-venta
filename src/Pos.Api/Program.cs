@@ -31,6 +31,7 @@ builder.Services.AddScoped<AuthenticationService>();
 builder.Services.AddScoped<ShiftService>();
 builder.Services.AddScoped<ProductCatalogService>();
 builder.Services.AddScoped<SaleService>();
+builder.Services.AddScoped<SaleDraftService>();
 builder.Services.AddScoped<CashRegisterService>();
 builder.Services.AddScoped<InventoryService>();
 builder.Services.AddScoped<TicketService>();
@@ -328,6 +329,32 @@ app.MapPost("/api/sales/complete", async (HttpRequest request, CompleteSaleComma
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 
+app.MapGet("/api/sale-drafts", async (HttpRequest request, SaleDraftService drafts, CancellationToken cancellationToken) =>
+{
+    var result = await drafts.ListOpenAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapPost("/api/sale-drafts", async (HttpRequest request, SaleDraftService drafts, CancellationToken cancellationToken) =>
+{
+    var result = await drafts.CreateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Created($"/api/sale-drafts/{result.Id}", result);
+});
+app.MapPut("/api/sale-drafts/{draftId:guid}", async (Guid draftId, HttpRequest request, SaveSaleDraftLinesCommand command, SaleDraftService drafts, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await drafts.SaveLinesAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), draftId, command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["draft"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+});
+app.MapDelete("/api/sale-drafts/{draftId:guid}", async (Guid draftId, HttpRequest request, SaleDraftService drafts, CancellationToken cancellationToken) =>
+{
+    var result = await drafts.DiscardAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), draftId, cancellationToken);
+    return result is null ? Results.Unauthorized() : result.Value ? Results.NoContent() : Results.NotFound();
+});
+
 app.MapPost("/api/sales/cancel", async (HttpRequest request, CancelSaleCommand command, SaleReversalService reversals, CancellationToken cancellationToken) =>
 {
     try { var result = await reversals.CancelAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
@@ -422,6 +449,7 @@ app.MapPost("/api/shifts/close", async (HttpRequest request, CloseShiftCommand c
 {
     try { var result = await cash.CloseAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["cash"] = [exception.Message] }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 
 app.MapGet("/api/shifts/summary", async (HttpRequest request, CashRegisterService cash, CancellationToken cancellationToken) =>

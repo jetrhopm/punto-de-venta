@@ -19,13 +19,17 @@ public partial class MainWindow : Window
     private static HttpClient Client => ApiClient.Client;
     private CancellationTokenSource? _searchCancellation;
     private Guid? _lastSaleId;
-    private readonly ObservableCollection<CartLineView> _cart = [];
+    private readonly ObservableCollection<TicketTabView> _tickets = [];
+    private readonly ObservableCollection<CartLineView> _emptyCart = [];
+    private readonly SemaphoreSlim _draftSaveLock = new(1, 1);
+    private TicketTabView? _activeTicket;
     private bool _exitConfirmed;
     private bool _exitDialogOpen;
     public MainWindow()
     {
         InitializeComponent();
-        CartList.ItemsSource = _cart;
+        TicketTabs.ItemsSource = _tickets;
+        CartList.ItemsSource = _emptyCart;
         Loaded += (_, _) => ApplyNavigationPermissions();
         Closing += OnClosing;
         PreviewTextInput += OnPreviewTextInput;
@@ -113,6 +117,11 @@ public partial class MainWindow : Window
         if (e.Key == Key.F12)
         {
             OnChargeClick(sender, e);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F5)
+        {
+            SelectNextTicket();
             e.Handled = true;
         }
         else if (e.Key == Key.F10)
@@ -288,7 +297,7 @@ public partial class MainWindow : Window
         try
         {
             using var response = await Client.PostAsJsonAsync("/api/shifts/close", new { countedCash = window.CountedCash.Value });
-            if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return false; }
+            if (!response.IsSuccessStatusCode) { StatusText.Text = await ReadApiMessageAsync(response); return false; }
             var result = await response.Content.ReadFromJsonAsync<ShiftSummaryResponse>();
             if (result is null) { StatusText.Text = "Turno cerrado."; return true; }
             StatusText.Text = $"Turno cerrado. Diferencia: ${result.Difference:0.00}";
@@ -430,12 +439,20 @@ public partial class MainWindow : Window
 
     private void AddProductToCart(ProductSearchResult product)
     {
-        var existing = _cart.FirstOrDefault(item => item.ProductId == product.Id);
-        if (existing is null) _cart.Add(new CartLineView(product.Id, product.Code, product.Description, product.Price, product.Stock, 1));
+        if (_activeTicket is null)
+        {
+            StatusText.Text = "Crea o recupera un ticket antes de agregar productos.";
+            return;
+        }
+
+        var cart = _activeTicket.Lines;
+        var existing = cart.FirstOrDefault(item => item.ProductId == product.Id);
+        if (existing is null) cart.Add(new CartLineView(product.Id, product.Code, product.Description, product.Price, product.Stock, 1));
         else { existing.Quantity++; CartList.Items.Refresh(); }
         ProductSearchTextBox.Clear();
         ProductResultsList.Visibility = Visibility.Collapsed;
         UpdateSaleSummary();
+        QueueActiveTicketSave();
         SystemSounds.Asterisk.Play();
         StatusText.Text = "Producto agregado a la venta.";
         FocusProductInput();
@@ -454,7 +471,7 @@ public partial class MainWindow : Window
 
     private void OnPreviewTextInput(object sender, TextCompositionEventArgs e)
     {
-        if (!string.Equals(CurrentSectionText.Text, "Ventas", StringComparison.OrdinalIgnoreCase)) return;
+        if (!string.Equals(WorkspaceTitleText.Text, "Venta en curso", StringComparison.OrdinalIgnoreCase)) return;
         if (Keyboard.FocusedElement is TextBox) return;
         ProductSearchTextBox.Focus();
         ProductSearchTextBox.Text += e.Text;
@@ -478,17 +495,21 @@ public partial class MainWindow : Window
             return;
         }
 
-        _cart.Remove(line);
+        if (_activeTicket is null) return;
+        _activeTicket.Lines.Remove(line);
         CartList.Items.Refresh();
         UpdateSaleSummary();
+        QueueActiveTicketSave();
         StatusText.Text = "Partida eliminada de la venta.";
         FocusProductInput();
     }
 
     private void UpdateSaleSummary()
     {
-        SaleTotalText.Text = $"${_cart.Sum(item => item.Total):0.00}";
-        SaleItemsText.Text = $"Artículos: {_cart.Sum(item => item.Quantity):0.###}";
+        var cart = _activeTicket?.Lines ?? _emptyCart;
+        SaleTotalText.Text = $"${cart.Sum(item => item.Total):0.00}";
+        SaleItemsText.Text = $"Artículos: {cart.Sum(item => item.Quantity):0.###}";
+        CurrentSectionText.Text = _activeTicket?.Title ?? "Nueva venta";
     }
 
     private sealed record ProductSearchResult(Guid Id, string Code, string Description, decimal Price, decimal Stock = 0m);
@@ -502,25 +523,190 @@ public partial class MainWindow : Window
         public Guid ProductId { get; } = productId; public string Code { get; } = code; public string Description { get; } = description; public decimal UnitPrice { get; } = unitPrice; public decimal Stock { get; } = stock; public decimal Quantity { get; set; } = quantity; public decimal Total => decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Code} | {Description} x {Quantity:0.###} = ${Total:0.00}";
     }
 
-    private sealed record SaleResponse(Guid SaleId, decimal Total, decimal Change);
+    private sealed class TicketTabView(Guid id, Guid operationId, int ticketNumber, IEnumerable<CartLineView>? lines = null)
+    {
+        public Guid Id { get; } = id;
+        public Guid OperationId { get; } = operationId;
+        public int TicketNumber { get; } = ticketNumber;
+        public string Title => $"Ticket {TicketNumber}";
+        public ObservableCollection<CartLineView> Lines { get; } = new(lines ?? []);
+    }
+
+    private sealed record SaleDraftResponse(Guid Id, Guid OperationId, int TicketNumber, DateTimeOffset UpdatedAtUtc, IReadOnlyList<SaleDraftLineResponse> Lines);
+    private sealed record SaleDraftLineResponse(Guid ProductId, string Code, string Description, decimal UnitPrice, decimal Stock, decimal Quantity);
+    private sealed record SaleResponse(Guid SaleId, decimal Total, decimal Change, bool Existing);
     private sealed record RegisterResponse(Guid Id, string Name);
     private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
     private sealed record CurrentShiftResponse(Guid ShiftId, Guid RegisterId, Guid UserId, decimal InitialCash, DateTimeOffset OpenedAtUtc);
 
+    private async void OnNewTicketClick(object sender, RoutedEventArgs e) => await CreateNewTicketAsync();
+
+    private async Task LoadSaleDraftsAsync()
+    {
+        try
+        {
+            var drafts = await Client.GetFromJsonAsync<List<SaleDraftResponse>>("/api/sale-drafts") ?? [];
+            _tickets.Clear();
+            foreach (var draft in drafts)
+            {
+                _tickets.Add(ToTicket(draft));
+            }
+
+            if (_tickets.Count == 0)
+            {
+                await CreateNewTicketAsync();
+                return;
+            }
+
+            TicketTabs.SelectedIndex = 0;
+            ActivateTicket(_tickets[0]);
+            StatusText.Text = _tickets.Count == 1
+                ? "Ticket en atención recuperado."
+                : $"{_tickets.Count} tickets en atención recuperados.";
+        }
+        catch (HttpRequestException)
+        {
+            StatusText.Text = "No se pudieron recuperar los tickets pendientes.";
+        }
+    }
+
+    private async Task CreateNewTicketAsync()
+    {
+        try
+        {
+            using var response = await Client.PostAsync("/api/sale-drafts", null);
+            if (!response.IsSuccessStatusCode)
+            {
+                StatusText.Text = await ReadApiMessageAsync(response);
+                return;
+            }
+
+            var draft = await response.Content.ReadFromJsonAsync<SaleDraftResponse>();
+            if (draft is null)
+            {
+                StatusText.Text = "El servidor no devolvió el nuevo ticket.";
+                return;
+            }
+
+            var ticket = ToTicket(draft);
+            _tickets.Add(ticket);
+            TicketTabs.SelectedItem = ticket;
+            ActivateTicket(ticket);
+            StatusText.Text = $"{ticket.Title} listo para atender.";
+        }
+        catch (HttpRequestException)
+        {
+            StatusText.Text = "No se pudo crear el ticket. Comprueba la conexión local.";
+        }
+    }
+
+    private static TicketTabView ToTicket(SaleDraftResponse draft) => new(
+        draft.Id,
+        draft.OperationId,
+        draft.TicketNumber,
+        draft.Lines.Select(line => new CartLineView(line.ProductId, line.Code, line.Description, line.UnitPrice, line.Stock, line.Quantity)));
+
+    private void OnTicketSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (e.Source != TicketTabs || TicketTabs.SelectedItem is not TicketTabView ticket) return;
+        ActivateTicket(ticket);
+    }
+
+    private void ActivateTicket(TicketTabView ticket)
+    {
+        _activeTicket = ticket;
+        CartList.ItemsSource = ticket.Lines;
+        CartList.Items.Refresh();
+        UpdateSaleSummary();
+        FocusProductInput();
+    }
+
+    private void SelectNextTicket()
+    {
+        if (_tickets.Count == 0) return;
+        var current = Math.Max(0, TicketTabs.SelectedIndex);
+        TicketTabs.SelectedIndex = (current + 1) % _tickets.Count;
+    }
+
+    private void QueueActiveTicketSave() => _ = PersistActiveTicketAsync(showError: false);
+
+    private async Task<bool> PersistActiveTicketAsync(bool showError = true)
+    {
+        var ticket = _activeTicket;
+        if (ticket is null) return false;
+        var lines = ticket.Lines.Select(line => new { productId = line.ProductId, quantity = line.Quantity }).ToArray();
+
+        await _draftSaveLock.WaitAsync();
+        try
+        {
+            using var response = await Client.PutAsJsonAsync($"/api/sale-drafts/{ticket.Id}", new { lines });
+            if (response.IsSuccessStatusCode) return true;
+            if (showError) StatusText.Text = await ReadApiMessageAsync(response);
+            return false;
+        }
+        catch (HttpRequestException)
+        {
+            if (showError) StatusText.Text = "No se pudo guardar el ticket. Revisa la conexión antes de continuar.";
+            return false;
+        }
+        finally
+        {
+            _draftSaveLock.Release();
+        }
+    }
+
+    private async void OnDiscardTicketClick(object sender, RoutedEventArgs e)
+    {
+        var ticket = _activeTicket;
+        if (ticket is null) return;
+        if (ticket.Lines.Count > 0 && MessageBox.Show($"¿Descartar {ticket.Title}? Sus productos no se venderán ni afectarán inventario.", "Descartar ticket", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            using var response = await Client.DeleteAsync($"/api/sale-drafts/{ticket.Id}");
+            if (!response.IsSuccessStatusCode)
+            {
+                StatusText.Text = await ReadApiMessageAsync(response);
+                return;
+            }
+
+            _tickets.Remove(ticket);
+            if (_tickets.Count == 0) await CreateNewTicketAsync();
+            else
+            {
+                TicketTabs.SelectedIndex = 0;
+                ActivateTicket(_tickets[0]);
+            }
+            StatusText.Text = "Ticket descartado. No se registró ninguna venta.";
+        }
+        catch (HttpRequestException)
+        {
+            StatusText.Text = "No se pudo descartar el ticket.";
+        }
+    }
+
     private async void OnChargeClick(object sender, RoutedEventArgs e)
     {
-        if (_cart.Count == 0) { StatusText.Text = "Agrega al menos un producto antes de cobrar."; return; }
-        var cashWindow = new CashWindow(_cart.Sum(item => item.Total)) { Owner = this };
+        var ticket = _activeTicket;
+        if (ticket is null || ticket.Lines.Count == 0) { StatusText.Text = "Agrega al menos un producto antes de cobrar."; return; }
+        if (!await PersistActiveTicketAsync()) return;
+        var cashWindow = new CashWindow(ticket.Lines.Sum(item => item.Total)) { Owner = this };
         if (cashWindow.ShowDialog() != true || cashWindow.Received is null) return;
         try
         {
-            var command = new { operationId = Guid.NewGuid(), lines = _cart.Select(item => new { productId = item.ProductId, quantity = item.Quantity }).ToArray(), cashReceived = cashWindow.CreditRequested ? 0m : cashWindow.Received.Value, cardAmount = cashWindow.CreditRequested ? 0m : cashWindow.CardAmount, transferAmount = cashWindow.CreditRequested ? 0m : cashWindow.TransferAmount, customerId = cashWindow.CustomerId, paymentMethod = cashWindow.PaymentMethod };
+            var command = new { operationId = ticket.OperationId, draftId = ticket.Id, lines = ticket.Lines.Select(item => new { productId = item.ProductId, quantity = item.Quantity }).ToArray(), cashReceived = cashWindow.CreditRequested ? 0m : cashWindow.Received.Value, cardAmount = cashWindow.CreditRequested ? 0m : cashWindow.CardAmount, transferAmount = cashWindow.CreditRequested ? 0m : cashWindow.TransferAmount, customerId = cashWindow.CustomerId, paymentMethod = cashWindow.PaymentMethod };
             using var response = await Client.PostAsJsonAsync("/api/sales/complete", command);
             if (!response.IsSuccessStatusCode) { StatusText.Text = await ReadApiMessageAsync(response); MessageBox.Show(StatusText.Text, "No se pudo confirmar la venta", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
             var result = await response.Content.ReadFromJsonAsync<SaleResponse>();
             _lastSaleId = result?.SaleId;
-            _cart.Clear(); CartList.Items.Refresh(); UpdateSaleSummary(); StatusText.Text = result is null ? "Venta confirmada." : cashWindow.CreditRequested ? "Venta a credito confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
-            if (result is not null)
+            _tickets.Remove(ticket);
+            if (_tickets.Count == 0) await CreateNewTicketAsync();
+            else { TicketTabs.SelectedIndex = 0; ActivateTicket(_tickets[0]); }
+            StatusText.Text = result is null ? "Venta confirmada." : result.Existing ? "La venta ya estaba confirmada; no se registró un cobro duplicado." : cashWindow.CreditRequested ? "Venta a crédito confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
+            if (result is not null && !result.Existing)
             {
                 try { StatusText.Text += " " + await OutputTicketAsync(result.SaleId); }
                 catch (Exception exception) { StatusText.Text += $" La venta quedó guardada, pero no se imprimió el ticket: {exception.Message}"; }
@@ -601,11 +787,12 @@ public partial class MainWindow : Window
             window.ShowAlreadyOpen(currentShift.InitialCash, currentShift.OpenedAtUtc);
             window.ShowDialog();
             StatusText.Text = "Caja abierta. Puedes continuar vendiendo.";
+            await LoadSaleDraftsAsync();
             return;
         }
 
         StatusText.Text = "No hay turno abierto. Captura el fondo inicial para empezar.";
-        await OpenShiftFromDialogAsync();
+        if (await OpenShiftFromDialogAsync()) await LoadSaleDraftsAsync();
     }
 
     private async Task<bool?> HasOpenShiftAsync()
@@ -645,6 +832,12 @@ public partial class MainWindow : Window
         _exitDialogOpen = true;
         try
         {
+            if (_activeTicket?.Lines.Count > 0 && !await PersistActiveTicketAsync())
+            {
+                MessageBox.Show("El ticket actual no pudo guardarse. JetVenta permanece abierto para no perder la venta en atención.", "No se puede salir", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             var hasOpenShift = await HasOpenShiftAsync();
             if (hasOpenShift is null)
             {

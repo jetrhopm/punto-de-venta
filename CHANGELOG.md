@@ -1,6 +1,9 @@
 # Changelog
 
 ## Sin liberar
+- Se agregan tickets en atencion persistentes con pestañas, recuperacion despues de un cierre inesperado y cobro idempotente.
+- Los tickets pendientes no modifican inventario, ventas, pagos, movimientos de caja ni totales de corte hasta su confirmacion.
+- El corte bloquea el cierre cuando existen tickets con partidas pendientes para evitar omitir ventas en atencion.
 - Se rediseña el ticket PDF para papel térmico de 58 y 80 mm con altura automática, datos de tienda, venta, caja, cajero, partidas, pagos y cambio sin recortes.
 - Se agrega un perfil de impresión por caja con impresoras y fuentes instaladas en Windows, tamaño de letra, papel de 58/80 mm, estilo de totales, ticket de prueba y vista previa editable.
 - Las ventas envían el ticket a la impresora configurada después de confirmar la transacción y registran el resultado sin repetir la venta si falla la impresión.

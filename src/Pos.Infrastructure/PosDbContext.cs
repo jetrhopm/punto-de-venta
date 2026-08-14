@@ -15,6 +15,8 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     public DbSet<ShiftRecord> Shifts => Set<ShiftRecord>();
     public DbSet<SaleRecord> Sales => Set<SaleRecord>();
     public DbSet<SaleLineRecord> SaleLines => Set<SaleLineRecord>();
+    public DbSet<SaleDraftRecord> SaleDrafts => Set<SaleDraftRecord>();
+    public DbSet<SaleDraftLineRecord> SaleDraftLines => Set<SaleDraftLineRecord>();
     public DbSet<PaymentRecord> Payments => Set<PaymentRecord>();
     public DbSet<InventoryMovementRecord> InventoryMovements => Set<InventoryMovementRecord>();
     public DbSet<CashMovementRecord> CashMovements => Set<CashMovementRecord>();
@@ -151,6 +153,32 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             entity.ToTable("sale_line"); entity.HasKey(line => line.Id); entity.Property(line => line.Quantity).HasPrecision(18, 3); entity.Property(line => line.UnitPrice).HasPrecision(18, 2); entity.Property(line => line.LineTotal).HasPrecision(18, 2); entity.Property(line => line.StockBefore).HasPrecision(18, 3); entity.Property(line => line.StockAfter).HasPrecision(18, 3);
             entity.HasOne<SaleRecord>().WithMany().HasForeignKey(line => line.SaleId).OnDelete(DeleteBehavior.Restrict);
         });
+        modelBuilder.Entity<SaleDraftRecord>(entity =>
+        {
+            entity.ToTable("sale_draft");
+            entity.HasKey(draft => draft.Id);
+            entity.Property(draft => draft.Status).HasMaxLength(20).IsRequired();
+            entity.Property(draft => draft.CreatedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(draft => draft.UpdatedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(draft => draft.CompletedAtUtc).HasColumnType("timestamp with time zone");
+            entity.HasIndex(draft => draft.OperationId).IsUnique();
+            entity.HasIndex(draft => new { draft.ShiftId, draft.TicketNumber }).IsUnique();
+            entity.HasIndex(draft => new { draft.ShiftId, draft.Status });
+            entity.HasOne<ShiftRecord>().WithMany().HasForeignKey(draft => draft.ShiftId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserRecord>().WithMany().HasForeignKey(draft => draft.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<SaleDraftLineRecord>(entity =>
+        {
+            entity.ToTable("sale_draft_line");
+            entity.HasKey(line => line.Id);
+            entity.Property(line => line.Code).HasMaxLength(80).IsRequired();
+            entity.Property(line => line.Description).HasMaxLength(200).IsRequired();
+            entity.Property(line => line.Quantity).HasPrecision(18, 3);
+            entity.Property(line => line.UnitPrice).HasPrecision(18, 2);
+            entity.HasIndex(line => new { line.DraftId, line.ProductId }).IsUnique();
+            entity.HasOne<SaleDraftRecord>().WithMany(draft => draft.Lines).HasForeignKey(line => line.DraftId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ProductRecord>().WithMany().HasForeignKey(line => line.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
         modelBuilder.Entity<PaymentRecord>(entity =>
         {
             entity.ToTable("payment"); entity.HasKey(payment => payment.Id); entity.Property(payment => payment.Amount).HasPrecision(18, 2); entity.Property(payment => payment.Received).HasPrecision(18, 2); entity.Property(payment => payment.Change).HasPrecision(18, 2); entity.Property(payment => payment.Method).HasMaxLength(20).IsRequired();
@@ -219,6 +247,8 @@ public sealed class PermissionRecord { public Guid Id { get; set; } public Guid 
 public sealed class ShiftRecord { public Guid Id { get; set; } public Guid RegisterId { get; set; } public Guid UserId { get; set; } public decimal InitialCash { get; set; } public string Status { get; set; } = "Open"; public DateTimeOffset OpenedAtUtc { get; set; } public DateTimeOffset? ClosedAtUtc { get; set; } public decimal? CountedCash { get; set; } public decimal? Difference { get; set; } }
 public sealed class SaleRecord { public Guid Id { get; set; } public Guid OperationId { get; set; } public Guid ShiftId { get; set; } public Guid? CustomerId { get; set; } public decimal Total { get; set; } public string Status { get; set; } = "Completed"; public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class SaleLineRecord { public Guid Id { get; set; } public Guid SaleId { get; set; } public Guid ProductId { get; set; } public decimal Quantity { get; set; } public decimal UnitPrice { get; set; } public decimal LineTotal { get; set; } public decimal StockBefore { get; set; } public decimal StockAfter { get; set; } }
+public sealed class SaleDraftRecord { public Guid Id { get; set; } public Guid OperationId { get; set; } public Guid ShiftId { get; set; } public Guid UserId { get; set; } public int TicketNumber { get; set; } public string Status { get; set; } = "Open"; public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset UpdatedAtUtc { get; set; } public DateTimeOffset? CompletedAtUtc { get; set; } public List<SaleDraftLineRecord> Lines { get; set; } = []; }
+public sealed class SaleDraftLineRecord { public Guid Id { get; set; } public Guid DraftId { get; set; } public Guid ProductId { get; set; } public string Code { get; set; } = string.Empty; public string Description { get; set; } = string.Empty; public decimal Quantity { get; set; } public decimal UnitPrice { get; set; } }
 public sealed class PaymentRecord { public Guid Id { get; set; } public Guid SaleId { get; set; } public string Method { get; set; } = "Cash"; public decimal Amount { get; set; } public decimal Received { get; set; } public decimal Change { get; set; } }
 public sealed class InventoryMovementRecord { public Guid Id { get; set; } public Guid ProductId { get; set; } public Guid? SaleId { get; set; } public Guid UserId { get; set; } public Guid OperationId { get; set; } public decimal Quantity { get; set; } public decimal StockBefore { get; set; } public decimal StockAfter { get; set; } public string Reason { get; set; } = "Sale"; public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class CashMovementRecord { public Guid Id { get; set; } public Guid ShiftId { get; set; } public string Type { get; set; } = "In"; public decimal Amount { get; set; } public string Reason { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } }

@@ -31,6 +31,8 @@ public sealed class CashRegisterService(PosDbContext database)
         var shift = await GetOpenShiftAsync(token, cancellationToken);
         if (shift is null) return null;
         if (command.CountedCash < 0m) throw new ArgumentException("El efectivo contado no puede ser negativo.");
+        if (await database.SaleDrafts.AnyAsync(item => item.ShiftId == shift.Id && item.Status == "Open" && item.Lines.Any(), cancellationToken))
+            throw new InvalidOperationException("Hay tickets en atención. Cóbrelos o descártalos antes de realizar el corte.");
         var summary = await SummaryAsync(shift, command.CountedCash, cancellationToken);
         shift.Status = "Closed"; shift.ClosedAtUtc = DateTimeOffset.UtcNow; shift.CountedCash = decimal.Round(command.CountedCash, 2); shift.Difference = summary.Difference;
         await database.SaveChangesAsync(cancellationToken);
