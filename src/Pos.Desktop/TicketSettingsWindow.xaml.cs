@@ -1,15 +1,14 @@
+using Pos.Printing;
 using System.Net.Http;
 using System.Net.Http.Json;
-using System.Net.Http.Headers;
-using System.Text;
 using System.Windows;
-using System.Windows.Controls;
 
 namespace Pos.Desktop;
 
 public partial class TicketSettingsWindow : Window
 {
     private static HttpClient Client => ApiClient.Client;
+    private bool _loaded;
 
     public TicketSettingsWindow()
     {
@@ -17,80 +16,100 @@ public partial class TicketSettingsWindow : Window
         Loaded += OnLoaded;
     }
 
-    private async void OnLoaded(object? sender, RoutedEventArgs e)
+    private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", SessionContext.AccessToken);
         try
         {
             var settings = await Client.GetFromJsonAsync<TicketSettings>("/api/ticket-settings");
             if (settings is not null)
             {
+                StoreNameBox.Text = settings.Name;
+                LegalNameBox.Text = settings.LegalName;
+                TaxIdBox.Text = settings.TaxId;
+                AddressBox.Text = settings.Address;
+                PhoneBox.Text = settings.Phone;
                 HeaderBox.Text = settings.TicketHeader;
                 FooterBox.Text = settings.TicketFooter;
-                WidthBox.SelectedIndex = settings.TicketWidthMm == 58 ? 0 : 1;
+                Width58Button.IsChecked = settings.TicketWidthMm == 58;
+                Width80Button.IsChecked = settings.TicketWidthMm != 58;
             }
+            _loaded = true;
             UpdatePreview();
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo cargar la configuracion: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = $"No se pudo cargar la configuración: {exception.Message}"; }
     }
 
-    private void OnPreviewChanged(object sender, EventArgs e) => UpdatePreview();
+    private void OnPreviewChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loaded) UpdatePreview();
+    }
+
+    private void OnPreviewChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        if (_loaded) UpdatePreview();
+    }
 
     private async void OnSaveClick(object sender, RoutedEventArgs e)
     {
-        var width = (WidthBox.SelectedItem as ComboBoxItem)?.Content?.ToString();
-        if (!int.TryParse(width, out var widthMm)) { StatusText.Text = "Selecciona un ancho valido."; return; }
+        if (string.IsNullOrWhiteSpace(StoreNameBox.Text)) { StatusText.Text = "Escribe el nombre comercial que aparecerá en el ticket."; StoreNameBox.Focus(); return; }
+        var widthMm = SelectedWidth;
         try
         {
-            using var response = await Client.PutAsJsonAsync("/api/ticket-settings", new { header = HeaderBox.Text, footer = FooterBox.Text, widthMm });
+            using var response = await Client.PutAsJsonAsync("/api/ticket-settings", new
+            {
+                header = HeaderBox.Text,
+                footer = FooterBox.Text,
+                widthMm,
+                storeName = StoreNameBox.Text,
+                legalName = LegalNameBox.Text,
+                taxId = TaxIdBox.Text,
+                address = AddressBox.Text,
+                phone = PhoneBox.Text
+            });
             if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
-            StatusText.Text = "Formato y vista previa guardados correctamente.";
+            ApiClient.SetPrinterTicketWidth(widthMm);
+            StatusText.Text = "Diseño del ticket guardado. Las próximas ventas usarán estos datos.";
         }
         catch (Exception exception) { StatusText.Text = $"No se pudo guardar: {exception.Message}"; }
     }
 
+    private void OnPrintSampleClick(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(ApiClient.PrinterName)) { StatusText.Text = "Primero selecciona una impresora en Configuración > Impresora."; return; }
+        try
+        {
+            var profile = TicketWindowsPrinter.CurrentProfile with { WidthMm = SelectedWidth };
+            TicketWindowsPrinter.Print(ApiClient.PrinterName, CreatePreviewData(), profile, "Muestra de ticket JetVenta");
+            StatusText.Text = $"Ticket muestra enviado a {ApiClient.PrinterName}.";
+        }
+        catch (Exception exception) { StatusText.Text = $"No se pudo imprimir la muestra: {exception.Message}"; }
+    }
+
     private void UpdatePreview()
     {
-        if (PreviewText is null || TicketPaper is null) return;
-        var width = (WidthBox?.SelectedItem as ComboBoxItem)?.Content?.ToString() == "80" ? 80 : 58;
-        TicketPaper.Width = width == 80 ? 300 : 240;
-        var columns = width == 80 ? 40 : 32;
-        var rule = new string('-', columns);
-        var builder = new StringBuilder();
-        builder.AppendLine(Center("MI TIENDA", columns));
-        builder.AppendLine(Center("RFC: XAXX010101000", columns));
-        if (!string.IsNullOrWhiteSpace(HeaderBox?.Text)) builder.AppendLine(Center(HeaderBox.Text.Trim().ReplaceLineEndings(" "), columns));
-        builder.AppendLine(rule);
-        builder.AppendLine(Center("COMPROBANTE DE VENTA", columns));
-        builder.AppendLine("FECHA: 14/08/2026 10:30:00");
-        builder.AppendLine("CAJA: CAJA PRINCIPAL");
-        builder.AppendLine("CAJERO: ADMINISTRADOR");
-        builder.AppendLine("TURNO: 12AB34CD");
-        builder.AppendLine("VENTA: 00000124");
-        builder.AppendLine(rule);
-        builder.AppendLine(width == 80 ? "CANT DESCRIPCION       PRECIO IMPORTE" : "CANT DESCRIP. PRECIO IMPORTE");
-        builder.AppendLine(width == 80 ? "   2 PRODUCTO EJEMPLO  $20.00  $40.00" : "    2 PRODUCTO $20.00  $40.00");
-        builder.AppendLine(width == 80 ? "   1 SEGUNDO PRODUCTO  $25.50  $25.50" : "    1 SEGUNDO  $25.50  $25.50");
-        builder.AppendLine(rule);
-        builder.AppendLine("ARTICULOS: 3");
-        builder.AppendLine(AmountLine("SUBTOTAL", 65.50m, columns));
-        builder.AppendLine(AmountLine("TOTAL", 65.50m, columns));
-        builder.AppendLine(AmountLine("EFECTIVO", 65.50m, columns));
-        builder.AppendLine(AmountLine("RECIBIDO", 100m, columns));
-        builder.AppendLine(AmountLine("CAMBIO", 34.50m, columns));
-        builder.AppendLine(rule);
-        builder.AppendLine();
-        builder.AppendLine(Center(string.IsNullOrWhiteSpace(FooterBox?.Text) ? "GRACIAS POR SU COMPRA" : FooterBox.Text.Trim().ReplaceLineEndings(" "), columns));
-        builder.AppendLine(Center("CONSERVE ESTE COMPROBANTE", columns));
-        PreviewText.Text = builder.ToString();
+        var width = SelectedWidth;
+        PreviewWidthText.Text = $"{width} mm";
+        var profile = TicketWindowsPrinter.CurrentProfile with { WidthMm = width };
+        TicketPreviewHost.Content = TicketWindowsPrinter.CreateTicketVisual(CreatePreviewData(), profile);
     }
 
-    private static string Center(string value, int width) => value.Length >= width ? value[..width] : value.PadLeft(value.Length + ((width - value.Length) / 2));
-    private static string AmountLine(string label, decimal amount, int width)
+    private TicketPdfData CreatePreviewData()
     {
-        var value = $"${amount:0.00}";
-        return label + new string(' ', Math.Max(1, width - label.Length - value.Length)) + value;
+        var sample = TicketWindowsPrinter.CreateSample(SelectedWidth);
+        return sample with
+        {
+            StoreName = string.IsNullOrWhiteSpace(StoreNameBox.Text) ? "MI TIENDA" : StoreNameBox.Text.Trim(),
+            LegalName = LegalNameBox.Text.Trim(),
+            TaxId = TaxIdBox.Text.Trim(),
+            Address = AddressBox.Text.Trim(),
+            Phone = PhoneBox.Text.Trim(),
+            Header = HeaderBox.Text.Trim(),
+            Footer = FooterBox.Text.Trim(),
+            WidthMm = SelectedWidth
+        };
     }
 
-    private sealed record TicketSettings(string TicketHeader, string TicketFooter, int TicketWidthMm);
+    private int SelectedWidth => Width58Button.IsChecked == true ? 58 : 80;
+
+    private sealed record TicketSettings(string Name, string LegalName, string TaxId, string Address, string Phone, string TicketHeader, string TicketFooter, int TicketWidthMm);
 }

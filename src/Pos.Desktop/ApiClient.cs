@@ -17,6 +17,10 @@ public static class ApiClient
     public static Guid? StoreId { get; private set; }
     public static Guid? RegisterId { get; private set; }
     public static string? PrinterName { get; private set; }
+    public static string PrinterFontFamily { get; private set; } = "Consolas";
+    public static double PrinterFontSize { get; private set; } = 9d;
+    public static bool UseNormalTotals { get; private set; }
+    public static int PrinterTicketWidthMm { get; private set; } = 80;
 
     static ApiClient() => Load();
 
@@ -64,11 +68,19 @@ public static class ApiClient
         SaveSettings(protectedToken);
     }
 
-    public static void SetPrinter(string? printerName)
+    public static void SetPrinterProfile(string? printerName, string fontFamily, double fontSize, bool useNormalTotals, int widthMm)
     {
         PrinterName = string.IsNullOrWhiteSpace(printerName) ? null : printerName.Trim();
+        PrinterFontFamily = string.IsNullOrWhiteSpace(fontFamily) ? "Consolas" : fontFamily.Trim();
+        PrinterFontSize = fontSize is >= 6d and <= 24d ? fontSize : 9d;
+        UseNormalTotals = useNormalTotals;
+        PrinterTicketWidthMm = widthMm == 58 ? 58 : 80;
         SaveSettings();
     }
+
+    public static void SetPrinter(string? printerName) => SetPrinterProfile(printerName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm);
+
+    public static void SetPrinterTicketWidth(int widthMm) => SetPrinterProfile(PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, widthMm);
 
     private static void SaveSettings(string? protectedToken = null)
     {
@@ -79,7 +91,7 @@ public static class ApiClient
             try { currentToken = JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(SettingsPath))?.DeviceTokenProtected; }
             catch (JsonException) { }
         }
-        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName)));
+        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm)));
     }
 
     private static void Load()
@@ -94,6 +106,10 @@ public static class ApiClient
                     BaseUrl = settings.BaseUrl.TrimEnd('/');
                     DeviceId = settings.DeviceId; StoreId = settings.StoreId; RegisterId = settings.RegisterId;
                     PrinterName = settings.PrinterName;
+                    PrinterFontFamily = string.IsNullOrWhiteSpace(settings.PrinterFontFamily) ? "Consolas" : settings.PrinterFontFamily;
+                    PrinterFontSize = settings.PrinterFontSize is >= 6d and <= 24d ? settings.PrinterFontSize : 9d;
+                    UseNormalTotals = settings.UseNormalTotals;
+                    PrinterTicketWidthMm = settings.PrinterTicketWidthMm == 58 ? 58 : 80;
                     ClientInstance.BaseAddress = new Uri(BaseUrl + "/");
                     return;
                 }
@@ -103,5 +119,15 @@ public static class ApiClient
         ClientInstance.BaseAddress = new Uri(BaseUrl + "/");
     }
 
-    private sealed record ClientSettings(string BaseUrl, Guid? DeviceId = null, Guid? StoreId = null, Guid? RegisterId = null, string? DeviceTokenProtected = null, string? PrinterName = null);
+    private sealed record ClientSettings(
+        string BaseUrl,
+        Guid? DeviceId = null,
+        Guid? StoreId = null,
+        Guid? RegisterId = null,
+        string? DeviceTokenProtected = null,
+        string? PrinterName = null,
+        string? PrinterFontFamily = null,
+        double PrinterFontSize = 9d,
+        bool UseNormalTotals = false,
+        int PrinterTicketWidthMm = 80);
 }

@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Pos.Application\Pos.Application.csproj" />
+    <ProjectReference Include="..\Pos.Printing\Pos.Printing.csproj" />
     <PackageReference Include="ClosedXML" />
     <PackageReference Include="CsvHelper" />
     <PackageReference Include="MahApps.Metro.IconPacks.Material" />

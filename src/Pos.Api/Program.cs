@@ -110,8 +110,8 @@ app.MapPost("/api/lan/pair", async (PairDeviceCommand command, LanPairingService
     try { var result = await pairing.PairAsync(command, cancellationToken); return result is null ? Results.BadRequest(new { message = "Codigo invalido, usado o expirado." }) : Results.Ok(result); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
-app.MapGet("/api/ticket-settings", async (HttpRequest request, TicketSettingsService settings, CancellationToken cancellationToken) => { var result = await settings.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { result.TicketHeader, result.TicketFooter, result.TicketWidthMm }); });
-app.MapPut("/api/ticket-settings", async (HttpRequest request, TicketSettingsCommand command, TicketSettingsService settings, CancellationToken cancellationToken) => { try { var result = await settings.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { result.TicketHeader, result.TicketFooter, result.TicketWidthMm }); } catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["ticket"] = [exception.Message] }); } });
+app.MapGet("/api/ticket-settings", async (HttpRequest request, TicketSettingsService settings, CancellationToken cancellationToken) => { var result = await settings.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { result.Name, result.LegalName, result.TaxId, result.Address, result.Phone, result.TicketHeader, result.TicketFooter, result.TicketWidthMm }); });
+app.MapPut("/api/ticket-settings", async (HttpRequest request, TicketSettingsCommand command, TicketSettingsService settings, CancellationToken cancellationToken) => { try { var result = await settings.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { result.Name, result.LegalName, result.TaxId, result.Address, result.Phone, result.TicketHeader, result.TicketFooter, result.TicketWidthMm }); } catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["ticket"] = [exception.Message] }); } });
 
 app.MapGet("/api/store-settings", async (HttpRequest request, StoreSettingsService settings, CancellationToken cancellationToken) =>
 {
@@ -388,6 +388,22 @@ app.MapGet("/api/sales/{saleId:guid}/ticket.pdf", async (Guid saleId, HttpReques
         return result is null ? Results.Unauthorized() : Results.File(result.Content, "application/pdf", result.FileName);
     }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+});
+
+app.MapGet("/api/sales/{saleId:guid}/ticket-data", async (Guid saleId, HttpRequest request, TicketService tickets, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await tickets.GetDataAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), saleId, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+});
+
+app.MapPost("/api/sales/{saleId:guid}/ticket/printed", async (Guid saleId, HttpRequest request, TicketService tickets, CancellationToken cancellationToken) =>
+{
+    var result = await tickets.MarkPrintedAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), saleId, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(new { printed = result.Value });
 });
 
 app.MapGet("/api/inventory/{productId:guid}/kardex", async (Guid productId, HttpRequest request, InventoryService inventory, CancellationToken cancellationToken) =>

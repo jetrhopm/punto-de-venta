@@ -11,8 +11,17 @@ public sealed class TicketService(PosDbContext database)
 {
     public async Task<TicketResult?> GenerateAsync(string token, Guid saleId, CancellationToken cancellationToken)
     {
-        var user = await AuthorizedUserAsync(token, cancellationToken);
-        if (user is null) return null;
+        var ticket = await GetDataAsync(token, saleId, cancellationToken);
+        if (ticket is null) return null;
+        var content = TicketPdfWriter.Create(ticket);
+        var job = await database.PrintJobs.SingleOrDefaultAsync(item => item.SaleId == saleId && item.Status == "Pending", cancellationToken);
+        if (job is not null) { job.Status = "Generated"; job.Attempts++; job.CompletedAtUtc = DateTimeOffset.UtcNow; await database.SaveChangesAsync(cancellationToken); }
+        return new TicketResult(content, $"Ticket-{saleId:N}.pdf");
+    }
+
+    public async Task<TicketPdfData?> GetDataAsync(string token, Guid saleId, CancellationToken cancellationToken)
+    {
+        if (await AuthorizedUserAsync(token, cancellationToken) is null) return null;
         var sale = await database.Sales.AsNoTracking().SingleOrDefaultAsync(item => item.Id == saleId, cancellationToken);
         if (sale is null) throw new KeyNotFoundException("Venta no encontrada.");
         var lines = await (from line in database.SaleLines.AsNoTracking() join product in database.Products.AsNoTracking() on line.ProductId equals product.Id where line.SaleId == saleId select new TicketPdfLine(product.Description, line.Quantity, line.UnitPrice, line.LineTotal)).ToListAsync(cancellationToken);
@@ -21,7 +30,7 @@ public sealed class TicketService(PosDbContext database)
         var register = await database.Registers.AsNoTracking().SingleAsync(item => item.Id == shift.RegisterId, cancellationToken);
         var cashier = await database.Users.AsNoTracking().SingleAsync(item => item.Id == shift.UserId, cancellationToken);
         var store = await database.Stores.AsNoTracking().SingleAsync(item => item.Id == register.StoreId, cancellationToken);
-        var content = TicketPdfWriter.Create(new TicketPdfData(
+        return new TicketPdfData(
             store.Name,
             store.LegalName,
             store.TaxId,
@@ -37,10 +46,19 @@ public sealed class TicketService(PosDbContext database)
             sale.CreatedAtUtc,
             lines,
             payments,
-            sale.Total));
-        var job = await database.PrintJobs.SingleOrDefaultAsync(item => item.SaleId == saleId && item.Status == "Pending", cancellationToken);
-        if (job is not null) { job.Status = "Generated"; job.Attempts++; job.CompletedAtUtc = DateTimeOffset.UtcNow; await database.SaveChangesAsync(cancellationToken); }
-        return new TicketResult(content, $"Ticket-{sale.Id:N}.pdf");
+            sale.Total);
+    }
+
+    public async Task<bool?> MarkPrintedAsync(string token, Guid saleId, CancellationToken cancellationToken)
+    {
+        if (await AuthorizedUserAsync(token, cancellationToken) is null) return null;
+        var job = await database.PrintJobs.SingleOrDefaultAsync(item => item.SaleId == saleId && item.Status != "Printed", cancellationToken);
+        if (job is null) return false;
+        job.Status = "Printed";
+        job.Attempts++;
+        job.CompletedAtUtc = DateTimeOffset.UtcNow;
+        await database.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     private async Task<UserRecord?> AuthorizedUserAsync(string token, CancellationToken cancellationToken)

@@ -10,6 +10,7 @@ using System.Net.Http.Json;
 using Microsoft.Win32;
 using System.IO;
 using System.Media;
+using Pos.Printing;
 
 namespace Pos.Desktop;
 
@@ -519,7 +520,11 @@ public partial class MainWindow : Window
             var result = await response.Content.ReadFromJsonAsync<SaleResponse>();
             _lastSaleId = result?.SaleId;
             _cart.Clear(); CartList.Items.Refresh(); UpdateSaleSummary(); StatusText.Text = result is null ? "Venta confirmada." : cashWindow.CreditRequested ? "Venta a credito confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
-            if (result is not null) await SaveTicketPdfAsync(result.SaleId);
+            if (result is not null)
+            {
+                try { StatusText.Text += " " + await OutputTicketAsync(result.SaleId); }
+                catch (Exception exception) { StatusText.Text += $" La venta quedó guardada, pero no se imprimió el ticket: {exception.Message}"; }
+            }
             FocusProductInput();
         }
         catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API para confirmar la venta."; }
@@ -555,6 +560,24 @@ public partial class MainWindow : Window
         var dialog = new SaveFileDialog { Title = "Guardar ticket PDF", Filter = "Documento PDF (*.pdf)|*.pdf", FileName = $"Ticket-{saleId:N}.pdf", AddExtension = true };
         if (dialog.ShowDialog() != true) return;
         await File.WriteAllBytesAsync(dialog.FileName, await response.Content.ReadAsByteArrayAsync());
+    }
+
+    private static async Task<string> OutputTicketAsync(Guid saleId)
+    {
+        if (string.IsNullOrWhiteSpace(ApiClient.PrinterName))
+        {
+            await SaveTicketPdfAsync(saleId);
+            return "No hay impresora configurada; se ofreció guardar el ticket en PDF.";
+        }
+
+        var ticket = await Client.GetFromJsonAsync<TicketPdfData>($"/api/sales/{saleId}/ticket-data")
+            ?? throw new InvalidOperationException("El servidor no devolvió los datos del ticket.");
+        var profile = TicketWindowsPrinter.CurrentProfile;
+        TicketWindowsPrinter.Print(ApiClient.PrinterName, ticket, profile, $"Ticket {saleId:N}");
+        using var markResponse = await Client.PostAsync($"/api/sales/{saleId}/ticket/printed", null);
+        return markResponse.IsSuccessStatusCode
+            ? $"Ticket enviado a {ApiClient.PrinterName}."
+            : $"Ticket enviado a {ApiClient.PrinterName}; no se pudo actualizar el estado de impresión.";
     }
 
     private void OnMinimizeClick(object sender, RoutedEventArgs e) =>

@@ -18,6 +18,7 @@
         <SolidColorBrush x:Key="TextMutedBrush" Color="#5C7080"/>
         <SolidColorBrush x:Key="LineBrush" Color="#CBD8E1"/>
         <SolidColorBrush x:Key="FocusBrush" Color="#38A3D1"/>
+        <DropShadowEffect x:Key="PanelShadowEffect" BlurRadius="16" ShadowDepth="2" Opacity="0.14" Color="#294A5F"/>
 
         <Style TargetType="Window">
             <Setter Property="FontFamily" Value="Segoe UI"/>
@@ -89,6 +90,30 @@
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
         <Style TargetType="ComboBox"><Setter Property="MinHeight" Value="34"/><Setter Property="Padding" Value="8,4"/><Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/></Style>
+        <Style x:Key="SegmentRadioStyle" TargetType="RadioButton">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Segment" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="12,8">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True"><Setter TargetName="Segment" Property="Background" Value="{StaticResource PrimarySoftBrush}"/><Setter TargetName="Segment" Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/><Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/></Trigger>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Segment" Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/></Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Segment" Property="BorderThickness" Value="2"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style TargetType="DataGrid"><Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/><Setter Property="GridLinesVisibility" Value="Horizontal"/><Setter Property="HorizontalGridLinesBrush" Value="#E4EBF0"/><Setter Property="RowHeight" Value="36"/><Setter Property="HeadersVisibility" Value="Column"/><Setter Property="AlternatingRowBackground" Value="#F7FAFC"/></Style>
         <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#E9F1F6"/><Setter Property="Foreground" Value="{StaticResource TextBrush}"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Padding" Value="10,9"/><Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/><Setter Property="BorderThickness" Value="0,0,0,1"/></Style>
         <Style TargetType="ListBoxItem"><Setter Property="Padding" Value="8,6"/></Style>
