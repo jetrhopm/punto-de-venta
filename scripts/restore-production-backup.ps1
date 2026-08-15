@@ -9,11 +9,17 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Security
 
 $installRoot = $PSScriptRoot
+$repositoryRoot = Split-Path -Parent $PSScriptRoot
 $dataRoot = Join-Path $env:ProgramData 'PuntoDeVenta'
 $logPath = Join-Path $dataRoot 'logs\restauracion.log'
 $connectionPath = Join-Path $dataRoot 'config\connection.bin'
 $adminSecretPath = Join-Path $dataRoot 'config\postgres-admin.bin'
-$postgresBin = Join-Path $installRoot 'postgresql\pgsql\bin'
+$postgresBinCandidates = @(
+    (Join-Path $installRoot 'postgresql\pgsql\bin'),
+    (Join-Path $repositoryRoot '.tools\postgresql-18.4\pgsql\bin')
+)
+$postgresBin = $postgresBinCandidates | Where-Object { Test-Path (Join-Path $_ 'psql.exe') } | Select-Object -First 1
+if ([string]::IsNullOrWhiteSpace($postgresBin)) { throw 'No se encontraron los componentes de PostgreSQL de JetVenta.' }
 $psql = Join-Path $postgresBin 'psql.exe'
 $pgRestore = Join-Path $postgresBin 'pg_restore.exe'
 $pgDump = Join-Path $postgresBin 'pg_dump.exe'
