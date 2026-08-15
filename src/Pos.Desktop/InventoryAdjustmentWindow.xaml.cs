@@ -45,7 +45,7 @@ public partial class InventoryAdjustmentWindow : Window
     {
         if (ResultsList.SelectedItem is not ProductRow row) return;
         _selected = row;
-        SelectedProductText.Text = $"{row.Product.Code} | {row.Product.Description} | Existencia actual: consultar al guardar";
+        SelectedProductText.Text = $"{row.Product.Code} | {row.Product.Description} | Existencia actual: {row.Product.Stock:0.###}";
         ResultsList.Visibility = Visibility.Collapsed;
     }
 
@@ -71,7 +71,7 @@ public partial class InventoryAdjustmentWindow : Window
     }
 
     private static bool TryParseDecimal(string value, out decimal result) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.CurrentCulture, out result) || decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
-    private sealed record ProductResult(Guid Id, string Code, string Description, decimal Price);
-    private sealed record ProductRow(ProductResult Product) { public string DisplayText => $"{Product.Code} | {Product.Description} | ${Product.Price:0.00}"; }
+    private sealed record ProductResult(Guid Id, string Code, string Description, decimal Price, decimal Stock);
+    private sealed record ProductRow(ProductResult Product) { public string DisplayText => $"{Product.Code} | {Product.Description} | Venta ${Product.Price:0.00} | Existencia {Product.Stock:0.###}"; }
     private sealed record AdjustmentResult(Guid MovementId, Guid ProductId, decimal Quantity, decimal StockBefore, decimal StockAfter, string Reason);
 }
