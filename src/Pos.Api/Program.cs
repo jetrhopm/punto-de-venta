@@ -557,6 +557,20 @@ app.MapGet("/api/shifts/cut", async (HttpRequest request, CashRegisterService ca
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
 
+app.MapGet("/api/shifts/cut/cashiers", async (HttpRequest request, string date, CashRegisterService cash, CancellationToken cancellationToken) =>
+{
+    if (!DateOnly.TryParseExact(date, "yyyy-MM-dd", out var selectedDate)) return Results.BadRequest(new { message = "La fecha debe tener formato AAAA-MM-DD." });
+    var result = await cash.CashiersForDayAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), selectedDate, cancellationToken);
+    return Results.Ok(result);
+});
+
+app.MapGet("/api/shifts/cut/day", async (HttpRequest request, string date, Guid? cashierId, CashRegisterService cash, CancellationToken cancellationToken) =>
+{
+    if (!DateOnly.TryParseExact(date, "yyyy-MM-dd", out var selectedDate)) return Results.BadRequest(new { message = "La fecha debe tener formato AAAA-MM-DD." });
+    var result = await cash.CutForDayAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), selectedDate, cashierId, cancellationToken);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
 app.MapPost("/api/setup/initial", async (InitialSetupCommand command, InitialSetupService setup, CancellationToken cancellationToken) =>
 {
     try { return Results.Created("/api/setup/initial", await setup.ExecuteAsync(command, cancellationToken)); }
