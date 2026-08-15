@@ -731,7 +731,7 @@ public partial class MainWindow : Window
         var ticket = _activeTicket;
         if (ticket is null || ticket.Lines.Count == 0) { StatusText.Text = "Agrega al menos un producto antes de cobrar."; return; }
         if (!await PersistActiveTicketAsync()) return;
-        var cashWindow = new CashWindow(ticket.Lines.Sum(item => item.Total)) { Owner = this };
+        var cashWindow = new CashWindow(ticket.Lines.Sum(item => item.Total), ticket.Lines.Sum(item => item.Quantity)) { Owner = this };
         if (cashWindow.ShowDialog() != true || cashWindow.Received is null) return;
         try
         {
@@ -744,10 +744,14 @@ public partial class MainWindow : Window
             if (_tickets.Count == 0) await CreateNewTicketAsync();
             else { TicketTabs.SelectedIndex = 0; ActivateTicket(_tickets[0]); }
             StatusText.Text = result is null ? "Venta confirmada." : result.Existing ? "La venta ya estaba confirmada; no se registró un cobro duplicado." : cashWindow.CreditRequested ? "Venta a crédito confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
-            if (result is not null && !result.Existing)
+            if (result is not null && !result.Existing && cashWindow.PrintRequested)
             {
                 try { StatusText.Text += " " + await OutputTicketAsync(result.SaleId); }
                 catch (Exception exception) { StatusText.Text += $" La venta quedó guardada, pero no se imprimió el ticket: {exception.Message}"; }
+            }
+            else if (result is not null && !result.Existing && !cashWindow.PrintRequested)
+            {
+                StatusText.Text += " Venta confirmada sin imprimir ticket.";
             }
             FocusProductInput();
         }
