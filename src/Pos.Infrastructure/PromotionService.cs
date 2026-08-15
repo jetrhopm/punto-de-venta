@@ -6,7 +6,8 @@ namespace Pos.Infrastructure;
 
 public sealed record PromotionCommand(Guid ProductId, string Name, decimal Percent = 0m, decimal DiscountAmount = 0m, decimal BuyQuantity = 0m, decimal PayQuantity = 0m, DateTimeOffset? StartsAtUtc = null, DateTimeOffset? EndsAtUtc = null);
 public sealed record PromotionResult(Guid Id, Guid ProductId, string Name, decimal Percent, decimal DiscountAmount, decimal BuyQuantity, decimal PayQuantity, DateTimeOffset? StartsAtUtc, DateTimeOffset? EndsAtUtc, bool IsActive);
-public sealed record PromotionPriceQuote(Guid ProductId, decimal BaseUnitPrice, decimal UnitPrice, decimal Quantity, decimal DiscountTotal, bool PromotionApplied);
+public sealed record PromotionPriceQuote(Guid ProductId, decimal BaseUnitPrice, decimal UnitPrice, decimal Quantity, decimal Total, decimal DiscountTotal, bool PromotionApplied);
+public sealed record PromotionPriceCalculation(decimal UnitPrice, decimal Total);
 
 public sealed class PromotionService(PosDbContext database)
 {
@@ -19,20 +20,34 @@ public sealed class PromotionService(PosDbContext database)
         var promotion = new PromotionRecord { Id = Guid.NewGuid(), ProductId = command.ProductId, Name = command.Name.Trim(), Percent = decimal.Round(command.Percent, 2), DiscountAmount = decimal.Round(command.DiscountAmount, 2), BuyQuantity = decimal.Round(command.BuyQuantity, 3), PayQuantity = decimal.Round(command.PayQuantity, 3), StartsAtUtc = command.StartsAtUtc?.ToUniversalTime(), EndsAtUtc = command.EndsAtUtc?.ToUniversalTime(), IsActive = true }; database.Promotions.Add(promotion); await database.SaveChangesAsync(cancellationToken); return ToResult(promotion);
     }
 
-    public async Task<decimal> DiscountedPriceAsync(Guid productId, decimal price, DateTimeOffset now, CancellationToken cancellationToken, decimal quantity = 1m)
+    public async Task<PromotionPriceCalculation> CalculateAsync(Guid productId, decimal price, DateTimeOffset now, CancellationToken cancellationToken, decimal quantity = 1m)
     {
         var promotions = await database.Promotions.AsNoTracking().Where(item => item.ProductId == productId && item.IsActive && (item.StartsAtUtc == null || item.StartsAtUtc <= now) && (item.EndsAtUtc == null || item.EndsAtUtc > now)).ToListAsync(cancellationToken);
-        var result = price; foreach (var promotion in promotions) { var candidate = promotion.BuyQuantity > 0m && quantity >= promotion.BuyQuantity ? price * ((Math.Floor(quantity / promotion.BuyQuantity) * promotion.PayQuantity) + quantity % promotion.BuyQuantity) / quantity : promotion.Percent > 0m ? price * (1m - promotion.Percent / 100m) : price - promotion.DiscountAmount; result = Math.Min(result, candidate); } return decimal.Round(Math.Max(0m, result), 2, MidpointRounding.AwayFromZero);
+        var result = price * quantity;
+        foreach (var promotion in promotions)
+        {
+            var candidate = promotion.BuyQuantity > 0m && quantity >= promotion.BuyQuantity
+                ? price * ((Math.Floor(quantity / promotion.BuyQuantity) * promotion.PayQuantity) + quantity % promotion.BuyQuantity)
+                : promotion.Percent > 0m
+                    ? price * quantity * (1m - promotion.Percent / 100m)
+                    : Math.Max(0m, price - promotion.DiscountAmount) * quantity;
+            result = Math.Min(result, candidate);
+        }
+        var total = decimal.Round(Math.Max(0m, result), 2, MidpointRounding.AwayFromZero);
+        return new PromotionPriceCalculation(decimal.Round(total / quantity, 2, MidpointRounding.AwayFromZero), total);
     }
+
+    public async Task<decimal> DiscountedPriceAsync(Guid productId, decimal price, DateTimeOffset now, CancellationToken cancellationToken, decimal quantity = 1m) =>
+        (await CalculateAsync(productId, price, now, cancellationToken, quantity)).UnitPrice;
 
     public async Task<PromotionPriceQuote?> QuoteAsync(string token, Guid productId, decimal price, decimal quantity, CancellationToken cancellationToken)
     {
         // F1 necesita cotizar durante una venta; no debe exigir permisos administrativos de catálogo.
         if (await AuthorizedAsync(token, "Sell", cancellationToken) is null) return null;
         if (productId == Guid.Empty || price < 0m || quantity <= 0m) throw new ArgumentException("Los datos de precio y cantidad no son validos.");
-        var discounted = await DiscountedPriceAsync(productId, price, DateTimeOffset.UtcNow, cancellationToken, quantity);
-        var discountTotal = decimal.Round(Math.Max(0m, (price - discounted) * quantity), 2, MidpointRounding.AwayFromZero);
-        return new PromotionPriceQuote(productId, price, discounted, quantity, discountTotal, discountTotal > 0m);
+        var calculation = await CalculateAsync(productId, price, DateTimeOffset.UtcNow, cancellationToken, quantity);
+        var discountTotal = decimal.Round(Math.Max(0m, (price * quantity) - calculation.Total), 2, MidpointRounding.AwayFromZero);
+        return new PromotionPriceQuote(productId, price, calculation.UnitPrice, quantity, calculation.Total, discountTotal, discountTotal > 0m);
     }
 
     public async Task<IReadOnlyList<PromotionResult>?> ListAsync(string token, Guid? productId, CancellationToken cancellationToken)

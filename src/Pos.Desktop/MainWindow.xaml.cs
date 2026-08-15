@@ -475,6 +475,7 @@ public partial class MainWindow : Window
             {
                 line.UnitPrice = line.BaseUnitPrice;
                 line.DiscountTotal = 0m;
+                line.PromotionalTotal = null;
                 return;
             }
             var quote = await response.Content.ReadFromJsonAsync<PromotionPriceQuote>();
@@ -482,11 +483,15 @@ public partial class MainWindow : Window
             {
                 line.UnitPrice = quote.UnitPrice;
                 line.DiscountTotal = quote.DiscountTotal;
+                line.PromotionalTotal = quote.Total;
             }
         }
         catch (HttpRequestException)
         {
             // La venta sigue mostrando el precio normal; el servidor vuelve a validar la promoción al cobrar.
+            line.UnitPrice = line.BaseUnitPrice;
+            line.DiscountTotal = 0m;
+            line.PromotionalTotal = null;
         }
     }
 
@@ -552,7 +557,7 @@ public partial class MainWindow : Window
 
     private sealed class CartLineView(Guid productId, string code, string description, decimal unitPrice, decimal stock, decimal quantity)
     {
-        public Guid ProductId { get; } = productId; public string Code { get; } = code; public string Description { get; } = description; public decimal BaseUnitPrice { get; } = unitPrice; public decimal UnitPrice { get; set; } = unitPrice; public decimal Stock { get; } = stock; public decimal Quantity { get; set; } = quantity; public decimal DiscountTotal { get; set; } public decimal Total => decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Code} | {Description} x {Quantity:0.###} = ${Total:0.00}";
+        public Guid ProductId { get; } = productId; public string Code { get; } = code; public string Description { get; } = description; public decimal BaseUnitPrice { get; } = unitPrice; public decimal UnitPrice { get; set; } = unitPrice; public decimal Stock { get; } = stock; public decimal Quantity { get; set; } = quantity; public decimal DiscountTotal { get; set; } public decimal? PromotionalTotal { get; set; } public decimal Total => PromotionalTotal ?? decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Code} | {Description} x {Quantity:0.###} = ${Total:0.00}";
     }
 
     private sealed class TicketTabView(Guid id, Guid operationId, int ticketNumber, IEnumerable<CartLineView>? lines = null)
@@ -566,7 +571,7 @@ public partial class MainWindow : Window
 
     private sealed record SaleDraftResponse(Guid Id, Guid OperationId, int TicketNumber, DateTimeOffset UpdatedAtUtc, IReadOnlyList<SaleDraftLineResponse> Lines);
     private sealed record SaleDraftLineResponse(Guid ProductId, string Code, string Description, decimal UnitPrice, decimal Stock, decimal Quantity);
-    private sealed record PromotionPriceQuote(Guid ProductId, decimal BaseUnitPrice, decimal UnitPrice, decimal Quantity, decimal DiscountTotal, bool PromotionApplied);
+    private sealed record PromotionPriceQuote(Guid ProductId, decimal BaseUnitPrice, decimal UnitPrice, decimal Quantity, decimal Total, decimal DiscountTotal, bool PromotionApplied);
     private sealed record SaleResponse(Guid SaleId, decimal Total, decimal Change, bool Existing);
     private sealed record RegisterResponse(Guid Id, string Name);
     private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
