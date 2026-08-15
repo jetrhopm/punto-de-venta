@@ -4,7 +4,7 @@ Sistema de JetVenta de escritorio para Windows 10 y Windows 11 x64, desarrollado
 
 ## Estado actual
 
-Fase 0 iniciada:
+La base técnica de Fase 0 y los módulos principales de Fase 1 y Fase 2 están implementados. El módulo F4 de inventario ya cuenta con catálogo paginado, valoración, alertas, movimientos, importación y exportación:
 
 - Prompt maestro guardado en `PROMPT_MAESTRO.md`.
 - Requisitos de desarrollo documentados en `docs/REQUISITOS_DESARROLLO.md`.
@@ -12,11 +12,14 @@ Fase 0 iniciada:
 - Iconos iniciales preparados en `src/Pos.Desktop/Assets/Icons/`.
 - Nucleo de dominio inicial con dinero decimal, permisos y borradores de venta.
 - Cascaron WPF navegable con atajos F1 a F4 y F12.
+- Inventario operativo en F4 con páginas de 500 productos, filtros, ordenamiento, límites auditados, movimientos y exportación CSV.
+- Importación opcional durante la configuración inicial y disponible posteriormente desde Inventario.
 
 El avance verificable de esta fase se registra en `docs/FASE_0.md`.
 El estado completo y los pendientes se mantienen en `docs/PLAN_PROYECTO.md`.
 
 El respaldo, restauracion de prueba y diagnostico estan documentados en `docs/RESPALDO_RESTAURACION_DIAGNOSTICO.md`.
+El alcance y la prueba manual de F4 están documentados en `docs/INVENTARIO.md`.
 
 ## Compilar
 

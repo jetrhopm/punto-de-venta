@@ -469,6 +469,27 @@ app.MapPost("/api/inventory/adjust", async (HttpRequest request, InventoryAdjust
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
+app.MapGet("/api/inventory/catalog", async (string? q, string? status, string? sort, bool descending, int? page, HttpRequest request, InventoryService inventory, CancellationToken cancellationToken) =>
+{
+    var result = await inventory.CatalogAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), q, status, sort ?? "description", descending, page ?? 1, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapGet("/api/inventory/export", async (HttpRequest request, InventoryService inventory, CancellationToken cancellationToken) =>
+{
+    var result = await inventory.ExportCsvAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.File(result, "text/csv", $"inventario-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
+});
+app.MapGet("/api/inventory/movements", async (string? q, int? page, HttpRequest request, InventoryService inventory, CancellationToken cancellationToken) =>
+{
+    var result = await inventory.MovementsAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), q, page ?? 1, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapPost("/api/inventory/limits", async (HttpRequest request, InventoryLimitChangeCommand command, InventoryService inventory, CancellationToken cancellationToken) =>
+{
+    try { var result = await inventory.UpdateLimitsAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["inventory"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+});
 
 app.MapGet("/api/sales/{saleId:guid}/ticket.pdf", async (Guid saleId, HttpRequest request, TicketService tickets, CancellationToken cancellationToken) =>
 {

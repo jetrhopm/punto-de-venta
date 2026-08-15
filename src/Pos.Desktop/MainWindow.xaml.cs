@@ -73,7 +73,7 @@ public partial class MainWindow : Window
             if (!HasPermissionFor(section)) { StatusText.Text = "No tienes permiso para abrir este modulo."; return; }
             if (section == "Corte") { OnCloseShiftClick(sender, e); return; }
             if (section == "Productos") { var window = new ProductCatalogWindow { Owner = this }; window.ShowDialog(); return; }
-            if (section == "Inventario") { var window = new InventoryAdjustmentWindow { Owner = this }; window.ShowDialog(); return; }
+            if (section == "Inventario") { var window = new InventoryWindow { Owner = this }; window.ShowDialog(); return; }
             if (section == "Clientes" || section == "Creditos") { OpenCustomers(); return; }
             if (section == "Compras") { var window = new PurchaseWindow { Owner = this }; window.ShowDialog(); return; }
             if (section == "Reportes") { var window = new ReportsWindow { Owner = this }; window.ShowDialog(); return; }
@@ -108,7 +108,7 @@ public partial class MainWindow : Window
             if (!HasPermissionFor(section)) { StatusText.Text = "No tienes permiso para abrir este modulo."; e.Handled = true; return; }
             if (section == "Clientes") { OpenCustomers(); e.Handled = true; return; }
             if (section == "Productos") { new ProductCatalogWindow { Owner = this }.ShowDialog(); e.Handled = true; return; }
-            if (section == "Inventario") { new InventoryAdjustmentWindow { Owner = this }.ShowDialog(); e.Handled = true; return; }
+            if (section == "Inventario") { new InventoryWindow { Owner = this }.ShowDialog(); e.Handled = true; return; }
             NavigateTo(section);
             if (section == "Ventas") FocusProductInput();
             e.Handled = true;
