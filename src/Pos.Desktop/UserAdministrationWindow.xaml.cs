@@ -6,22 +6,60 @@ namespace Pos.Desktop;
 
 public partial class UserAdministrationWindow : Window
 {
-    private static readonly (string Code, string Label)[] PermissionOptions =
+    private static readonly PermissionOption[] PermissionOptions =
     [
-        ("Sell", "Vender"), ("ViewProducts", "Consultar productos"), ("ManageProducts", "Crear y editar productos"), ("ChangeSalePrice", "Cambiar precio"),
-        ("ApplyDiscounts", "Aplicar descuentos"), ("UseWholesalePrice", "Usar mayoreo"), ("ViewInventory", "Consultar inventario"), ("AdjustInventory", "Ajustar inventario"),
-        ("ViewCostsAndProfit", "Ver costos y utilidad"), ("CancelSaleLines", "Cancelar partidas"), ("CancelSales", "Cancelar ventas"), ("ProcessReturns", "Procesar devoluciones"),
-        ("ReprintTickets", "Reimprimir tickets"), ("OpenCashDrawer", "Abrir cajón"), ("RecordCashMovements", "Movimientos de efectivo"), ("ViewSalesHistory", "Historial de ventas"),
-        ("OpenShift", "Abrir turno"), ("CloseShift", "Realizar corte"), ("ViewPreviousShifts", "Ver cortes anteriores"), ("ViewReports", "Ver reportes"),
-        ("ManageCustomersAndCredit", "Clientes y crédito"), ("ManageSuppliersAndPurchases", "Proveedores y compras"), ("ProcessServicePayments", "Recargas y servicios"),
-        ("ConfigurePrinters", "Configurar impresoras"), ("ConfigureStore", "Configurar tienda"), ("ManageUsers", "Administrar usuarios"), ("ImportOrExportData", "Importar, exportar y respaldar")
+        new("Sell", "Registrar ventas y cobrar", PermissionGroup.Sales),
+        new("ChangeSalePrice", "Cambiar precio durante la venta", PermissionGroup.Sales),
+        new("ApplyDiscounts", "Aplicar descuentos y promociones", PermissionGroup.Sales),
+        new("UseWholesalePrice", "Usar precio de mayoreo", PermissionGroup.Sales),
+        new("CancelSaleLines", "Eliminar productos del ticket", PermissionGroup.Sales),
+        new("CancelSales", "Cancelar ventas confirmadas", PermissionGroup.Sales),
+        new("ProcessReturns", "Procesar devoluciones", PermissionGroup.Sales),
+        new("ReprintTickets", "Reimprimir tickets", PermissionGroup.Sales),
+        new("OpenCashDrawer", "Abrir cajón de dinero", PermissionGroup.Sales),
+        new("RecordCashMovements", "Registrar entradas y salidas de efectivo", PermissionGroup.Sales),
+        new("ViewSalesHistory", "Consultar historial de tickets", PermissionGroup.Sales),
+        new("OpenShift", "Abrir turno", PermissionGroup.Sales),
+        new("CloseShift", "Realizar corte de caja", PermissionGroup.Sales),
+        new("ViewPreviousShifts", "Consultar cortes anteriores", PermissionGroup.Sales),
+
+        new("ManageCustomersAndCredit", "Administrar clientes, crédito y abonos", PermissionGroup.Customers),
+
+        new("ViewProducts", "Consultar catálogo de productos", PermissionGroup.Products),
+        new("ManageProducts", "Crear, editar, eliminar productos, departamentos, kits y promociones", PermissionGroup.Products),
+
+        new("ViewInventory", "Consultar existencias, kardex y reporte de inventario", PermissionGroup.Inventory),
+        new("AdjustInventory", "Ajustar inventario y modificar mínimos o máximos", PermissionGroup.Inventory),
+        new("ViewCostsAndProfit", "Ver costos, utilidad y valor del inventario", PermissionGroup.Inventory),
+        new("ImportOrExportData", "Importar o exportar inventario y crear respaldos", PermissionGroup.Inventory),
+
+        new("ManageSuppliersAndPurchases", "Administrar proveedores y compras", PermissionGroup.Other),
+        new("ProcessServicePayments", "Realizar recargas y pagos de servicios", PermissionGroup.Other),
+        new("ViewReports", "Ver reportes y análisis de ventas", PermissionGroup.Other),
+        new("ConfigurePrinters", "Configurar impresoras y formato de ticket", PermissionGroup.Other),
+        new("ConfigureStore", "Configurar datos de la tienda", PermissionGroup.Other),
+        new("ManageUsers", "Administrar usuarios y permisos", PermissionGroup.Other)
     ];
+
+    private readonly Dictionary<string, CheckBox> _permissionBoxes = new(StringComparer.Ordinal);
 
     public UserAdministrationWindow()
     {
         InitializeComponent();
         NewAdminBox.IsEnabled = SessionContext.IsAdministrator;
-        foreach (var permission in PermissionOptions) PermissionsPanel.Children.Add(new CheckBox { Content = permission.Label, Tag = permission.Code, Width = 220, Margin = new Thickness(0, 3, 4, 3) });
+        foreach (var permission in PermissionOptions)
+        {
+            var box = new CheckBox
+            {
+                Content = permission.Label,
+                Tag = permission.Code,
+                ToolTip = permission.Label,
+                Width = 265,
+                Margin = new Thickness(0, 4, 8, 4)
+            };
+            PanelFor(permission.Group).Children.Add(box);
+            _permissionBoxes.Add(permission.Code, box);
+        }
         Loaded += async (_, _) => await LoadUsersAsync();
     }
 
@@ -35,8 +73,8 @@ public partial class UserAdministrationWindow : Window
     {
         if (UsersGrid.SelectedItem is not UserRow user) return;
         var canModify = SessionContext.IsAdministrator || !user.IsAdministrator;
-        foreach (CheckBox box in PermissionsPanel.Children) box.IsChecked = user.IsAdministrator || user.Permissions.Contains((string)box.Tag);
-        foreach (CheckBox box in PermissionsPanel.Children) box.IsEnabled = canModify && !user.IsAdministrator;
+        foreach (var box in _permissionBoxes.Values) box.IsChecked = user.IsAdministrator || user.Permissions.Contains((string)box.Tag);
+        foreach (var box in _permissionBoxes.Values) box.IsEnabled = canModify && !user.IsAdministrator;
         StatusButton.Content = user.IsActive ? "Desactivar usuario seleccionado" : "Activar usuario seleccionado";
         StatusText.Text = canModify ? $"Seleccionado: {user.DisplayName}" : "Solo un administrador puede modificar a otro administrador.";
     }
@@ -63,7 +101,7 @@ public partial class UserAdministrationWindow : Window
     private async void OnSavePermissionsClick(object sender, RoutedEventArgs e)
     {
         if (UsersGrid.SelectedItem is not UserRow user) { StatusText.Text = "Selecciona un usuario."; return; }
-        var permissions = PermissionsPanel.Children.OfType<CheckBox>().Where(item => item.IsChecked == true).Select(item => (string)item.Tag).ToArray();
+        var permissions = _permissionBoxes.Values.Where(item => item.IsChecked == true).Select(item => (string)item.Tag).ToArray();
         using var response = await ApiClient.Client.PutAsJsonAsync($"api/users/{user.Id}/permissions", new { permissions });
         StatusText.Text = response.IsSuccessStatusCode ? "Permisos guardados." : await response.Content.ReadAsStringAsync();
         if (response.IsSuccessStatusCode) await LoadUsersAsync();
@@ -77,5 +115,17 @@ public partial class UserAdministrationWindow : Window
         if (response.IsSuccessStatusCode) ResetPasswordBox.Clear();
     }
 
+    private WrapPanel PanelFor(PermissionGroup group) => group switch
+    {
+        PermissionGroup.Sales => SalesPermissionsPanel,
+        PermissionGroup.Customers => CustomerPermissionsPanel,
+        PermissionGroup.Products => ProductPermissionsPanel,
+        PermissionGroup.Inventory => InventoryPermissionsPanel,
+        PermissionGroup.Other => OtherPermissionsPanel,
+        _ => throw new ArgumentOutOfRangeException(nameof(group))
+    };
+
     private sealed record UserRow(Guid Id, string UserName, string DisplayName, bool IsAdministrator, bool IsActive, List<string> Permissions);
+    private sealed record PermissionOption(string Code, string Label, PermissionGroup Group);
+    private enum PermissionGroup { Sales, Customers, Products, Inventory, Other }
 }
