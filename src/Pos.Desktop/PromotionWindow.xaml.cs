@@ -21,6 +21,8 @@ public partial class PromotionWindow : Window
     private void OnProductSelected(object sender, MouseButtonEventArgs e) { if (ProductList.SelectedItem is ProductRow row) { _selectedProduct = row; ProductBox.Text = row.Display; ProductList.Visibility = Visibility.Collapsed; } }
     private void OnTypeChanged(object sender, SelectionChangedEventArgs e)
     {
+        // WPF can raise SelectionChanged while InitializeComponent is still creating the controls.
+        if (ValueOneLabel is null || ValueTwoLabel is null || ValueOneBox is null || ValueTwoBox is null) return;
         var type = (TypeBox.SelectedItem as ComboBoxItem)?.Tag?.ToString();
         ValueOneLabel.Text = type == "percent" ? "Descuento %" : type == "amount" ? "Descuento en pesos" : "Cantidad a comprar";
         ValueTwoLabel.Text = type == "buyPay" ? "Cantidad a pagar" : "Campo no utilizado";
