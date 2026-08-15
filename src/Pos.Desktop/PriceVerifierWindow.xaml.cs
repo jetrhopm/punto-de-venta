@@ -45,6 +45,10 @@ public partial class PriceVerifierWindow : Window
                 ProductNameText.Text = "Producto no encontrado";
                 ProductCodeText.Text = code;
                 ProductPriceText.Text = "$0.00";
+                ProductStockText.Text = "0";
+                ProductAvailabilityText.Text = "No encontrado";
+                ProductAvailabilityText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(180, 35, 24));
+                ProductAvailabilityBadge.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(253, 235, 234));
                 ProductDetailText.Text = "";
                 StatusText.Text = "No se encontró un producto con ese código.";
                 CodeBox.SelectAll();
@@ -54,7 +58,16 @@ public partial class PriceVerifierWindow : Window
             ProductNameText.Text = product.Description;
             ProductCodeText.Text = $"Código: {product.Code}";
             ProductPriceText.Text = $"${product.Price:0.00}";
-            ProductDetailText.Text = $"Unidad: {product.UnitOfMeasure}  |  Existencia: {product.Stock:0.###}";
+            ProductStockText.Text = $"{product.Stock:0.###} {product.UnitOfMeasure}";
+            var available = product.Stock > 0m;
+            ProductAvailabilityText.Text = available ? "Disponible" : "Agotado";
+            ProductAvailabilityText.Foreground = new System.Windows.Media.SolidColorBrush(available
+                ? System.Windows.Media.Color.FromRgb(22, 131, 74)
+                : System.Windows.Media.Color.FromRgb(180, 35, 24));
+            ProductAvailabilityBadge.Background = new System.Windows.Media.SolidColorBrush(available
+                ? System.Windows.Media.Color.FromRgb(231, 245, 236)
+                : System.Windows.Media.Color.FromRgb(253, 235, 234));
+            ProductDetailText.Text = $"Unidad de venta: {product.UnitOfMeasure}";
             StatusText.Text = "";
             CodeBox.SelectAll();
         }
