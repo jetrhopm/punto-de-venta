@@ -73,6 +73,21 @@ public static class TicketWindowsPrinter
         TextElement.SetFontFamily(root, family);
         TextElement.SetFontSize(root, baseSize);
 
+        if (ticket.SaleId == Guid.Empty)
+        {
+            root.Children.Add(Text(ticket.StoreName.ToUpperInvariant(), baseSize + 4d, FontWeights.Bold, TextAlignment.Center, new Thickness(0, 0, 0, 3)));
+            root.Children.Add(Rule());
+            root.Children.Add(Text("COMPROBANTE DE RETIRO", baseSize + 2d, FontWeights.Bold, TextAlignment.Center, new Thickness(0, 1, 0, 3)));
+            root.Children.Add(Text("RETIRO DE EFECTIVO DE CAJA", baseSize, FontWeights.SemiBold, TextAlignment.Center, new Thickness(0, 0, 0, 6)));
+            root.Children.Add(Metadata("Fecha", ticket.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss"), baseSize));
+            root.Children.Add(Metadata("Motivo", ticket.Lines.FirstOrDefault()?.Description ?? "Retiro de efectivo", baseSize));
+            root.Children.Add(Rule());
+            root.Children.Add(AmountLine("TOTAL RETIRADO", ticket.Total, baseSize + 3d, FontWeights.Bold));
+            root.Children.Add(Rule());
+            AddOptionalCentered(root, string.IsNullOrWhiteSpace(ticket.Footer) ? "Conserve este comprobante" : ticket.Footer, baseSize);
+            return new Border { Width = pageWidth, Padding = new Thickness(padding), Background = Brushes.White, Child = root };
+        }
+
         root.Children.Add(Text(ticket.StoreName.ToUpperInvariant(), baseSize + 4d, FontWeights.Bold, TextAlignment.Center, new Thickness(0, 0, 0, 3)));
         AddOptionalCentered(root, ticket.LegalName, baseSize);
         AddOptionalCentered(root, string.IsNullOrWhiteSpace(ticket.TaxId) ? string.Empty : $"RFC: {ticket.TaxId}", baseSize);
