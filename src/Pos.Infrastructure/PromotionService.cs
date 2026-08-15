@@ -27,7 +27,8 @@ public sealed class PromotionService(PosDbContext database)
 
     public async Task<PromotionPriceQuote?> QuoteAsync(string token, Guid productId, decimal price, decimal quantity, CancellationToken cancellationToken)
     {
-        if (await AuthorizedAsync(token, "ViewProducts", cancellationToken) is null) return null;
+        // F1 necesita cotizar durante una venta; no debe exigir permisos administrativos de catálogo.
+        if (await AuthorizedAsync(token, "Sell", cancellationToken) is null) return null;
         if (productId == Guid.Empty || price < 0m || quantity <= 0m) throw new ArgumentException("Los datos de precio y cantidad no son validos.");
         var discounted = await DiscountedPriceAsync(productId, price, DateTimeOffset.UtcNow, cancellationToken, quantity);
         var discountTotal = decimal.Round(Math.Max(0m, (price - discounted) * quantity), 2, MidpointRounding.AwayFromZero);

@@ -470,7 +470,14 @@ public partial class MainWindow : Window
         try
         {
             var url = $"/api/promotions/quote?productId={line.ProductId}&price={line.BaseUnitPrice.ToString(System.Globalization.CultureInfo.InvariantCulture)}&quantity={line.Quantity.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
-            var quote = await Client.GetFromJsonAsync<PromotionPriceQuote>(url);
+            using var response = await Client.GetAsync(url);
+            if (!response.IsSuccessStatusCode)
+            {
+                line.UnitPrice = line.BaseUnitPrice;
+                line.DiscountTotal = 0m;
+                return;
+            }
+            var quote = await response.Content.ReadFromJsonAsync<PromotionPriceQuote>();
             if (quote is not null)
             {
                 line.UnitPrice = quote.UnitPrice;
