@@ -123,6 +123,11 @@
                                     </StackPanel>
                                 </DataTemplate>
                             </TabControl.ItemTemplate>
+                            <TabControl.ContentTemplate>
+                                <DataTemplate>
+                                    <Grid Visibility="Collapsed"/>
+                                </DataTemplate>
+                            </TabControl.ContentTemplate>
                         </TabControl>
                     </Grid>
 
