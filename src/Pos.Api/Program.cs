@@ -551,6 +551,12 @@ app.MapGet("/api/shifts/summary", async (HttpRequest request, CashRegisterServic
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
 
+app.MapGet("/api/shifts/cut", async (HttpRequest request, CashRegisterService cash, CancellationToken cancellationToken) =>
+{
+    var result = await cash.CurrentCutAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
 app.MapPost("/api/setup/initial", async (InitialSetupCommand command, InitialSetupService setup, CancellationToken cancellationToken) =>
 {
     try { return Results.Created("/api/setup/initial", await setup.ExecuteAsync(command, cancellationToken)); }

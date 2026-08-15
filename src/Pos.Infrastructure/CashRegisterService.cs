@@ -7,6 +7,7 @@ namespace Pos.Infrastructure;
 public sealed record CashMovementCommand(string Type, decimal Amount, string Reason);
 public sealed record CloseShiftCommand(decimal CountedCash);
 public sealed record ShiftSummary(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
+public sealed record CashCutSummary(decimal InitialCash, decimal TotalSales, int SalesCount, decimal CashSales, decimal CardSales, decimal TransferSales, decimal CreditSales, decimal CashIn, decimal CashOut, decimal CashReturns, decimal Profit, decimal ExpectedCash);
 
 public sealed class CashRegisterService(PosDbContext database)
 {
@@ -14,6 +15,24 @@ public sealed class CashRegisterService(PosDbContext database)
     {
         var shift = await GetOpenShiftAsync(token, cancellationToken);
         return shift is null ? null : await SummaryAsync(shift, null, cancellationToken);
+    }
+
+    public async Task<CashCutSummary?> CurrentCutAsync(string token, CancellationToken cancellationToken)
+    {
+        var shift = await GetOpenShiftAsync(token, cancellationToken);
+        if (shift is null) return null;
+        var sales = await database.Sales.AsNoTracking().Where(item => item.ShiftId == shift.Id && item.Status == "Completed").ToListAsync(cancellationToken);
+        var saleIds = sales.Select(item => item.Id).ToArray();
+        var payments = await database.Payments.AsNoTracking().Where(item => saleIds.Contains(item.SaleId)).ToListAsync(cancellationToken);
+        var movements = await database.CashMovements.AsNoTracking().Where(item => item.ShiftId == shift.Id).ToListAsync(cancellationToken);
+        var lines = await (from line in database.SaleLines.AsNoTracking() join product in database.Products.AsNoTracking() on line.ProductId equals product.Id where saleIds.Contains(line.SaleId) select new { line.LineTotal, line.Quantity, product.Cost }).ToListAsync(cancellationToken);
+        var cashSales = payments.Where(item => item.Method == "Cash").Sum(item => item.Amount);
+        var cashIn = movements.Where(item => item.Type == "In").Sum(item => item.Amount);
+        var cashReturns = movements.Where(item => item.Type == "Out" && (item.Reason.StartsWith("Devolucion", StringComparison.OrdinalIgnoreCase) || item.Reason.StartsWith("Cancelacion", StringComparison.OrdinalIgnoreCase))).Sum(item => item.Amount);
+        var cashOut = movements.Where(item => item.Type == "Out").Sum(item => item.Amount) - cashReturns;
+        var expectedCash = decimal.Round(shift.InitialCash + cashSales + cashIn - cashOut - cashReturns, 2);
+        var profit = decimal.Round(lines.Sum(item => item.LineTotal - (item.Quantity * item.Cost)), 2);
+        return new CashCutSummary(decimal.Round(shift.InitialCash, 2), decimal.Round(sales.Sum(item => item.Total), 2), sales.Count, decimal.Round(cashSales, 2), decimal.Round(payments.Where(item => item.Method == "Card").Sum(item => item.Amount), 2), decimal.Round(payments.Where(item => item.Method == "Transfer").Sum(item => item.Amount), 2), decimal.Round(payments.Where(item => item.Method == "Credit").Sum(item => item.Amount), 2), decimal.Round(cashIn, 2), decimal.Round(cashOut, 2), decimal.Round(cashReturns, 2), profit, expectedCash);
     }
 
     public async Task<ShiftSummary?> AddMovementAsync(string token, CashMovementCommand command, CancellationToken cancellationToken)

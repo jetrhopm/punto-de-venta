@@ -72,7 +72,12 @@ public partial class MainWindow : Window
         if (sender is Button { Tag: string section })
         {
             if (!HasPermissionFor(section)) { StatusText.Text = "No tienes permiso para abrir este modulo."; return; }
-            if (section == "Corte") { OnCloseShiftClick(sender, e); return; }
+            if (section == "Corte")
+            {
+                var window = new CutWindow { Owner = this };
+                if (window.ShowDialog() == true && window.RequestCloseShift) _ = CloseShiftFromDialogAsync();
+                return;
+            }
             if (section == "Productos") { var window = new ProductCatalogWindow { Owner = this }; window.ShowDialog(); return; }
             if (section == "Inventario") { OpenInventory(); return; }
             if (section == "Clientes" || section == "Creditos") { OpenCustomers(); return; }
