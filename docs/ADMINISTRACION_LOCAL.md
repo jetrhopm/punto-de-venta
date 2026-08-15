@@ -32,7 +32,7 @@ La API crea una copia automática diaria sin interrumpir al cajero y mantiene la
 
 Desde la pantalla se puede crear un respaldo y guardar una copia en disco externo o ubicacion de red. La copia externa lleva el `.dump` y su archivo vecino `.dump.sha256`; ambos deben conservarse juntos. El permiso requerido es `ImportOrExportData`.
 
-La restauracion deliberadamente no se ejecuta con un boton dentro del programa abierto. En otra computadora se instala JetVenta primero, se copian los dos archivos del respaldo y se ejecuta como administrador `restore-production-backup.ps1 -BackupFile "D:\respaldo.dump" -Approve` desde la carpeta de instalación. La herramienta verifica el SHA-256, crea antes una copia preventiva de la base de destino y reinicia la API. La impresora se selecciona de nuevo porque es una preferencia local de cada caja.
+La restauración se ejecuta desde **Configuración > Respaldos > Cargar respaldo**. El usuario selecciona el archivo `.dump`; JetVenta exige que el archivo `.dump.sha256` esté junto a él, valida el SHA-256 y solicita confirmación. Después ejecuta el restaurador protegido con permisos de Windows, crea una copia preventiva de la base de destino, reemplaza la base y reinicia la API. La impresora se selecciona de nuevo porque es una preferencia local de cada caja. El comando PowerShell incluido queda como herramienta técnica de recuperación, no como requisito para el usuario común.
 
 ## Importacion de productos e inventario
 
