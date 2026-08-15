@@ -14,6 +14,7 @@ public partial class CustomerWindow : Window
     private CancellationTokenSource? _searchCancellation;
     private CustomerRow? _selected;
     public Guid? SelectedCustomerId { get; private set; }
+    public string? SelectedCustomerName { get; private set; }
 
     public CustomerWindow(bool selectOnly = false)
     {
@@ -32,7 +33,7 @@ public partial class CustomerWindow : Window
     private void OnCustomerSelected(object sender, MouseButtonEventArgs e)
     {
         if (CustomersList.SelectedItem is not CustomerRow row) return;
-        _selected = row; SelectedCustomerId = row.Customer.Id;
+        _selected = row; SelectedCustomerId = row.Customer.Id; SelectedCustomerName = row.Customer.Name;
         if (_selectOnly) { DialogResult = true; return; }
         NameTextBox.Text = row.Customer.Name; LimitTextBox.Text = row.Customer.CreditLimit.ToString("0.00", CultureInfo.InvariantCulture); MessageText.Text = $"Saldo actual: ${row.Customer.Balance:0.00}";
     }

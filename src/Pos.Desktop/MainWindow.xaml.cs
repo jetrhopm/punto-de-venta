@@ -186,6 +186,31 @@ public partial class MainWindow : Window
     private void OnSalesActionClick(object sender, RoutedEventArgs e) =>
         ShowPendingFeature("Accion de ventas");
 
+    private async void OnSaveOrderClick(object sender, RoutedEventArgs e)
+    {
+        if (_activeTicket is null || _activeTicket.Lines.Count == 0) { StatusText.Text = "Agrega productos antes de guardar la orden."; return; }
+        StatusText.Text = await PersistActiveTicketAsync() ? "Orden guardada. Puedes continuarla o cambiar de ticket." : "No se pudo guardar la orden.";
+        FocusProductInput();
+    }
+
+    private async void OnFindCustomerClick(object sender, RoutedEventArgs e) => await SelectCustomerForActiveTicketAsync();
+    private async void OnSelectCustomerClick(object sender, RoutedEventArgs e) => await SelectCustomerForActiveTicketAsync();
+
+    private async Task SelectCustomerForActiveTicketAsync()
+    {
+        if (_activeTicket is null) return;
+        if (!SessionContext.HasPermission("ManageCustomersAndCredit")) { StatusText.Text = "No tienes permiso para consultar clientes."; return; }
+        var window = new CustomerWindow(true) { Owner = this };
+        if (window.ShowDialog() != true || window.SelectedCustomerId is null) return;
+        _activeTicket.SetCustomer(window.SelectedCustomerId.Value, window.SelectedCustomerName ?? "Cliente");
+        TicketTabs.Items.Refresh();
+        CurrentCustomerText.Text = window.SelectedCustomerName ?? "Cliente";
+        UpdateSaleSummary();
+        await PersistActiveTicketAsync(showError: true);
+        StatusText.Text = $"Cliente seleccionado: {window.SelectedCustomerName}.";
+        FocusProductInput();
+    }
+
     private void OnChangeTicketClick(object sender, RoutedEventArgs e) => SelectNextTicket();
 
     private async void OnAddProductFromEntryClick(object sender, RoutedEventArgs e) =>
@@ -592,8 +617,11 @@ public partial class MainWindow : Window
         public Guid Id { get; } = id;
         public Guid OperationId { get; } = operationId;
         public int TicketNumber { get; } = ticketNumber;
-        public string Title => $"Ticket {TicketNumber}";
+        public Guid? CustomerId { get; private set; }
+        public string? CustomerName { get; private set; }
+        public string Title => string.IsNullOrWhiteSpace(CustomerName) ? $"Ticket {TicketNumber}" : CustomerName!;
         public ObservableCollection<CartLineView> Lines { get; } = new(lines ?? []);
+        public void SetCustomer(Guid customerId, string customerName) { CustomerId = customerId; CustomerName = customerName.Trim(); }
     }
 
     private sealed record SaleDraftResponse(Guid Id, Guid OperationId, int TicketNumber, DateTimeOffset UpdatedAtUtc, IReadOnlyList<SaleDraftLineResponse> Lines);
@@ -683,6 +711,7 @@ public partial class MainWindow : Window
         CartList.ItemsSource = ticket.Lines;
         CartList.Items.Refresh();
         UpdateSaleSummary();
+        CurrentCustomerText.Text = ticket.CustomerName ?? "Seleccionar cliente";
         FocusProductInput();
     }
 
@@ -762,7 +791,7 @@ public partial class MainWindow : Window
         if (cashWindow.ShowDialog() != true || cashWindow.Received is null) return;
         try
         {
-            var command = new { operationId = ticket.OperationId, draftId = ticket.Id, lines = ticket.Lines.Select(item => new { productId = item.ProductId, quantity = item.Quantity }).ToArray(), cashReceived = cashWindow.CreditRequested ? 0m : cashWindow.Received.Value, cardAmount = cashWindow.CreditRequested ? 0m : cashWindow.CardAmount, transferAmount = cashWindow.CreditRequested ? 0m : cashWindow.TransferAmount, customerId = cashWindow.CustomerId, paymentMethod = cashWindow.PaymentMethod };
+            var command = new { operationId = ticket.OperationId, draftId = ticket.Id, lines = ticket.Lines.Select(item => new { productId = item.ProductId, quantity = item.Quantity }).ToArray(), cashReceived = cashWindow.CreditRequested ? 0m : cashWindow.Received.Value, cardAmount = cashWindow.CreditRequested ? 0m : cashWindow.CardAmount, transferAmount = cashWindow.CreditRequested ? 0m : cashWindow.TransferAmount, customerId = cashWindow.CustomerId ?? ticket.CustomerId, paymentMethod = cashWindow.PaymentMethod };
             using var response = await Client.PostAsJsonAsync("/api/sales/complete", command);
             if (!response.IsSuccessStatusCode) { StatusText.Text = await ReadApiMessageAsync(response); MessageBox.Show(StatusText.Text, "No se pudo confirmar la venta", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
             var result = await response.Content.ReadFromJsonAsync<SaleResponse>();
@@ -803,7 +832,12 @@ public partial class MainWindow : Window
     private void OnReturnLastSaleClick(object sender, RoutedEventArgs e)
     {
         if (!SessionContext.HasPermission("ProcessReturns")) { StatusText.Text = "No tienes permiso para procesar devoluciones."; return; }
-        if (_lastSaleId is null) { StatusText.Text = "No hay una venta reciente para devolver."; return; }
+        if (_lastSaleId is null)
+        {
+            StatusText.Text = "Selecciona la venta que deseas devolver desde el historial.";
+            new SalesHistoryWindow { Owner = this }.ShowDialog();
+            return;
+        }
         var window = new ReturnSaleWindow(_lastSaleId.Value) { Owner = this };
         window.ShowDialog();
     }
