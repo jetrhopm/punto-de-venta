@@ -23,7 +23,6 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<CartLineView> _emptyCart = [];
     private readonly SemaphoreSlim _draftSaveLock = new(1, 1);
     private TicketTabView? _activeTicket;
-    private InventoryWindow? _inventoryWindow;
     private bool _exitConfirmed;
     private bool _exitDialogOpen;
     public MainWindow()
@@ -72,6 +71,7 @@ public partial class MainWindow : Window
         if (sender is Button { Tag: string section })
         {
             if (!HasPermissionFor(section)) { StatusText.Text = "No tienes permiso para abrir este modulo."; return; }
+            if (section == "Ventas") { ShowSalesWorkspace(); return; }
             if (section == "Corte")
             {
                 var window = new CutWindow { Owner = this };
@@ -83,7 +83,7 @@ public partial class MainWindow : Window
             if (section == "Clientes") { OpenCustomers(); return; }
             if (section == "Creditos") { OpenCustomers(creditMode: true); return; }
             if (section == "Compras") { var window = new PurchaseWindow { Owner = this }; window.ShowDialog(); return; }
-            if (section == "Reportes") { var window = new ReportsWindow { Owner = this }; window.ShowDialog(); return; }
+            if (section == "Reportes") { ShowEmbeddedModule(new ReportsWindow(), "Reportes", "Consulta ventas y análisis sin cerrar los tickets en atención."); return; }
             if (section == "Historial") { var window = new SalesHistoryWindow { Owner = this }; window.ShowDialog(); return; }
             if (section == "Facturas") { ShowPendingFeature("Facturas CFDI"); return; }
             if (section == "Promociones") { var window = new PromotionWindow { Owner = this }; window.ShowDialog(); return; }
@@ -115,10 +115,9 @@ public partial class MainWindow : Window
             if (!HasPermissionFor(section)) { StatusText.Text = "No tienes permiso para abrir este modulo."; e.Handled = true; return; }
             if (section == "Clientes") { OpenCustomers(); e.Handled = true; return; }
             if (section == "Creditos") { OpenCustomers(creditMode: true); e.Handled = true; return; }
+            if (section == "Ventas") { ShowSalesWorkspace(); e.Handled = true; return; }
             if (section == "Productos") { new ProductCatalogWindow { Owner = this }.ShowDialog(); e.Handled = true; return; }
             if (section == "Inventario") { OpenInventory(); e.Handled = true; return; }
-            NavigateTo(section);
-            if (section == "Ventas") FocusProductInput();
             e.Handled = true;
             return;
         }
@@ -1059,6 +1058,27 @@ public partial class MainWindow : Window
         StatusText.Text = $"Navegacion activa: {section}.";
     }
 
+    private void ShowSalesWorkspace()
+    {
+        ModuleWorkspace.Content = null;
+        ModuleWorkspace.Visibility = Visibility.Collapsed;
+        SalesWorkspace.Visibility = Visibility.Visible;
+        CurrentSectionText.Text = "Nueva venta";
+        WorkspaceTitleText.Text = "Venta en curso";
+        WorkspaceDetailText.Text = "Escanea un código o busca un producto.";
+        StatusText.Text = "Venta en curso. Los tickets en atención se conservaron.";
+        FocusProductInput();
+    }
+
+    private void ShowEmbeddedModule(UserControl module, string section, string detail)
+    {
+        SalesWorkspace.Visibility = Visibility.Collapsed;
+        ModuleWorkspace.Content = module;
+        ModuleWorkspace.Visibility = Visibility.Visible;
+        CurrentSectionText.Text = section;
+        StatusText.Text = $"{section} abierto. Los tickets en atención siguen guardados.";
+    }
+
     private void OpenCustomers(bool creditMode = false)
     {
         var window = new CustomerWindow(creditMode: creditMode) { Owner = this };
@@ -1066,18 +1086,7 @@ public partial class MainWindow : Window
         CurrentSectionText.Text = "Ventas";
     }
 
-    private void OpenInventory()
-    {
-        if (_inventoryWindow is { IsLoaded: true })
-        {
-            _inventoryWindow.Activate();
-            return;
-        }
-
-        _inventoryWindow = new InventoryWindow { Owner = this };
-        _inventoryWindow.Closed += (_, _) => _inventoryWindow = null;
-        _inventoryWindow.Show();
-    }
+    private void OpenInventory() => new InventoryWindow { Owner = this }.ShowDialog();
 
     private void ShowPendingFeature(string feature)
     {

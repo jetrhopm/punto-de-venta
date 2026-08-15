@@ -74,7 +74,7 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1" Margin="14,12">
+        <Grid x:Name="SalesWorkspace" Grid.Row="1" Margin="14,12">
             <Grid.ColumnDefinitions><ColumnDefinition Width="132"/><ColumnDefinition Width="*"/><ColumnDefinition Width="310"/></Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0">
@@ -179,6 +179,8 @@
                 </Grid>
             </Border>
         </Grid>
+
+        <ContentControl x:Name="ModuleWorkspace" Grid.Row="1" Margin="14,12" Visibility="Collapsed" />
 
         <Border Grid.Row="2" Background="#17384E" Padding="14,0">
             <DockPanel>

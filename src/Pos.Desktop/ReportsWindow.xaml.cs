@@ -4,11 +4,12 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Windows;
+using System.Windows.Controls;
 using Microsoft.Win32;
 
 namespace Pos.Desktop;
 
-public partial class ReportsWindow : Window
+public partial class ReportsWindow : UserControl
 {
     private static HttpClient Client => ApiClient.Client;
     private DateTimeOffset _from;
@@ -140,7 +141,7 @@ public partial class ReportsWindow : Window
     private async void OnExportClick(object sender, RoutedEventArgs e)
     {
         var dialog = new SaveFileDialog { Filter = "CSV (*.csv)|*.csv", FileName = $"ventas-{_from:yyyyMMdd}-{_to:yyyyMMdd}.csv" };
-        if (dialog.ShowDialog(this) != true) return;
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
         try
         {
             var bytes = await Client.GetByteArrayAsync($"/api/reports/sales.csv?from={Uri.EscapeDataString(_from.ToString("O"))}&to={Uri.EscapeDataString(_to.ToString("O"))}");
