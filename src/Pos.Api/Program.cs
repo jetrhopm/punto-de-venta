@@ -460,6 +460,12 @@ app.MapGet("/api/reports/analysis", async (HttpRequest request, ReportService re
     var result = await reports.SalesAnalysisAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
+app.MapGet("/api/reports/dashboard", async (DateTimeOffset from, DateTimeOffset to, HttpRequest request, ReportService reports, CancellationToken cancellationToken) =>
+{
+    if (to <= from) return Results.BadRequest(new { message = "El periodo final debe ser posterior al inicial." });
+    var result = await reports.SalesDashboardAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), from, to, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
 app.MapGet("/api/reports/inventory", async (HttpRequest request, ReportService reports, CancellationToken cancellationToken) =>
 {
     var result = await reports.InventoryAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);

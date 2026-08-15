@@ -2,133 +2,57 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
-        Title="Reportes" Width="1120" Height="720" MinWidth="900" MinHeight="560"
+        Title="Reportes" Width="1200" Height="790" MinWidth="980" MinHeight="620"
         WindowStartupLocation="CenterOwner" Loaded="OnLoaded">
     <Window.Resources>
-        <Style x:Key="SummaryCard" TargetType="Border">
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="BorderBrush" Value="#D9E3EA"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="7"/>
-            <Setter Property="Padding" Value="14"/>
-            <Setter Property="Margin" Value="0,0,10,0"/>
+        <Style x:Key="DashboardCard" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/><Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="7"/><Setter Property="Padding" Value="16"/><Setter Property="Effect" Value="{StaticResource PanelShadowEffect}"/>
         </Style>
-        <Style x:Key="SmallMutedText" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#526577"/>
-            <Setter Property="FontSize" Value="12"/>
-        </Style>
+        <Style x:Key="MetricCard" TargetType="Border" BasedOn="{StaticResource DashboardCard}"><Setter Property="Padding" Value="14"/><Setter Property="Margin" Value="0,0,10,0"/></Style>
+        <Style x:Key="SectionTitle" TargetType="TextBlock"><Setter Property="FontSize" Value="17"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="{StaticResource TextBrush}"/></Style>
+        <Style x:Key="ChartProgress" TargetType="ProgressBar"><Setter Property="Height" Value="10"/><Setter Property="Minimum" Value="0"/><Setter Property="Maximum" Value="100"/><Setter Property="Background" Value="#E8EFF4"/></Style>
+        <Style x:Key="PeriodButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Padding" Value="12,7"/><Setter Property="Margin" Value="0,0,7,0"/></Style>
     </Window.Resources>
-
-    <Grid Margin="18" Background="#F5F8FB">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-
-        <DockPanel>
-            <Button DockPanel.Dock="Right" Width="170" Height="38" Click="OnExportClick">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <icons:PackIconMaterial Kind="FileExportOutline" Width="18" Height="18" Margin="0,0,7,0"/>
-                    <TextBlock Text="Exportar ventas CSV"/>
-                </StackPanel>
-            </Button>
-            <StackPanel>
-                <TextBlock Text="Reportes y análisis de ventas" FontSize="23" FontWeight="SemiBold" Foreground="#17324D"/>
-                <TextBlock x:Name="RangeText" Margin="0,4,0,0" Foreground="#526577"/>
-                <TextBlock Text="Los datos salen de PostgreSQL: ventas, partidas e inventario quedan incluidos en respaldos y restauraciones." Margin="0,3,0,0" Foreground="#526577"/>
-            </StackPanel>
-        </DockPanel>
-
-        <ItemsControl Grid.Row="1" x:Name="PeriodSummaryList" Margin="0,16,0,12">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate><UniformGrid Columns="3"/></ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <Border Style="{StaticResource SummaryCard}">
-                        <StackPanel>
-                            <TextBlock Text="{Binding Period}" FontWeight="SemiBold" Foreground="#17324D"/>
-                            <TextBlock Text="{Binding TotalText}" FontSize="24" FontWeight="Bold" Foreground="#146CB0" Margin="0,7,0,0"/>
-                            <TextBlock Text="{Binding SalesText}" Style="{StaticResource SmallMutedText}" Margin="0,3,0,0"/>
-                            <ProgressBar Height="7" Minimum="0" Maximum="100" Value="{Binding Percentage, Mode=OneWay}" Margin="0,10,0,0"/>
-                        </StackPanel>
-                    </Border>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
-        <TabControl Grid.Row="2">
-            <TabItem Header="Ventas recientes">
-                <ListView x:Name="SalesList" Margin="0,10,0,0">
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Header="Fecha" DisplayMemberBinding="{Binding CreatedAtUtc}" Width="170"/>
-                            <GridViewColumn Header="Venta" DisplayMemberBinding="{Binding SaleId}" Width="245"/>
-                            <GridViewColumn Header="Estado" DisplayMemberBinding="{Binding Status}" Width="100"/>
-                            <GridViewColumn Header="Total" DisplayMemberBinding="{Binding Total}" Width="90"/>
-                            <GridViewColumn Header="Pago" DisplayMemberBinding="{Binding PaymentMethod}" Width="120"/>
-                        </GridView>
-                    </ListView.View>
-                </ListView>
-            </TabItem>
-            <TabItem Header="Más vendidos">
-                <ListView x:Name="BestSellersList" Margin="0,10,0,0">
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Header="Código" DisplayMemberBinding="{Binding Code}" Width="120"/>
-                            <GridViewColumn Header="Producto" DisplayMemberBinding="{Binding Description}" Width="330"/>
-                            <GridViewColumn Header="Vendido" DisplayMemberBinding="{Binding QuantitySoldText}" Width="90"/>
-                            <GridViewColumn Header="Importe" DisplayMemberBinding="{Binding TotalSoldText}" Width="100"/>
-                            <GridViewColumn Header="Gráfica" Width="280">
-                                <GridViewColumn.CellTemplate>
-                                    <DataTemplate><ProgressBar Height="12" Minimum="0" Maximum="100" Value="{Binding Percentage, Mode=OneWay}"/></DataTemplate>
-                                </GridViewColumn.CellTemplate>
-                            </GridViewColumn>
-                        </GridView>
-                    </ListView.View>
-                </ListView>
-            </TabItem>
-            <TabItem Header="Surtir tienda">
-                <ListView x:Name="RestockList" Margin="0,10,0,0">
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Header="Código" DisplayMemberBinding="{Binding Code}" Width="120"/>
-                            <GridViewColumn Header="Producto" DisplayMemberBinding="{Binding Description}" Width="330"/>
-                            <GridViewColumn Header="Existencia" DisplayMemberBinding="{Binding StockText}" Width="90"/>
-                            <GridViewColumn Header="Mínimo" DisplayMemberBinding="{Binding MinimumStockText}" Width="90"/>
-                            <GridViewColumn Header="Vendido año" DisplayMemberBinding="{Binding QuantitySoldText}" Width="90"/>
-                            <GridViewColumn Header="Sugerencia" DisplayMemberBinding="{Binding Suggestion}" Width="220"/>
-                        </GridView>
-                    </ListView.View>
-                </ListView>
-            </TabItem>
-            <TabItem Header="Bajo movimiento">
-                <ListView x:Name="LowMovementList" Margin="0,10,0,0">
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Header="Código" DisplayMemberBinding="{Binding Code}" Width="120"/>
-                            <GridViewColumn Header="Producto" DisplayMemberBinding="{Binding Description}" Width="360"/>
-                            <GridViewColumn Header="Vendido año" DisplayMemberBinding="{Binding QuantitySoldText}" Width="100"/>
-                            <GridViewColumn Header="Existencia" DisplayMemberBinding="{Binding StockText}" Width="100"/>
-                            <GridViewColumn Header="Lectura" DisplayMemberBinding="{Binding MovementNote}" Width="260"/>
-                        </GridView>
-                    </ListView.View>
-                </ListView>
-            </TabItem>
-            <TabItem Header="Sin ventas">
-                <ListView x:Name="NoMovementList" Margin="0,10,0,0">
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Header="Código" DisplayMemberBinding="{Binding Code}" Width="120"/>
-                            <GridViewColumn Header="Producto" DisplayMemberBinding="{Binding Description}" Width="380"/>
-                            <GridViewColumn Header="Categoría" DisplayMemberBinding="{Binding Category}" Width="140"/>
-                            <GridViewColumn Header="Existencia" DisplayMemberBinding="{Binding StockText}" Width="100"/>
-                            <GridViewColumn Header="Lectura" DisplayMemberBinding="{Binding MovementNote}" Width="260"/>
-                        </GridView>
-                    </ListView.View>
-                </ListView>
-            </TabItem>
-        </TabControl>
+    <Grid Background="{StaticResource AppBackgroundBrush}">
+        <Grid Margin="20">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <Border Style="{StaticResource DashboardCard}" Padding="18" Effect="{x:Null}">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal"><Border Width="43" Height="43" Background="{StaticResource PrimarySoftBrush}" CornerRadius="6" Margin="0,0,12,0"><icons:PackIconMaterial Kind="ChartBoxOutline" Width="27" Height="27" Foreground="{StaticResource PrimaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><StackPanel><TextBlock Text="Reportes y análisis" FontSize="25" FontWeight="Bold" Foreground="{StaticResource TextBrush}"/><TextBlock x:Name="RangeText" Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}"/></StackPanel></StackPanel>
+                        <TextBlock Text="Consulta tendencias, formas de pago, departamentos y productos para surtir. Las gráficas se calculan con ventas confirmadas." Margin="0,13,0,0" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,15,0,0"><Button Style="{StaticResource PeriodButton}" Tag="week" Click="OnQuickPeriodClick">Semana actual</Button><Button Style="{StaticResource PeriodButton}" Tag="month" Click="OnQuickPeriodClick">Mes actual</Button><Button Style="{StaticResource PeriodButton}" Tag="previousMonth" Click="OnQuickPeriodClick">Mes anterior</Button><Button Style="{StaticResource PeriodButton}" Tag="year" Click="OnQuickPeriodClick">Año actual</Button></StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,11,0,0"><TextBlock Text="Periodo personalizado" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0"/><DatePicker x:Name="FromDatePicker" Width="130"/><TextBlock Text="a" VerticalAlignment="Center" Margin="9,0" Foreground="{StaticResource TextMutedBrush}"/><DatePicker x:Name="ToDatePicker" Width="130"/><Button Style="{StaticResource PrimaryButtonStyle}" Margin="10,0,0,0" Click="OnApplyCustomPeriodClick">Aplicar</Button></StackPanel>
+                    </StackPanel>
+                    <Button Grid.Column="1" Width="174" Height="39" VerticalAlignment="Top" Click="OnExportClick"><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><icons:PackIconMaterial Kind="FileExportOutline" Width="18" Height="18" Margin="0,0,7,0"/><TextBlock Text="Exportar ventas CSV"/></StackPanel></Button>
+                </Grid>
+            </Border>
+            <TabControl Grid.Row="1" Margin="0,16,0,0">
+                <TabItem Header="Resumen visual">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="1"><StackPanel Margin="0,12,0,4">
+                        <Grid Margin="0,0,0,14"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource MetricCard}"><StackPanel><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="CashMultiple" Width="19" Height="19" Foreground="{StaticResource SuccessBrush}" Margin="0,0,7,0"/><TextBlock Text="Ventas totales" Foreground="{StaticResource TextMutedBrush}"/></StackPanel><TextBlock x:Name="TotalSalesText" Text="$0.00" FontSize="23" FontWeight="Bold" Margin="0,8,0,0"/><TextBlock x:Name="SalesCountText" Text="0 ventas confirmadas" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Margin="0,3,0,0"/></StackPanel></Border>
+                            <Border Grid.Column="1" Style="{StaticResource MetricCard}"><StackPanel><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ReceiptTextOutline" Width="19" Height="19" Foreground="{StaticResource PrimaryBrush}" Margin="0,0,7,0"/><TextBlock Text="Venta promedio" Foreground="{StaticResource TextMutedBrush}"/></StackPanel><TextBlock x:Name="AverageSaleText" Text="$0.00" FontSize="23" FontWeight="Bold" Margin="0,8,0,0"/><TextBlock Text="Por venta confirmada" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Margin="0,3,0,0"/></StackPanel></Border>
+                            <Border Grid.Column="2" Style="{StaticResource MetricCard}"><StackPanel><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ChartLine" Width="19" Height="19" Foreground="#7C5799" Margin="0,0,7,0"/><TextBlock Text="Utilidad estimada" Foreground="{StaticResource TextMutedBrush}"/></StackPanel><TextBlock x:Name="ProfitText" Text="$0.00" FontSize="23" FontWeight="Bold" Margin="0,8,0,0"/><TextBlock Text="Según costo actual del producto" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Margin="0,3,0,0"/></StackPanel></Border>
+                            <Border Grid.Column="3" Style="{StaticResource MetricCard}" Margin="0"><StackPanel><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="PercentOutline" Width="19" Height="19" Foreground="{StaticResource WarningBrush}" Margin="0,0,7,0"/><TextBlock Text="Margen estimado" Foreground="{StaticResource TextMutedBrush}"/></StackPanel><TextBlock x:Name="MarginText" Text="0.00%" FontSize="23" FontWeight="Bold" Margin="0,8,0,0"/><TextBlock Text="Utilidad sobre ventas" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Margin="0,3,0,0"/></StackPanel></Border>
+                        </Grid>
+                        <Grid Margin="0,0,0,14"><Grid.ColumnDefinitions><ColumnDefinition Width="1.25*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource DashboardCard}" Margin="0,0,14,0"><StackPanel><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ChartBar" Width="21" Height="21" Foreground="{StaticResource PrimaryBrush}" Margin="0,0,8,0"/><TextBlock Text="Ventas y utilidad por día" Style="{StaticResource SectionTitle}"/></StackPanel><TextBlock Text="Importe de ventas confirmadas durante el periodo seleccionado" Margin="0,4,0,12" Foreground="{StaticResource TextMutedBrush}" FontSize="12"/><ItemsControl x:Name="DailySalesChart"><ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="82"/><ColumnDefinition Width="*"/><ColumnDefinition Width="98"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontSize="12"/><ProgressBar Grid.Column="1" Style="{StaticResource ChartProgress}" Value="{Binding Percentage}" Foreground="{StaticResource PrimaryBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/><StackPanel Grid.Column="2"><TextBlock Text="{Binding TotalText}" HorizontalAlignment="Right" FontWeight="SemiBold" FontSize="12"/><TextBlock Text="{Binding ProfitText}" HorizontalAlignment="Right" Foreground="{StaticResource SuccessBrush}" FontSize="11"/></StackPanel></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl><TextBlock x:Name="DailyEmptyText" Text="No hay ventas confirmadas en este periodo." Foreground="{StaticResource TextMutedBrush}" Margin="0,8,0,0" Visibility="Collapsed"/></StackPanel></Border>
+                            <Border Grid.Column="1" Style="{StaticResource DashboardCard}"><StackPanel><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="CreditCardMultipleOutline" Width="21" Height="21" Foreground="#2B8C7F" Margin="0,0,8,0"/><TextBlock Text="Ventas por forma de pago" Style="{StaticResource SectionTitle}"/></StackPanel><TextBlock Text="Distribución de los importes cobrados" Margin="0,4,0,12" Foreground="{StaticResource TextMutedBrush}" FontSize="12"/><ItemsControl x:Name="PaymentChart"><ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,5"><Grid.ColumnDefinitions><ColumnDefinition Width="105"/><ColumnDefinition Width="*"/><ColumnDefinition Width="82"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontSize="12"/><ProgressBar Grid.Column="1" Style="{StaticResource ChartProgress}" Value="{Binding Percentage}" Foreground="{Binding Brush}" VerticalAlignment="Center" Margin="0,0,9,0"/><TextBlock Grid.Column="2" Text="{Binding TotalText}" HorizontalAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold" FontSize="12"/></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl><TextBlock x:Name="PaymentEmptyText" Text="No hay cobros registrados en este periodo." Foreground="{StaticResource TextMutedBrush}" Margin="0,8,0,0" Visibility="Collapsed"/></StackPanel></Border>
+                        </Grid>
+                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource DashboardCard}" Margin="0,0,14,0"><StackPanel><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ShapeOutline" Width="21" Height="21" Foreground="#7C5799" Margin="0,0,8,0"/><TextBlock Text="Ventas por departamento" Style="{StaticResource SectionTitle}"/></StackPanel><TextBlock Text="Útil para comparar las áreas que más facturan" Margin="0,4,0,12" Foreground="{StaticResource TextMutedBrush}" FontSize="12"/><ItemsControl x:Name="DepartmentSalesChart"><ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="145"/><ColumnDefinition Width="*"/><ColumnDefinition Width="92"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Department}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Department}" FontSize="12"/><ProgressBar Grid.Column="1" Style="{StaticResource ChartProgress}" Value="{Binding Percentage}" Foreground="#7C5799" VerticalAlignment="Center" Margin="0,0,9,0"/><TextBlock Grid.Column="2" Text="{Binding TotalText}" HorizontalAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold" FontSize="12"/></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl><TextBlock x:Name="DepartmentEmptyText" Text="No hay productos vendidos por departamento en este periodo." Foreground="{StaticResource TextMutedBrush}" Margin="0,8,0,0" Visibility="Collapsed"/></StackPanel></Border>
+                            <Border Grid.Column="1" Style="{StaticResource DashboardCard}"><StackPanel><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="TrendingUp" Width="21" Height="21" Foreground="{StaticResource SuccessBrush}" Margin="0,0,8,0"/><TextBlock Text="Utilidad estimada por departamento" Style="{StaticResource SectionTitle}"/></StackPanel><TextBlock Text="Calculada con el costo actual de cada producto" Margin="0,4,0,12" Foreground="{StaticResource TextMutedBrush}" FontSize="12"/><ItemsControl x:Name="DepartmentProfitChart"><ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="145"/><ColumnDefinition Width="*"/><ColumnDefinition Width="92"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Department}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Department}" FontSize="12"/><ProgressBar Grid.Column="1" Style="{StaticResource ChartProgress}" Value="{Binding ProfitPercentage}" Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,9,0"/><TextBlock Grid.Column="2" Text="{Binding ProfitText}" HorizontalAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold" FontSize="12"/></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl><TextBlock x:Name="ProfitDepartmentEmptyText" Text="No hay utilidad por departamento para mostrar." Foreground="{StaticResource TextMutedBrush}" Margin="0,8,0,0" Visibility="Collapsed"/></StackPanel></Border>
+                        </Grid>
+                    </StackPanel></ScrollViewer>
+                </TabItem>
+                <TabItem Header="Ventas recientes"><ListView x:Name="SalesList" Margin="0,10,0,0"><ListView.View><GridView><GridViewColumn Header="Fecha" DisplayMemberBinding="{Binding CreatedAtUtc}" Width="170"/><GridViewColumn Header="Venta" DisplayMemberBinding="{Binding SaleId}" Width="245"/><GridViewColumn Header="Estado" DisplayMemberBinding="{Binding Status}" Width="100"/><GridViewColumn Header="Total" DisplayMemberBinding="{Binding Total}" Width="90"/><GridViewColumn Header="Pago" DisplayMemberBinding="{Binding PaymentMethod}" Width="120"/></GridView></ListView.View></ListView></TabItem>
+                <TabItem Header="Más vendidos"><ListView x:Name="BestSellersList" Margin="0,10,0,0"><ListView.View><GridView><GridViewColumn Header="Código" DisplayMemberBinding="{Binding Code}" Width="120"/><GridViewColumn Header="Producto" DisplayMemberBinding="{Binding Description}" Width="330"/><GridViewColumn Header="Vendido" DisplayMemberBinding="{Binding QuantitySoldText}" Width="90"/><GridViewColumn Header="Importe" DisplayMemberBinding="{Binding TotalSoldText}" Width="100"/><GridViewColumn Header="Gráfica" Width="280"><GridViewColumn.CellTemplate><DataTemplate><ProgressBar Height="12" Minimum="0" Maximum="100" Value="{Binding Percentage}"/></DataTemplate></GridViewColumn.CellTemplate></GridViewColumn></GridView></ListView.View></ListView></TabItem>
+                <TabItem Header="Surtir tienda"><ListView x:Name="RestockList" Margin="0,10,0,0"><ListView.View><GridView><GridViewColumn Header="Código" DisplayMemberBinding="{Binding Code}" Width="120"/><GridViewColumn Header="Producto" DisplayMemberBinding="{Binding Description}" Width="330"/><GridViewColumn Header="Existencia" DisplayMemberBinding="{Binding StockText}" Width="90"/><GridViewColumn Header="Mínimo" DisplayMemberBinding="{Binding MinimumStockText}" Width="90"/><GridViewColumn Header="Vendido año" DisplayMemberBinding="{Binding QuantitySoldText}" Width="90"/><GridViewColumn Header="Sugerencia" DisplayMemberBinding="{Binding Suggestion}" Width="220"/></GridView></ListView.View></ListView></TabItem>
+                <TabItem Header="Bajo movimiento"><ListView x:Name="LowMovementList" Margin="0,10,0,0"><ListView.View><GridView><GridViewColumn Header="Código" DisplayMemberBinding="{Binding Code}" Width="120"/><GridViewColumn Header="Producto" DisplayMemberBinding="{Binding Description}" Width="360"/><GridViewColumn Header="Vendido año" DisplayMemberBinding="{Binding QuantitySoldText}" Width="100"/><GridViewColumn Header="Existencia" DisplayMemberBinding="{Binding StockText}" Width="100"/><GridViewColumn Header="Lectura" DisplayMemberBinding="{Binding MovementNote}" Width="260"/></GridView></ListView.View></ListView></TabItem>
+                <TabItem Header="Sin ventas"><ListView x:Name="NoMovementList" Margin="0,10,0,0"><ListView.View><GridView><GridViewColumn Header="Código" DisplayMemberBinding="{Binding Code}" Width="120"/><GridViewColumn Header="Producto" DisplayMemberBinding="{Binding Description}" Width="380"/><GridViewColumn Header="Categoría" DisplayMemberBinding="{Binding Category}" Width="140"/><GridViewColumn Header="Existencia" DisplayMemberBinding="{Binding StockText}" Width="100"/><GridViewColumn Header="Lectura" DisplayMemberBinding="{Binding MovementNote}" Width="260"/></GridView></ListView.View></ListView></TabItem>
+            </TabControl>
+        </Grid>
     </Grid>
 </Window>

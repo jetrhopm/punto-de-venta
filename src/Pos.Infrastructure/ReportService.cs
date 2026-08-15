@@ -10,6 +10,10 @@ public sealed record CreditReportRow(Guid CustomerId, string Name, decimal Balan
 public sealed record PeriodSummaryRow(string Period, DateTimeOffset FromUtc, DateTimeOffset ToUtc, int SalesCount, decimal Total);
 public sealed record ProductAnalysisRow(Guid ProductId, string Code, string Description, string Category, string UnitOfMeasure, decimal QuantitySold, decimal TotalSold, decimal Stock, decimal MinimumStock, decimal MaximumStock);
 public sealed record SalesAnalysisResult(IReadOnlyList<PeriodSummaryRow> Periods, IReadOnlyList<ProductAnalysisRow> BestSellers, IReadOnlyList<ProductAnalysisRow> RestockNeeded, IReadOnlyList<ProductAnalysisRow> LowMovement, IReadOnlyList<ProductAnalysisRow> NoMovement);
+public sealed record DailySalesDashboardRow(DateTime Date, int SalesCount, decimal Total, decimal EstimatedProfit);
+public sealed record PaymentDashboardRow(string Method, decimal Total);
+public sealed record DepartmentDashboardRow(string Department, decimal Total, decimal EstimatedProfit);
+public sealed record SalesDashboardResult(decimal TotalSales, int SalesCount, decimal AverageSale, decimal EstimatedGrossProfit, decimal MarginPercent, IReadOnlyList<DailySalesDashboardRow> DailySales, IReadOnlyList<PaymentDashboardRow> Payments, IReadOnlyList<DepartmentDashboardRow> Departments);
 
 public sealed class ReportService(PosDbContext database)
 {
@@ -102,6 +106,72 @@ public sealed class ReportService(PosDbContext database)
             restockNeeded,
             lowMovement,
             noMovement);
+    }
+
+    public async Task<SalesDashboardResult?> SalesDashboardAsync(string token, DateTimeOffset startDate, DateTimeOffset endDate, CancellationToken cancellationToken)
+    {
+        if (await AuthorizedAsync(token, "ViewReports", cancellationToken) is null) return null;
+
+        var completedSales = database.Sales.AsNoTracking()
+            .Where(item => item.Status == "Completed")
+            .Where(item => item.CreatedAtUtc >= startDate)
+            .Where(item => item.CreatedAtUtc < endDate);
+
+        var totals = await completedSales
+            .GroupBy(_ => 1)
+            .Select(group => new { SalesCount = group.Count(), Total = group.Sum(item => item.Total) })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var dailySales = await completedSales
+            .Select(item => new { Date = item.CreatedAtUtc.Date, item.Total })
+            .GroupBy(item => item.Date)
+            .Select(group => new { Date = group.Key, SalesCount = group.Count(), Total = group.Sum(item => item.Total) })
+            .OrderBy(item => item.Date)
+            .ToListAsync(cancellationToken);
+
+        var lineRows = from line in database.SaleLines.AsNoTracking()
+                       join sale in completedSales on line.SaleId equals sale.Id
+                       join product in database.Products.AsNoTracking() on line.ProductId equals product.Id
+                       join department in database.Departments.AsNoTracking() on product.DepartmentId equals department.Id into departmentMatches
+                       from department in departmentMatches.DefaultIfEmpty()
+                       select new
+                       {
+                           Date = sale.CreatedAtUtc.Date,
+                           line.LineTotal,
+                           EstimatedProfit = (line.UnitPrice - product.Cost) * line.Quantity,
+                           Department = department == null ? product.Category : department.Name
+                       };
+
+        var profitByDay = await lineRows
+            .GroupBy(item => item.Date)
+            .Select(group => new { Date = group.Key, Profit = group.Sum(item => item.EstimatedProfit) })
+            .ToDictionaryAsync(item => item.Date, item => item.Profit, cancellationToken);
+
+        var departments = await lineRows
+            .GroupBy(item => item.Department)
+            .Select(group => new { Department = group.Key, Total = group.Sum(item => item.LineTotal), EstimatedProfit = group.Sum(item => item.EstimatedProfit) })
+            .OrderByDescending(item => item.Total)
+            .Take(12)
+            .ToListAsync(cancellationToken);
+
+        var payments = await (from payment in database.Payments.AsNoTracking()
+                              join sale in completedSales on payment.SaleId equals sale.Id
+                              group payment by payment.Method into grouped
+                              select new { Method = grouped.Key, Total = grouped.Sum(item => item.Amount) })
+            .OrderByDescending(item => item.Total)
+            .ToListAsync(cancellationToken);
+
+        var totalProfit = profitByDay.Values.Sum();
+        var totalSales = totals?.Total ?? 0m;
+        return new SalesDashboardResult(
+            totalSales,
+            totals?.SalesCount ?? 0,
+            totals is null || totals.SalesCount == 0 ? 0m : decimal.Round(totalSales / totals.SalesCount, 2),
+            decimal.Round(totalProfit, 2),
+            totalSales <= 0m ? 0m : decimal.Round(totalProfit / totalSales * 100m, 2),
+            dailySales.Select(item => new DailySalesDashboardRow(item.Date, item.SalesCount, item.Total, decimal.Round(profitByDay.GetValueOrDefault(item.Date), 2))).ToList(),
+            payments.Select(item => new PaymentDashboardRow(item.Method, item.Total)).ToList(),
+            departments.Select(item => new DepartmentDashboardRow(string.IsNullOrWhiteSpace(item.Department) ? "Sin departamento" : item.Department, item.Total, decimal.Round(item.EstimatedProfit, 2))).ToList());
     }
 
     public async Task<byte[]?> SalesCsvAsync(string token, DateTimeOffset startDate, DateTimeOffset endDate, CancellationToken cancellationToken)
