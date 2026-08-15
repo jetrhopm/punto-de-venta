@@ -11,6 +11,7 @@ $setupProjectRoot = Join-Path $root 'installer\Pos.Setup'
 $payload = Join-Path $setupProjectRoot 'Payload.zip'
 $output = Join-Path $root 'artifacts\installer'
 $published = Join-Path $root 'artifacts\production\setup'
+$assemblyVersion = if ($Version.Split('.').Count -eq 3) { "$Version.0" } else { $Version }
 
 if (-not (Test-Path $dotnet)) { throw 'No existe el SDK local.' }
 & (Join-Path $PSScriptRoot 'package-production.ps1')
@@ -23,7 +24,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 if (Test-Path $published) { Remove-Item $published -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $published, $output | Out-Null
-& $dotnet publish $setupProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:Version=$Version -o $published
+& $dotnet publish $setupProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:Version=$Version -p:AssemblyVersion=$assemblyVersion -p:FileVersion=$assemblyVersion -p:InformationalVersion=$Version -o $published
 if ($LASTEXITCODE -ne 0) { throw 'No se pudo publicar el instalador autocontenido.' }
 
 $setup = Join-Path $output 'Setup.exe'

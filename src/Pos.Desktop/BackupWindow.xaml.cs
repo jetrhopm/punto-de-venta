@@ -37,7 +37,8 @@ public partial class BackupWindow : Window
             using var response = await ApiClient.Client.GetAsync($"api/maintenance/backups/{Uri.EscapeDataString(backup.FileName)}");
             response.EnsureSuccessStatusCode();
             await File.WriteAllBytesAsync(dialog.FileName, await response.Content.ReadAsByteArrayAsync());
-            StatusText.Text = "Copia externa guardada. Conserva también el SHA-256 mostrado en la lista.";
+            await File.WriteAllTextAsync(dialog.FileName + ".sha256", backup.Sha256 + Environment.NewLine);
+            StatusText.Text = "Copia externa y comprobante SHA-256 guardados correctamente.";
         }
         catch (Exception exception) { StatusText.Text = $"No se pudo guardar la copia: {exception.Message}"; }
     }

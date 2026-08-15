@@ -28,6 +28,10 @@ Copy-Item (Join-Path $PSScriptRoot 'install-production.ps1') $productionScript -
 # Windows PowerShell 5.1 necesita BOM para interpretar UTF-8 de forma confiable.
 $productionScriptText = [IO.File]::ReadAllText($productionScript, [Text.Encoding]::UTF8)
 [IO.File]::WriteAllText($productionScript, $productionScriptText, [Text.UTF8Encoding]::new($true))
+$restoreScript = Join-Path $output 'restore-production-backup.ps1'
+Copy-Item (Join-Path $PSScriptRoot 'restore-production-backup.ps1') $restoreScript -Force
+$restoreScriptText = [IO.File]::ReadAllText($restoreScript, [Text.Encoding]::UTF8)
+[IO.File]::WriteAllText($restoreScript, $restoreScriptText, [Text.UTF8Encoding]::new($true))
 Copy-Item (Join-Path $root '.tools\vc_redist.x64.exe') (Join-Path $output 'vc_redist.x64.exe') -Force
 Copy-Item (Join-Path $root 'src\Pos.Desktop\Assets\Icons\app.ico') (Join-Path $output 'client\app.ico') -Force
 Write-Host "Publicacion de produccion preparada en $output"

@@ -20,6 +20,18 @@ La restauracion usa por defecto una base temporal llamada `punto_venta_restore_t
 
 No se debe apuntar a la base activa sin un procedimiento de mantenimiento y una copia previa. El script termina mostrando el numero de productos restaurados.
 
+## Restauracion en otra computadora
+
+1. En la computadora anterior, crea el respaldo desde **Configuracion > Respaldos** y usa **Guardar copia externa**. Conserva juntos `archivo.dump` y `archivo.dump.sha256`.
+2. Instala JetVenta en la computadora nueva y deja que complete la configuración técnica.
+3. Cierra JetVenta. Abre PowerShell como administrador y ejecuta:
+
+```powershell
+& "C:\Program Files\JetVenta\restore-production-backup.ps1" -BackupFile "E:\archivo.dump" -Approve
+```
+
+El script valida el checksum antes de cambiar nada, hace una copia preventiva de la base de destino en `C:\ProgramData\PuntoDeVenta\backups`, sustituye solo la base de datos JetVenta y reinicia la API. El contenido de la base, incluidos usuarios, permisos, productos, clientes, proveedores, compras, ventas, turnos, cortes y movimientos, queda restaurado. La impresora se configura nuevamente en el equipo destino.
+
 ## Diagnostico
 
 ```powershell

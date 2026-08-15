@@ -28,9 +28,9 @@ La API ejecuta el `pg_dump.exe` incluido con PostgreSQL y guarda un respaldo en 
 - checksum SHA-256 en `.sha256`;
 - manifiesto JSON con fecha y tamano.
 
-Desde la pantalla se puede crear un respaldo y guardar una copia en disco externo o ubicacion de red. El permiso requerido es `ImportOrExportData`.
+Desde la pantalla se puede crear un respaldo y guardar una copia en disco externo o ubicacion de red. La copia externa lleva el `.dump` y su archivo vecino `.dump.sha256`; ambos deben conservarse juntos. El permiso requerido es `ImportOrExportData`.
 
-La restauracion deliberadamente no se ejecuta con un boton dentro del programa abierto. Debe detener servicios, comprobar la version y restaurar primero en una base temporal mediante el procedimiento administrativo documentado.
+La restauracion deliberadamente no se ejecuta con un boton dentro del programa abierto. En otra computadora se instala JetVenta primero, se copian los dos archivos del respaldo y se ejecuta como administrador `restore-production-backup.ps1 -BackupFile "D:\respaldo.dump" -Approve` desde la carpeta de instalación. La herramienta verifica el SHA-256, crea antes una copia preventiva de la base de destino y reinicia la API. La impresora se selecciona de nuevo porque es una preferencia local de cada caja.
 
 ## Importacion de productos e inventario
 
