@@ -22,7 +22,7 @@
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                 <Button Style="{StaticResource ActionButton}" Click="OnRefreshClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="Refresh" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Actualizar"/></StackPanel></Button>
-                <Button Style="{StaticResource ActionButton}" Click="OnAdjustmentClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="PlusMinusBoxOutline" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Ajustar existencia"/></StackPanel></Button>
+                <Button Style="{StaticResource ActionButton}" Click="OnAdjustmentClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="PlusMinusBox" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Ajustar existencia"/></StackPanel></Button>
                 <Button Style="{StaticResource ActionButton}" Click="OnImportClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="FileImportOutline" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Importar"/></StackPanel></Button>
                 <Button Style="{StaticResource ActionButton}" Click="OnExportClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="FileExportOutline" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Exportar"/></StackPanel></Button>
                 <Button Style="{StaticResource ActionButton}" Click="OnMovementsClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="TimelineClockOutline" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Movimientos"/></StackPanel></Button>
