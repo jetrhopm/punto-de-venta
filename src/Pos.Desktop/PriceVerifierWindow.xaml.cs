@@ -39,11 +39,11 @@ public partial class PriceVerifierWindow : Window
         try
         {
             var products = await ApiClient.Client.GetFromJsonAsync<List<ProductLookupResult>>($"/api/products/search?q={Uri.EscapeDataString(code)}") ?? [];
-            var product = products.FirstOrDefault(item => string.Equals(item.Code, code, StringComparison.OrdinalIgnoreCase)) ?? products.FirstOrDefault();
+            var product = products.FirstOrDefault(item => string.Equals(item.Code.Trim(), code, StringComparison.OrdinalIgnoreCase));
             if (product is null)
             {
-                ProductNameText.Text = "Producto no encontrado";
-                ProductCodeText.Text = code;
+                ProductNameText.Text = "Código no encontrado";
+                ProductCodeText.Text = $"Código de barras: {code}";
                 ProductPriceText.Text = "$0.00";
                 ProductStockText.Text = "0";
                 ProductAvailabilityText.Text = "No encontrado";
@@ -55,8 +55,8 @@ public partial class PriceVerifierWindow : Window
                 return;
             }
 
-            ProductNameText.Text = product.Description;
-            ProductCodeText.Text = $"Código: {product.Code}";
+            ProductNameText.Text = GetDisplayName(product);
+            ProductCodeText.Text = $"Código de barras: {product.Code}";
             ProductPriceText.Text = $"${product.Price:0.00}";
             ProductStockText.Text = $"{product.Stock:0.###} {product.UnitOfMeasure}";
             var available = product.Stock > 0m;
@@ -75,6 +75,16 @@ public partial class PriceVerifierWindow : Window
         {
             StatusText.Text = "No se pudo consultar el catálogo.";
         }
+    }
+
+    private static string GetDisplayName(ProductLookupResult product)
+    {
+        var description = product.Description?.Trim() ?? string.Empty;
+        return string.IsNullOrWhiteSpace(description) ||
+            string.Equals(description, product.Code, StringComparison.OrdinalIgnoreCase) ||
+            description.All(char.IsDigit)
+            ? "Producto sin descripción registrada"
+            : description;
     }
 
     private sealed record ProductLookupResult(Guid Id, string Code, string Description, decimal Price, decimal Stock, string UnitOfMeasure);

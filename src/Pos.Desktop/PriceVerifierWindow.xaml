@@ -17,8 +17,9 @@
         <TextBox Grid.Row="1" x:Name="CodeBox" Height="42" Margin="0,20,0,16" FontSize="18" Padding="10,5" KeyDown="OnCodeKeyDown" ToolTip="Escanea o escribe el código y presiona Enter"/>
         <Border Grid.Row="2" Background="#F3F8FB" BorderBrush="#D8E4EC" BorderThickness="1" CornerRadius="6" Padding="18">
             <StackPanel>
-                <TextBlock x:Name="ProductNameText" Text="Escanea un producto" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                <TextBlock x:Name="ProductCodeText" Text="" FontSize="14" Foreground="#526577" Margin="0,8,0,0"/>
+                <TextBlock Text="Producto" FontSize="12" Foreground="#526577"/>
+                <TextBlock x:Name="ProductNameText" Text="Escanea un producto" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                <TextBlock x:Name="ProductCodeText" Text="Código de barras: -" FontSize="14" Foreground="#526577" Margin="0,8,0,0"/>
                 <TextBlock x:Name="ProductPriceText" Text="$0.00" FontSize="42" FontWeight="Bold" Foreground="#146CB0" Margin="0,20,0,0"/>
                 <Grid Margin="0,14,0,0">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
