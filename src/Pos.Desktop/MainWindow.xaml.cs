@@ -80,7 +80,8 @@ public partial class MainWindow : Window
             }
             if (section == "Productos") { var window = new ProductCatalogWindow { Owner = this }; window.ShowDialog(); return; }
             if (section == "Inventario") { OpenInventory(); return; }
-            if (section == "Clientes" || section == "Creditos") { OpenCustomers(); return; }
+            if (section == "Clientes") { OpenCustomers(); return; }
+            if (section == "Creditos") { OpenCustomers(creditMode: true); return; }
             if (section == "Compras") { var window = new PurchaseWindow { Owner = this }; window.ShowDialog(); return; }
             if (section == "Reportes") { var window = new ReportsWindow { Owner = this }; window.ShowDialog(); return; }
             if (section == "Historial") { var window = new SalesHistoryWindow { Owner = this }; window.ShowDialog(); return; }
@@ -103,7 +104,7 @@ public partial class MainWindow : Window
         var section = e.Key switch
         {
             Key.F1 => "Ventas",
-            Key.F2 => "Clientes",
+            Key.F2 => "Creditos",
             Key.F3 => "Productos",
             Key.F4 => "Inventario",
             _ => null
@@ -113,6 +114,7 @@ public partial class MainWindow : Window
         {
             if (!HasPermissionFor(section)) { StatusText.Text = "No tienes permiso para abrir este modulo."; e.Handled = true; return; }
             if (section == "Clientes") { OpenCustomers(); e.Handled = true; return; }
+            if (section == "Creditos") { OpenCustomers(creditMode: true); e.Handled = true; return; }
             if (section == "Productos") { new ProductCatalogWindow { Owner = this }.ShowDialog(); e.Handled = true; return; }
             if (section == "Inventario") { OpenInventory(); e.Handled = true; return; }
             NavigateTo(section);
@@ -1055,9 +1057,9 @@ public partial class MainWindow : Window
         StatusText.Text = $"Navegacion activa: {section}.";
     }
 
-    private void OpenCustomers()
+    private void OpenCustomers(bool creditMode = false)
     {
-        var window = new CustomerWindow { Owner = this };
+        var window = new CustomerWindow(creditMode: creditMode) { Owner = this };
         window.ShowDialog();
         CurrentSectionText.Text = "Ventas";
     }
