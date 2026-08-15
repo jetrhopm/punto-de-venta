@@ -24,6 +24,7 @@ public partial class CashWindow : Window
         InitializeComponent();
         _total = decimal.Round(total, 2);
         CustomerId = selectedCustomerId;
+        CreditButton.IsEnabled = SessionContext.IsAdministrator || SessionContext.HasPermission("SellOnCredit");
         _controlsReady = true;
         TotalText.Text = $"Total: ${_total:0.00}";
         ItemsText.Text = $"Artículos: {totalItems:0.###}";
@@ -81,6 +82,11 @@ public partial class CashWindow : Window
 
     private void OnCreditClick(object sender, RoutedEventArgs e)
     {
+        if (!SessionContext.IsAdministrator && !SessionContext.HasPermission("SellOnCredit"))
+        {
+            MessageText.Text = "No tienes permiso para cobrar a crédito.";
+            return;
+        }
         if (CustomerId is null)
         {
             var customers = new CustomerWindow(true) { Owner = this };

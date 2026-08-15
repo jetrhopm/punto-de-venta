@@ -3,6 +3,8 @@ namespace Pos.Domain;
 public enum Permission
 {
     Sell,
+    SellOnCredit,
+    UseCommonProduct,
     ViewProducts,
     ManageProducts,
     ChangeSalePrice,

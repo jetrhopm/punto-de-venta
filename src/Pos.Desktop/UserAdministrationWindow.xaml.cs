@@ -8,34 +8,36 @@ public partial class UserAdministrationWindow : Window
 {
     private static readonly PermissionOption[] PermissionOptions =
     [
-        new("Sell", "Registrar ventas y cobrar", PermissionGroup.Sales),
+        new("Sell", "Vender y cobrar tickets", PermissionGroup.Sales),
+        new("SellOnCredit", "Cobrar a crédito", PermissionGroup.Sales),
+        new("UseCommonProduct", "Utilizar producto común", PermissionGroup.Sales),
         new("ChangeSalePrice", "Cambiar precio durante la venta", PermissionGroup.Sales),
-        new("ApplyDiscounts", "Aplicar descuentos y promociones", PermissionGroup.Sales),
-        new("UseWholesalePrice", "Usar precio de mayoreo", PermissionGroup.Sales),
+        new("ApplyDiscounts", "Aplicar descuentos", PermissionGroup.Sales),
+        new("UseWholesalePrice", "Aplicar precio de mayoreo", PermissionGroup.Sales),
         new("CancelSaleLines", "Eliminar productos del ticket", PermissionGroup.Sales),
         new("CancelSales", "Cancelar ventas confirmadas", PermissionGroup.Sales),
         new("ProcessReturns", "Procesar devoluciones", PermissionGroup.Sales),
         new("ReprintTickets", "Reimprimir tickets", PermissionGroup.Sales),
         new("OpenCashDrawer", "Abrir cajón de dinero", PermissionGroup.Sales),
-        new("RecordCashMovements", "Registrar entradas y salidas de efectivo", PermissionGroup.Sales),
-        new("ViewSalesHistory", "Consultar historial de tickets", PermissionGroup.Sales),
-        new("OpenShift", "Abrir turno", PermissionGroup.Sales),
-        new("CloseShift", "Realizar corte de caja", PermissionGroup.Sales),
-        new("ViewPreviousShifts", "Consultar cortes anteriores", PermissionGroup.Sales),
+        new("RecordCashMovements", "Registrar entrada F7 y salida F8 de efectivo", PermissionGroup.Sales),
+        new("ViewSalesHistory", "Revisar historial de ventas", PermissionGroup.Sales),
 
-        new("ManageCustomersAndCredit", "Administrar clientes, crédito y abonos", PermissionGroup.Customers),
+        new("ManageCustomersAndCredit", "Crear, modificar, desactivar clientes; asignar clientes, crédito, cuenta, abonos y reportes", PermissionGroup.Customers),
 
         new("ViewProducts", "Consultar catálogo de productos", PermissionGroup.Products),
-        new("ManageProducts", "Crear, editar, eliminar productos, departamentos, kits y promociones", PermissionGroup.Products),
+        new("ManageProducts", "Crear, modificar y eliminar productos; administrar departamentos, kits y promociones", PermissionGroup.Products),
 
-        new("ViewInventory", "Consultar existencias, kardex y reporte de inventario", PermissionGroup.Inventory),
+        new("ViewInventory", "Ver existencias, mínimos, máximos y movimientos de inventario", PermissionGroup.Inventory),
         new("AdjustInventory", "Ajustar inventario y modificar mínimos o máximos", PermissionGroup.Inventory),
         new("ViewCostsAndProfit", "Ver costos, utilidad y valor del inventario", PermissionGroup.Inventory),
         new("ImportOrExportData", "Importar o exportar inventario y crear respaldos", PermissionGroup.Inventory),
 
+        new("OpenShift", "Abrir turno", PermissionGroup.Other),
+        new("CloseShift", "Realizar corte del turno propio y ver efectivo esperado", PermissionGroup.Other),
+        new("ViewPreviousShifts", "Consultar cortes de cajeros y corte consolidado del día", PermissionGroup.Other),
         new("ManageSuppliersAndPurchases", "Administrar proveedores y compras", PermissionGroup.Other),
         new("ProcessServicePayments", "Realizar recargas y pagos de servicios", PermissionGroup.Other),
-        new("ViewReports", "Ver reportes y análisis de ventas", PermissionGroup.Other),
+        new("ViewReports", "Acceder a reportes de ventas, ganancias y análisis", PermissionGroup.Other),
         new("ConfigurePrinters", "Configurar impresoras y formato de ticket", PermissionGroup.Other),
         new("ConfigureStore", "Configurar datos de la tienda", PermissionGroup.Other),
         new("ManageUsers", "Administrar usuarios y permisos", PermissionGroup.Other)

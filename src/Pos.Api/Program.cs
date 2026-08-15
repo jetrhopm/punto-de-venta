@@ -281,7 +281,8 @@ app.MapPost("/api/products/quick-sale", async (HttpRequest request, ProductComma
     if (session is null) return Results.Unauthorized();
     var user = await database.Users.AsNoTracking().SingleOrDefaultAsync(item => item.Id == session.UserId && item.IsActive, cancellationToken);
     if (user is null) return Results.Unauthorized();
-    var allowed = user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "Sell", cancellationToken);
+    var requiredPermission = command.IsCommonProduct ? "UseCommonProduct" : "ManageProducts";
+    var allowed = user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == requiredPermission, cancellationToken);
     if (!allowed) return Results.StatusCode(StatusCodes.Status403Forbidden);
     if (string.IsNullOrWhiteSpace(command.Code) || string.IsNullOrWhiteSpace(command.Description) || command.Price < 0m) return Results.ValidationProblem(new Dictionary<string, string[]> { ["product"] = ["Codigo, descripcion y precio valido son obligatorios."] });
 
@@ -376,6 +377,7 @@ app.MapPost("/api/sales/complete", async (HttpRequest request, CompleteSaleComma
 {
     try { var result = await sales.CompleteAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["sale"] = [exception.Message] }); }
+    catch (UnauthorizedAccessException) { return Results.Forbid(); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 

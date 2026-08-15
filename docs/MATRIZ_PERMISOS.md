@@ -6,33 +6,32 @@ Los administradores tienen acceso completo. Los cajeros reciben únicamente los 
 
 | Permiso | Permite |
 | --- | --- |
-| `Sell` | Registrar ventas y cobrar. |
+| `Sell` | Vender y cobrar tickets. |
+| `SellOnCredit` | Cobrar a crédito; además requiere un cliente activo con crédito habilitado. |
+| `UseCommonProduct` | Utilizar producto común o registrar rápidamente un código no encontrado. |
 | `ChangeSalePrice` | Cambiar el precio durante la venta. |
-| `ApplyDiscounts` | Aplicar descuentos y promociones. |
+| `ApplyDiscounts` | Aplicar descuentos. |
 | `UseWholesalePrice` | Usar precio de mayoreo. |
 | `CancelSaleLines` | Eliminar productos del ticket. |
 | `CancelSales` | Cancelar ventas confirmadas. |
 | `ProcessReturns` | Procesar devoluciones. |
 | `ReprintTickets` | Reimprimir tickets. |
 | `OpenCashDrawer` | Abrir el cajón de dinero. |
-| `RecordCashMovements` | Registrar entradas y salidas de efectivo. |
-| `ViewSalesHistory` | Consultar historial de tickets. |
-| `OpenShift` | Abrir turno. |
-| `CloseShift` | Realizar corte de caja. |
-| `ViewPreviousShifts` | Consultar cortes anteriores. |
+| `RecordCashMovements` | Registrar entrada F7 y salida F8 de efectivo. |
+| `ViewSalesHistory` | Revisar historial de ventas. |
 
 ## Clientes
 
 | Permiso | Permite |
 | --- | --- |
-| `ManageCustomersAndCredit` | Administrar clientes, crédito y abonos. |
+| `ManageCustomersAndCredit` | Crear, modificar y desactivar clientes; asignarlos a ventas; administrar crédito, cuenta, abonos y reportes. |
 
 ## Productos
 
 | Permiso | Permite |
 | --- | --- |
 | `ViewProducts` | Consultar el catálogo de productos. |
-| `ManageProducts` | Crear, editar y eliminar productos, departamentos, kits y promociones. |
+| `ManageProducts` | Crear, modificar y eliminar productos; administrar departamentos, kits y promociones. |
 
 ## Inventario
 
@@ -47,9 +46,12 @@ Los administradores tienen acceso completo. Los cajeros reciben únicamente los 
 
 | Permiso | Permite |
 | --- | --- |
+| `OpenShift` | Abrir turno. |
+| `CloseShift` | Realizar el corte del turno propio y consultar el efectivo esperado. |
+| `ViewPreviousShifts` | Consultar cortes de cajeros y el corte consolidado del día. No cierra turnos ajenos. |
 | `ManageSuppliersAndPurchases` | Administrar proveedores y compras. |
 | `ProcessServicePayments` | Realizar recargas y pagos de servicios. |
-| `ViewReports` | Consultar reportes y análisis de ventas. |
+| `ViewReports` | Acceder a reportes de ventas, ganancias y análisis. |
 | `ConfigurePrinters` | Configurar impresoras y formato de ticket. |
 | `ConfigureStore` | Configurar datos de la tienda. |
 | `ManageUsers` | Administrar usuarios y permisos. |

@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Pos.Infrastructure;
 
-public sealed record ProductCommand(string Code, string Description, decimal Price, decimal Cost = 0m, decimal ProfitPercent = 20m, decimal WholesalePrice = 0m, decimal WholesaleProfitPercent = 0m, decimal WholesaleMinimumQuantity = 0m, bool IsKit = false, string UnitOfMeasure = "Pieza", Guid? DepartmentId = null);
+public sealed record ProductCommand(string Code, string Description, decimal Price, decimal Cost = 0m, decimal ProfitPercent = 20m, decimal WholesalePrice = 0m, decimal WholesaleProfitPercent = 0m, decimal WholesaleMinimumQuantity = 0m, bool IsKit = false, string UnitOfMeasure = "Pieza", Guid? DepartmentId = null, bool IsCommonProduct = false);
 public sealed record DepartmentCommand(string Name);
 public sealed record ProductResult(Guid Id, string Code, string Description, decimal Price, decimal Cost, decimal ProfitPercent, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleMinimumQuantity, Guid? DepartmentId, bool IsKit, string UnitOfMeasure, bool IsActive);
 public sealed record CatalogProductResult(Guid Id, string Code, string Description, string Department, Guid? DepartmentId, decimal Cost, decimal Price, decimal ProfitPercent, decimal ProfitAmount, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleProfitAmount, decimal WholesaleMinimumQuantity, decimal Stock, decimal MinimumStock, decimal MaximumStock, string UnitOfMeasure, bool IsKit, bool IsActive);

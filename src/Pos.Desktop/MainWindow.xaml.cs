@@ -241,7 +241,7 @@ public partial class MainWindow : Window
         ShowPendingFeature("Producto varios");
 
     private void OnCommonProductClick(object sender, RoutedEventArgs e) =>
-        ShowPendingFeature("Articulo comun");
+        StatusText.Text = SessionContext.HasPermission("UseCommonProduct") ? "Producto común disponible al registrar un código no encontrado." : "No tienes permiso para utilizar producto común.";
 
     private void OnProductLookupClick(object sender, RoutedEventArgs e) =>
         OpenProductLookup();
@@ -498,9 +498,18 @@ public partial class MainWindow : Window
             return;
         }
 
+        var isCommonProduct = window.Decision == MissingProductDecision.CommonProduct;
+        var requiredPermission = isCommonProduct ? "UseCommonProduct" : "ManageProducts";
+        if (!SessionContext.HasPermission(requiredPermission))
+        {
+            StatusText.Text = isCommonProduct ? "No tienes permiso para utilizar producto común." : "No tienes permiso para registrar productos desde una venta.";
+            FocusProductInput();
+            return;
+        }
+
         try
         {
-            var command = new { code = window.ProductCode, description = window.ProductDescription, price = window.Price, unitOfMeasure = window.UnitOfMeasure };
+            var command = new { code = window.ProductCode, description = window.ProductDescription, price = window.Price, unitOfMeasure = window.UnitOfMeasure, isCommonProduct };
             using var response = await Client.PostAsJsonAsync("/api/products/quick-sale", command);
             if (!response.IsSuccessStatusCode)
             {
