@@ -284,7 +284,17 @@ public partial class MainWindow : Window
         try
         {
             using var response = await Client.PostAsJsonAsync("/api/shifts/cash-movements", new { type = window.Type, amount = window.Amount.Value, reason = window.Reason });
-            StatusText.Text = response.IsSuccessStatusCode ? "Movimiento de efectivo registrado." : await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
+            StatusText.Text = "Movimiento de efectivo registrado.";
+            if (window.Type == "Out")
+            {
+                if (string.IsNullOrWhiteSpace(ApiClient.PrinterName)) StatusText.Text += " No hay impresora configurada; no se imprimió comprobante.";
+                else
+                {
+                    try { TicketWindowsPrinter.PrintCashMovement(ApiClient.PrinterName, window.Amount.Value, window.Type, window.Reason, window.ProviderName, TicketWindowsPrinter.CurrentProfile); StatusText.Text += " Comprobante enviado a la impresora."; }
+                    catch (Exception exception) { StatusText.Text += $" La salida quedó registrada, pero no se pudo imprimir: {exception.Message}"; }
+                }
+            }
         }
         catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API."; }
     }

@@ -145,6 +145,26 @@ public static class TicketWindowsPrinter
         writer.Write(document.DocumentPaginator, validatedTicket);
     }
 
+    public static void PrintCashMovement(string printerName, decimal amount, string type, string reason, string? providerName, TicketPrintProfile profile)
+    {
+        var detail = string.IsNullOrWhiteSpace(providerName) ? reason : $"{reason} ({providerName})";
+        var movementLabel = type.Equals("Out", StringComparison.OrdinalIgnoreCase) ? "salida" : "entrada";
+        var ticket = new TicketPdfData(
+            "JETVENTA",
+            Guid.Empty,
+            DateTimeOffset.Now,
+            [new TicketPdfLine(detail, 1m, amount, amount)],
+            amount,
+            amount,
+            0m)
+        {
+            Header = $"Comprobante de {movementLabel} de efectivo",
+            Footer = "Conserve este comprobante",
+            WidthMm = profile.WidthMm
+        };
+        Print(printerName, ticket, profile, $"Movimiento de efectivo {DateTime.Now:yyyyMMddHHmmss}");
+    }
+
     private static TextBlock Text(string value, double size, FontWeight weight, TextAlignment alignment, Thickness margin) => new()
     {
         Text = value,
