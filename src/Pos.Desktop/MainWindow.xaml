@@ -78,9 +78,9 @@
             <Grid.ColumnDefinitions><ColumnDefinition Width="132"/><ColumnDefinition Width="*"/><ColumnDefinition Width="310"/></Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0">
-                <Button Style="{StaticResource RailButton}" Click="OnNewTicketClick"><StackPanel><icons:PackIconMaterial Kind="PlusBoxOutline" Width="25" Height="25" HorizontalAlignment="Center" Foreground="{StaticResource PrimaryBrush}"/><TextBlock Text="Nuevo ticket" Margin="0,4,0,0"/></StackPanel></Button>
+                <Button Style="{StaticResource RailButton}" Click="OnNewTicketClick"><StackPanel><icons:PackIconMaterial Kind="PlusBoxOutline" Width="25" Height="25" HorizontalAlignment="Center" Foreground="{StaticResource PrimaryBrush}"/><TextBlock Text="Nuevo ticket (F6)" Margin="0,4,0,0" TextWrapping="Wrap" TextAlignment="Center"/></StackPanel></Button>
                 <Button Style="{StaticResource RailButton}" Click="OnSalesActionClick"><StackPanel><icons:PackIconMaterial Kind="ContentSaveOutline" Width="25" Height="25" HorizontalAlignment="Center" Foreground="{StaticResource PrimaryBrush}"/><TextBlock Text="Guardar orden" Margin="0,4,0,0"/></StackPanel></Button>
-                <Button Style="{StaticResource RailButton}" Click="OnDiscardTicketClick"><StackPanel><icons:PackIconMaterial Kind="Cancel" Width="25" Height="25" HorizontalAlignment="Center" Foreground="{StaticResource DangerBrush}"/><TextBlock Text="Descartar ticket" Margin="0,4,0,0"/></StackPanel></Button>
+                <Button Style="{StaticResource RailButton}" Click="OnDiscardTicketClick"><StackPanel><icons:PackIconMaterial Kind="Cancel" Width="25" Height="25" HorizontalAlignment="Center" Foreground="{StaticResource DangerBrush}"/><TextBlock Text="Descartar ticket (Ctrl+1)" Margin="0,4,0,0" TextWrapping="Wrap" TextAlignment="Center"/></StackPanel></Button>
                 <Button Style="{StaticResource RailButton}" Click="OnSalesActionClick"><StackPanel><icons:PackIconMaterial Kind="AccountSearchOutline" Width="25" Height="25" HorizontalAlignment="Center" Foreground="{StaticResource PrimaryBrush}"/><TextBlock Text="Buscar cliente" Margin="0,4,0,0"/></StackPanel></Button>
                 <Button Style="{StaticResource RailButton}" Click="OnReturnLastSaleClick"><StackPanel><icons:PackIconMaterial Kind="UndoVariant" Width="25" Height="25" HorizontalAlignment="Center" Foreground="{StaticResource WarningBrush}"/><TextBlock Text="Devolución" Margin="0,4,0,0"/></StackPanel></Button>
                 <Button Style="{StaticResource RailButton}" Click="OnPairingCodeClick"><StackPanel><icons:PackIconMaterial Kind="LinkVariant" Width="25" Height="25" HorizontalAlignment="Center" Foreground="#7C5799"/><TextBlock Text="Código de caja" Margin="0,4,0,0"/></StackPanel></Button>
@@ -110,16 +110,20 @@
                         <Button Style="{StaticResource SalesToolbarButton}" Click="OnPriceVerifierClick" ToolTip="F9 - Verificador"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="BarcodeScan" Width="18" Height="18" Margin="0,0,5,0" Foreground="#7C5799"/><TextBlock Text="F9 Verificador"/></StackPanel></Button>
                     </DockPanel>
 
-                    <TabControl Grid.Row="2" x:Name="TicketTabs" Margin="0,14,0,0" Height="39" SelectionChanged="OnTicketSelectionChanged">
-                        <TabControl.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal" Margin="4,0">
-                                    <icons:PackIconMaterial Kind="ReceiptTextOutline" Width="17" Height="17" Margin="0,0,6,0" Foreground="{StaticResource PrimaryBrush}"/>
-                                    <TextBlock Text="{Binding Title}" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </DataTemplate>
-                        </TabControl.ItemTemplate>
-                    </TabControl>
+                    <Grid Grid.Row="2" Margin="0,14,0,0">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="39"/></Grid.RowDefinitions>
+                        <TextBlock Text="F5: cambiar entre tickets" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Margin="2,0,0,3"/>
+                        <TabControl Grid.Row="1" x:Name="TicketTabs" ToolTip="F5: cambiar entre tickets" SelectionChanged="OnTicketSelectionChanged">
+                            <TabControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="4,0">
+                                        <icons:PackIconMaterial Kind="ReceiptTextOutline" Width="17" Height="17" Margin="0,0,6,0" Foreground="{StaticResource PrimaryBrush}"/>
+                                        <TextBlock Text="{Binding Title}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </TabControl.ItemTemplate>
+                        </TabControl>
+                    </Grid>
 
                     <ListView Grid.Row="3" x:Name="CartList" Margin="0,10,0,14" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Background="#FBFDFF" KeyDown="OnCartKeyDown">
                         <ListView.View>
