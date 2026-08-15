@@ -75,7 +75,7 @@ public partial class MainWindow : Window
             if (section == "Corte")
             {
                 var window = new CutWindow { Owner = this };
-                if (window.ShowDialog() == true && window.RequestCloseShift) _ = CloseShiftFromDialogAsync();
+                if (window.ShowDialog() == true && window.RequestCloseShift) _ = CloseShiftFromDialogAsync(openNewShift: true);
                 return;
             }
             if (section == "Productos") { var window = new ProductCatalogWindow { Owner = this }; window.ShowDialog(); return; }
@@ -331,20 +331,24 @@ public partial class MainWindow : Window
 
     private async void OnCloseShiftClick(object sender, RoutedEventArgs e)
     {
-        await CloseShiftFromDialogAsync();
+        await CloseShiftFromDialogAsync(openNewShift: true);
     }
 
-    private async Task<bool> CloseShiftFromDialogAsync()
+    private async Task<bool> CloseShiftFromDialogAsync(bool openNewShift = false)
     {
         if (!SessionContext.HasPermission("CloseShift")) { StatusText.Text = "No tienes permiso para cerrar turnos."; return false; }
-        using var summaryResponse = await Client.GetAsync("/api/shifts/summary");
+        HttpResponseMessage summaryResponse;
+        try { summaryResponse = await Client.GetAsync("/api/shifts/summary"); }
+        catch (HttpRequestException) { StatusText.Text = "No se pudo consultar la caja. La API sigue sin responder y el turno no se cerró."; return false; }
         if (!summaryResponse.IsSuccessStatusCode)
         {
             StatusText.Text = await ReadApiMessageAsync(summaryResponse);
+            summaryResponse.Dispose();
             return false;
         }
 
         var summary = await summaryResponse.Content.ReadFromJsonAsync<ShiftSummaryResponse>();
+        summaryResponse.Dispose();
         if (summary is null) { StatusText.Text = "No se pudo calcular el efectivo esperado."; return false; }
         var window = new CloseShiftWindow(summary.ExpectedCash) { Owner = this };
         if (window.ShowDialog() != true || window.CountedCash is null) return false;
@@ -356,6 +360,16 @@ public partial class MainWindow : Window
             if (result is null) { StatusText.Text = "Turno cerrado."; return true; }
             StatusText.Text = $"Turno cerrado. Diferencia: ${result.Difference:0.00}";
             new ShiftCloseSummaryWindow(result.ExpectedCash, result.CountedCash, result.Difference) { Owner = this }.ShowDialog();
+            if (openNewShift)
+            {
+                _tickets.Clear();
+                _activeTicket = null;
+                CartList.ItemsSource = _emptyCart;
+                CurrentCustomerText.Text = "Cliente actual: público en general";
+                UpdateSaleSummary();
+                StatusText.Text = "Turno cerrado. Captura el fondo inicial del nuevo turno para continuar.";
+                if (await OpenShiftFromDialogAsync()) await LoadSaleDraftsAsync();
+            }
             return true;
         }
         catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API."; return false; }

@@ -164,20 +164,13 @@
                         <TextBlock x:Name="SaleTotalText" Text="$0.00" FontSize="38" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
                         <TextBlock x:Name="SaleItemsText" Text="Artículos: 0" HorizontalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" Margin="0,2,0,15"/>
                     </StackPanel>
-                    <Button Grid.Row="1" Style="{StaticResource PaymentButton}" Height="64" Click="OnChargeClick"><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><icons:PackIconMaterial Kind="CashRegister" Width="25" Height="25" Margin="0,0,8,0" Foreground="{StaticResource SuccessBrush}"/><TextBlock Text="Seleccionar forma de pago" VerticalAlignment="Center"/></StackPanel></Button>
                     <StackPanel Grid.Row="2" Margin="0,18,0,0">
-                        <TextBlock Text="Cliente actual" FontWeight="SemiBold" Margin="3,0,0,5"/>
-                        <Button Click="OnSelectCustomerClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="AccountOutline" Width="20" Height="20" Margin="0,0,7,0"/><TextBlock x:Name="CurrentCustomerText" Text="Seleccionar cliente" VerticalAlignment="Center"/></StackPanel></Button>
+                        <TextBlock x:Name="CurrentCustomerText" Text="Cliente actual: público en general" FontWeight="SemiBold" Margin="3,0,0,5"/>
                         <Button Style="{StaticResource SuccessButtonStyle}" Height="72" Margin="3,15,3,4" Click="OnChargeClick"><StackPanel><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><icons:PackIconMaterial Kind="CashRegister" Width="24" Height="24" Margin="0,0,8,0"/><TextBlock Text="COBRAR" FontSize="18" FontWeight="Bold"/></StackPanel><TextBlock Text="F12" FontSize="12" HorizontalAlignment="Center" Margin="0,2,0,0"/></StackPanel></Button>
                         <UniformGrid Columns="2">
                             <Button Click="OnChargeClick"><StackPanel><icons:PackIconMaterial Kind="ReceiptTextOutline" Width="21" Height="21" HorizontalAlignment="Center"/><TextBlock Text="Ticket rápido" FontSize="11"/></StackPanel></Button>
                             <Button Click="OnSalesActionClick"><StackPanel><icons:PackIconMaterial Kind="PrinterOutline" Width="21" Height="21" HorizontalAlignment="Center"/><TextBlock Text="Último ticket" FontSize="11"/></StackPanel></Button>
                         </UniformGrid>
-                    </StackPanel>
-                    <StackPanel Grid.Row="4">
-                        <Separator Margin="0,14,0,10"/>
-                        <Button Click="OnCloseShiftClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ClipboardCheckOutline" Width="19" Height="19" Margin="0,0,7,0"/><TextBlock Text="Realizar corte"/></StackPanel></Button>
-                        <Button Click="OnExitClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="LogoutVariant" Width="19" Height="19" Margin="0,0,7,0" Foreground="{StaticResource DangerBrush}"/><TextBlock Text="Cerrar sesión"/></StackPanel></Button>
                     </StackPanel>
                 </Grid>
             </Border>
