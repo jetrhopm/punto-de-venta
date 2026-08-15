@@ -338,22 +338,22 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnSearchButtonClick(object sender, RoutedEventArgs e)
+    private async void OnSearchButtonClick(object sender, RoutedEventArgs e)
     {
-        if (ProductResultsList.Items.Count == 1) { ProductResultsList.SelectedIndex = 0; AddSelectedProduct(); }
+        if (ProductResultsList.Items.Count == 1) { ProductResultsList.SelectedIndex = 0; await AddSelectedProductAsync(); }
         else StatusText.Text = ProductResultsList.Items.Count == 0 ? "No hay productos para agregar." : "Selecciona un producto de la lista.";
         FocusProductInput();
     }
 
-    private void OnProductSelected(object sender, MouseButtonEventArgs e)
+    private async void OnProductSelected(object sender, MouseButtonEventArgs e)
     {
-        AddSelectedProduct();
+        await AddSelectedProductAsync();
     }
 
-    private void AddSelectedProduct()
+    private async Task AddSelectedProductAsync()
     {
         if (ProductResultsList.SelectedItem is not ProductSearchRow row) return;
-        AddProductToCart(row.Product);
+        await AddProductToCartAsync(row.Product);
     }
 
     private async Task HandleProductEntryAsync(string query)
@@ -370,13 +370,13 @@ public partial class MainWindow : Window
             var exact = results.FirstOrDefault(item => string.Equals(item.Code, query, StringComparison.OrdinalIgnoreCase));
             if (exact is not null)
             {
-                AddProductToCart(exact);
+                await AddProductToCartAsync(exact);
                 return;
             }
 
             if (results.Count == 1 && !LooksLikeBarcode(query))
             {
-                AddProductToCart(results[0]);
+                await AddProductToCartAsync(results[0]);
                 return;
             }
 
@@ -430,7 +430,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            AddProductToCart(product);
+            await AddProductToCartAsync(product);
         }
         catch (HttpRequestException)
         {
@@ -439,7 +439,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void AddProductToCart(ProductSearchResult product)
+    private async Task AddProductToCartAsync(ProductSearchResult product)
     {
         if (_activeTicket is null)
         {
@@ -450,14 +450,37 @@ public partial class MainWindow : Window
         var cart = _activeTicket.Lines;
         var existing = cart.FirstOrDefault(item => item.ProductId == product.Id);
         if (existing is null) cart.Add(new CartLineView(product.Id, product.Code, product.Description, product.Price, product.Stock, 1));
-        else { existing.Quantity++; CartList.Items.Refresh(); }
+        else { existing.Quantity++; }
+        var line = existing ?? cart[^1];
+        await ApplyPromotionQuoteAsync(line);
+        CartList.Items.Refresh();
         ProductSearchTextBox.Clear();
         ProductResultsList.Visibility = Visibility.Collapsed;
         UpdateSaleSummary();
         QueueActiveTicketSave();
         SystemSounds.Asterisk.Play();
-        StatusText.Text = "Producto agregado a la venta.";
+        StatusText.Text = line.DiscountTotal > 0m
+            ? $"Producto agregado. Promoción aplicada: {line.DiscountTotal:C2} de descuento."
+            : "Producto agregado a la venta.";
         FocusProductInput();
+    }
+
+    private async Task ApplyPromotionQuoteAsync(CartLineView line)
+    {
+        try
+        {
+            var url = $"/api/promotions/quote?productId={line.ProductId}&price={line.BaseUnitPrice.ToString(System.Globalization.CultureInfo.InvariantCulture)}&quantity={line.Quantity.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+            var quote = await Client.GetFromJsonAsync<PromotionPriceQuote>(url);
+            if (quote is not null)
+            {
+                line.UnitPrice = quote.UnitPrice;
+                line.DiscountTotal = quote.DiscountTotal;
+            }
+        }
+        catch (HttpRequestException)
+        {
+            // La venta sigue mostrando el precio normal; el servidor vuelve a validar la promoción al cobrar.
+        }
     }
 
     private static bool LooksLikeBarcode(string value) => value.Length >= 6 && value.All(char.IsLetterOrDigit);
@@ -522,7 +545,7 @@ public partial class MainWindow : Window
 
     private sealed class CartLineView(Guid productId, string code, string description, decimal unitPrice, decimal stock, decimal quantity)
     {
-        public Guid ProductId { get; } = productId; public string Code { get; } = code; public string Description { get; } = description; public decimal UnitPrice { get; } = unitPrice; public decimal Stock { get; } = stock; public decimal Quantity { get; set; } = quantity; public decimal Total => decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Code} | {Description} x {Quantity:0.###} = ${Total:0.00}";
+        public Guid ProductId { get; } = productId; public string Code { get; } = code; public string Description { get; } = description; public decimal BaseUnitPrice { get; } = unitPrice; public decimal UnitPrice { get; set; } = unitPrice; public decimal Stock { get; } = stock; public decimal Quantity { get; set; } = quantity; public decimal DiscountTotal { get; set; } public decimal Total => decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Code} | {Description} x {Quantity:0.###} = ${Total:0.00}";
     }
 
     private sealed class TicketTabView(Guid id, Guid operationId, int ticketNumber, IEnumerable<CartLineView>? lines = null)
@@ -536,6 +559,7 @@ public partial class MainWindow : Window
 
     private sealed record SaleDraftResponse(Guid Id, Guid OperationId, int TicketNumber, DateTimeOffset UpdatedAtUtc, IReadOnlyList<SaleDraftLineResponse> Lines);
     private sealed record SaleDraftLineResponse(Guid ProductId, string Code, string Description, decimal UnitPrice, decimal Stock, decimal Quantity);
+    private sealed record PromotionPriceQuote(Guid ProductId, decimal BaseUnitPrice, decimal UnitPrice, decimal Quantity, decimal DiscountTotal, bool PromotionApplied);
     private sealed record SaleResponse(Guid SaleId, decimal Total, decimal Change, bool Existing);
     private sealed record RegisterResponse(Guid Id, string Name);
     private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);

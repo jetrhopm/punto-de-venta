@@ -6,6 +6,7 @@ namespace Pos.Infrastructure;
 
 public sealed record PromotionCommand(Guid ProductId, string Name, decimal Percent = 0m, decimal DiscountAmount = 0m, decimal BuyQuantity = 0m, decimal PayQuantity = 0m, DateTimeOffset? StartsAtUtc = null, DateTimeOffset? EndsAtUtc = null);
 public sealed record PromotionResult(Guid Id, Guid ProductId, string Name, decimal Percent, decimal DiscountAmount, decimal BuyQuantity, decimal PayQuantity, DateTimeOffset? StartsAtUtc, DateTimeOffset? EndsAtUtc, bool IsActive);
+public sealed record PromotionPriceQuote(Guid ProductId, decimal BaseUnitPrice, decimal UnitPrice, decimal Quantity, decimal DiscountTotal, bool PromotionApplied);
 
 public sealed class PromotionService(PosDbContext database)
 {
@@ -22,6 +23,15 @@ public sealed class PromotionService(PosDbContext database)
     {
         var promotions = await database.Promotions.AsNoTracking().Where(item => item.ProductId == productId && item.IsActive && (item.StartsAtUtc == null || item.StartsAtUtc <= now) && (item.EndsAtUtc == null || item.EndsAtUtc > now)).ToListAsync(cancellationToken);
         var result = price; foreach (var promotion in promotions) { var candidate = promotion.BuyQuantity > 0m && quantity >= promotion.BuyQuantity ? price * ((Math.Floor(quantity / promotion.BuyQuantity) * promotion.PayQuantity) + quantity % promotion.BuyQuantity) / quantity : promotion.Percent > 0m ? price * (1m - promotion.Percent / 100m) : price - promotion.DiscountAmount; result = Math.Min(result, candidate); } return decimal.Round(Math.Max(0m, result), 2, MidpointRounding.AwayFromZero);
+    }
+
+    public async Task<PromotionPriceQuote?> QuoteAsync(string token, Guid productId, decimal price, decimal quantity, CancellationToken cancellationToken)
+    {
+        if (await AuthorizedAsync(token, "ViewProducts", cancellationToken) is null) return null;
+        if (productId == Guid.Empty || price < 0m || quantity <= 0m) throw new ArgumentException("Los datos de precio y cantidad no son validos.");
+        var discounted = await DiscountedPriceAsync(productId, price, DateTimeOffset.UtcNow, cancellationToken, quantity);
+        var discountTotal = decimal.Round(Math.Max(0m, (price - discounted) * quantity), 2, MidpointRounding.AwayFromZero);
+        return new PromotionPriceQuote(productId, price, discounted, quantity, discountTotal, discountTotal > 0m);
     }
 
     public async Task<IReadOnlyList<PromotionResult>?> ListAsync(string token, Guid? productId, CancellationToken cancellationToken)

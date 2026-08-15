@@ -350,6 +350,15 @@ app.MapGet("/api/promotions", async (Guid? productId, HttpRequest request, Promo
     var result = await promotions.ListAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), productId, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
+app.MapGet("/api/promotions/quote", async (Guid productId, decimal price, decimal quantity, HttpRequest request, PromotionService promotions, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await promotions.QuoteAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), productId, price, quantity, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["promotion"] = [exception.Message] }); }
+});
 app.MapDelete("/api/promotions/{id:guid}", async (Guid id, HttpRequest request, PromotionService promotions, CancellationToken cancellationToken) =>
 {
     var result = await promotions.DeactivateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), id, cancellationToken);

@@ -50,7 +50,8 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
             var originalLine = command.Lines.SingleOrDefault(item => item.ProductId == line.ProductId);
             var requestedQuantity = originalLine?.Quantity ?? requested;
             unitPrice = originalLine is not null && originalLine.UseWholesale && product.WholesalePrice > 0m && requestedQuantity >= product.WholesaleMinimumQuantity ? product.WholesalePrice : product.Price;
-            unitPrice = draftLines?.GetValueOrDefault(product.Id)?.UnitPrice ?? await promotions.DiscountedPriceAsync(product.Id, unitPrice, DateTimeOffset.UtcNow, cancellationToken, requestedQuantity);
+            // El borrador solo conserva la cantidad y la composición del ticket. El precio autoritativo se recalcula al cobrar para aplicar promociones vigentes.
+            unitPrice = await promotions.DiscountedPriceAsync(product.Id, unitPrice, DateTimeOffset.UtcNow, cancellationToken, requestedQuantity);
             var total = originalLine is null ? 0m : decimal.Round(unitPrice * requestedQuantity, 2, MidpointRounding.AwayFromZero);
             if (!product.IsKit) product.Stock -= requested;
             if (originalLine is not null) lines.Add(new SaleLineRecord { Id = Guid.NewGuid(), ProductId = product.Id, Quantity = requestedQuantity, UnitPrice = unitPrice, LineTotal = total, StockBefore = stockBefore, StockAfter = product.Stock });
