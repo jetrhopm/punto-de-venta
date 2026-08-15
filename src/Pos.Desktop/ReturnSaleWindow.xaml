@@ -8,7 +8,7 @@
             <TextBlock x:Name="SelectedText" Text="Ningún producto seleccionado." Foreground="#17324D" Margin="0,3,0,8" TextWrapping="Wrap"/>
             <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/><ColumnDefinition Width="110"/></Grid.ColumnDefinitions>
-                <StackPanel Margin="0,0,8,0"><TextBlock Text="Cantidad a devolver" Foreground="#526577"/><TextBox x:Name="QuantityTextBox" Height="34" ToolTip="Escribe cuántas piezas o unidades devolver"/></StackPanel>
+                <StackPanel Margin="0,0,8,0"><TextBlock Text="Cantidad de productos a devolver" Foreground="#526577"/><TextBox x:Name="QuantityTextBox" Height="34" ToolTip="Escribe cuántas piezas, unidades o kilos devolver"/></StackPanel>
                 <StackPanel Grid.Column="1" Margin="0,0,8,0"><TextBlock Text="Motivo de la devolución" Foreground="#526577"/><TextBox x:Name="ReasonTextBox" Height="34" ToolTip="Ejemplo: producto dañado o cambio del cliente"/></StackPanel>
                 <Button Grid.Column="2" Height="34" VerticalAlignment="Bottom" Click="OnReturnClick">Devolver producto</Button>
             </Grid>
