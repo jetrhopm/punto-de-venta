@@ -188,13 +188,6 @@ public partial class MainWindow : Window
     private void OnSalesActionClick(object sender, RoutedEventArgs e) =>
         ShowPendingFeature("Accion de ventas");
 
-    private async void OnSaveOrderClick(object sender, RoutedEventArgs e)
-    {
-        if (_activeTicket is null || _activeTicket.Lines.Count == 0) { StatusText.Text = "Agrega productos antes de guardar la orden."; return; }
-        StatusText.Text = await PersistActiveTicketAsync() ? "Orden guardada. Puedes continuarla o cambiar de ticket." : "No se pudo guardar la orden.";
-        FocusProductInput();
-    }
-
     private async void OnFindCustomerClick(object sender, RoutedEventArgs e) => await SelectCustomerForActiveTicketAsync();
     private async void OnSelectCustomerClick(object sender, RoutedEventArgs e) => await SelectCustomerForActiveTicketAsync();
     private void OnTicketHistoryClick(object sender, RoutedEventArgs e)

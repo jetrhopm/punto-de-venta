@@ -11,6 +11,7 @@ public sealed record BackupResult(string FileName, long SizeBytes, string Sha256
 
 public sealed class DatabaseMaintenanceService(PosDbContext database)
 {
+    private static readonly SemaphoreSlim BackupLock = new(1, 1);
     public async Task<IReadOnlyList<BackupResult>?> ListAsync(string token, CancellationToken cancellationToken)
     {
         if (await AuthorizedAsync(token, cancellationToken) is null) return null;
@@ -26,32 +27,56 @@ public sealed class DatabaseMaintenanceService(PosDbContext database)
     public async Task<BackupResult?> CreateAsync(string token, CancellationToken cancellationToken)
     {
         if (await AuthorizedAsync(token, cancellationToken) is null) return null;
-        var connection = new NpgsqlConnectionStringBuilder(database.Database.GetConnectionString());
-        var pgDump = FindPgDump();
+        return await CreateCoreAsync(cancellationToken);
+    }
+
+    public async Task<bool> EnsureDailyAutomaticBackupAsync(CancellationToken cancellationToken)
+    {
+        if (!await database.Stores.AsNoTracking().AnyAsync(cancellationToken)) return false;
         var directory = BackupDirectory();
         Directory.CreateDirectory(directory);
-        var createdAt = DateTimeOffset.UtcNow;
-        var path = Path.Combine(directory, $"punto-venta-{createdAt:yyyyMMdd-HHmmss}.dump");
-        var start = new ProcessStartInfo(pgDump) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true };
-        start.ArgumentList.Add($"--host={connection.Host}");
-        start.ArgumentList.Add($"--port={connection.Port}");
-        start.ArgumentList.Add($"--username={connection.Username}");
-        start.ArgumentList.Add($"--dbname={connection.Database}");
-        start.ArgumentList.Add("--format=custom");
-        start.ArgumentList.Add($"--file={path}");
-        start.ArgumentList.Add("--no-password");
-        start.Environment["PGPASSWORD"] = connection.Password;
-        using var process = Process.Start(start) ?? throw new InvalidOperationException("No se pudo iniciar pg_dump.");
-        var error = await process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
-        if (process.ExitCode != 0) { File.Delete(path); throw new InvalidOperationException($"PostgreSQL no pudo crear el respaldo: {error.Trim()}"); }
-        await using var backupStream = File.OpenRead(path);
-        var hash = Convert.ToHexString(await SHA256.HashDataAsync(backupStream, cancellationToken));
-        await File.WriteAllTextAsync(path + ".sha256", hash, cancellationToken);
-        var info = new FileInfo(path);
-        var result = new BackupResult(info.Name, info.Length, hash, createdAt);
-        await File.WriteAllTextAsync(path + ".json", JsonSerializer.Serialize(result), cancellationToken);
-        return result;
+        if (Directory.GetFiles(directory, "*.dump").Select(path => new FileInfo(path)).Any(file => file.CreationTime.Date == DateTime.Now.Date)) return false;
+        await CreateCoreAsync(cancellationToken);
+        return true;
+    }
+
+    private async Task<BackupResult> CreateCoreAsync(CancellationToken cancellationToken)
+    {
+        await BackupLock.WaitAsync(cancellationToken);
+        try
+        {
+            var connection = new NpgsqlConnectionStringBuilder(database.Database.GetConnectionString());
+            var pgDump = FindPgDump();
+            var directory = BackupDirectory();
+            Directory.CreateDirectory(directory);
+            var createdAt = DateTimeOffset.UtcNow;
+            var path = Path.Combine(directory, $"punto-venta-{createdAt:yyyyMMdd-HHmmss}.dump");
+            var start = new ProcessStartInfo(pgDump) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true };
+            start.ArgumentList.Add($"--host={connection.Host}");
+            start.ArgumentList.Add($"--port={connection.Port}");
+            start.ArgumentList.Add($"--username={connection.Username}");
+            start.ArgumentList.Add($"--dbname={connection.Database}");
+            start.ArgumentList.Add("--format=custom");
+            start.ArgumentList.Add($"--file={path}");
+            start.ArgumentList.Add("--no-password");
+            start.Environment["PGPASSWORD"] = connection.Password;
+            using var process = Process.Start(start) ?? throw new InvalidOperationException("No se pudo iniciar pg_dump.");
+            var error = await process.StandardError.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken);
+            if (process.ExitCode != 0) { File.Delete(path); throw new InvalidOperationException($"PostgreSQL no pudo crear el respaldo: {error.Trim()}"); }
+            await using var backupStream = File.OpenRead(path);
+            var hash = Convert.ToHexString(await SHA256.HashDataAsync(backupStream, cancellationToken));
+            await File.WriteAllTextAsync(path + ".sha256", hash, cancellationToken);
+            var info = new FileInfo(path);
+            var result = new BackupResult(info.Name, info.Length, hash, createdAt);
+            await File.WriteAllTextAsync(path + ".json", JsonSerializer.Serialize(result), cancellationToken);
+            TrimLocalBackups(directory, 5);
+            return result;
+        }
+        finally
+        {
+            BackupLock.Release();
+        }
     }
 
     public async Task<string?> ResolveFileAsync(string token, string fileName, CancellationToken cancellationToken)
@@ -77,6 +102,16 @@ public sealed class DatabaseMaintenanceService(PosDbContext database)
     }
 
     private static string BackupDirectory() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "backups");
+
+    private static void TrimLocalBackups(string directory, int keep)
+    {
+        foreach (var obsolete in Directory.GetFiles(directory, "*.dump").Select(path => new FileInfo(path)).OrderByDescending(file => file.CreationTimeUtc).Skip(keep))
+        {
+            File.Delete(obsolete.FullName);
+            File.Delete(obsolete.FullName + ".sha256");
+            File.Delete(obsolete.FullName + ".json");
+        }
+    }
 
     private async Task<Guid?> AuthorizedAsync(string token, CancellationToken cancellationToken)
     {

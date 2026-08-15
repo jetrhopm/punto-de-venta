@@ -49,6 +49,7 @@ builder.Services.AddScoped<LanPairingService>();
 builder.Services.AddScoped<StoreSettingsService>();
 builder.Services.AddScoped<ProductImportService>();
 builder.Services.AddScoped<DatabaseMaintenanceService>();
+builder.Services.AddHostedService<DailyBackupHostedService>();
 
 var app = builder.Build();
 

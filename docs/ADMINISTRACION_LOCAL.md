@@ -28,6 +28,8 @@ La API ejecuta el `pg_dump.exe` incluido con PostgreSQL y guarda un respaldo en 
 - checksum SHA-256 en `.sha256`;
 - manifiesto JSON con fecha y tamano.
 
+La API crea una copia automática diaria sin interrumpir al cajero y mantiene las cinco copias locales más recientes. También crea una copia antes de importar inventario. No depende del cierre del programa: un apagón o cierre forzado puede impedir ese evento, mientras que PostgreSQL conserva las transacciones ya confirmadas.
+
 Desde la pantalla se puede crear un respaldo y guardar una copia en disco externo o ubicacion de red. La copia externa lleva el `.dump` y su archivo vecino `.dump.sha256`; ambos deben conservarse juntos. El permiso requerido es `ImportOrExportData`.
 
 La restauracion deliberadamente no se ejecuta con un boton dentro del programa abierto. En otra computadora se instala JetVenta primero, se copian los dos archivos del respaldo y se ejecuta como administrador `restore-production-backup.ps1 -BackupFile "D:\respaldo.dump" -Approve` desde la carpeta de instalación. La herramienta verifica el SHA-256, crea antes una copia preventiva de la base de destino y reinicia la API. La impresora se selecciona de nuevo porque es una preferencia local de cada caja.
