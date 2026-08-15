@@ -116,7 +116,12 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (e.Key == Key.F12)
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key is Key.D1 or Key.NumPad1)
+        {
+            OnDiscardTicketClick(sender, e);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F12)
         {
             OnChargeClick(sender, e);
             e.Handled = true;
