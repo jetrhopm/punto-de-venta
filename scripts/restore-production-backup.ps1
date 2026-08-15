@@ -68,34 +68,58 @@ $actualHash = (Get-FileHash -LiteralPath $backup -Algorithm SHA256).Hash.ToUpper
 if ($expectedHash -ne $actualHash) { throw 'El SHA-256 no coincide. No se restauró ningún dato.' }
 Write-RestoreLog "Respaldo verificado: $([IO.Path]::GetFileName($backup))."
 
-$connection = Get-ProtectedText $connectionPath
-$adminPassword = Get-ProtectedText $adminSecretPath
-$port = Read-ConnectionValue $connection 'Port'
-$database = Read-ConnectionValue $connection 'Database'
-$applicationUser = Read-ConnectionValue $connection 'Username'
-if ($database -ne 'punto_venta' -or $applicationUser -notmatch '^[A-Za-z_][A-Za-z0-9_]{0,62}$') { throw 'La instalación local tiene una configuración de base de datos no admitida.' }
+$developmentSettingsPath = Join-Path $repositoryRoot '.postgres\development-settings.json'
+$isDevelopment = -not (Test-Path -LiteralPath $connectionPath) -and (Test-Path -LiteralPath $developmentSettingsPath)
+if ($isDevelopment) {
+    $developmentSettings = Get-Content -LiteralPath $developmentSettingsPath -Raw | ConvertFrom-Json
+    $port = [int]$developmentSettings.Port
+    $database = [string]$developmentSettings.Database
+    $applicationUser = [string]$developmentSettings.ApplicationUser
+    if ($database -ne 'punto_venta_dev' -or $applicationUser -notmatch '^[A-Za-z_][A-Za-z0-9_]{0,62}$') { throw 'La configuración de pruebas no es válida.' }
+    $databasePassword = [string]$developmentSettings.ApplicationPassword
+    Write-RestoreLog 'Modo de pruebas detectado. Se restaurará la base local de desarrollo.'
+} else {
+    $connection = Get-ProtectedText $connectionPath
+    $adminPassword = Get-ProtectedText $adminSecretPath
+    $port = Read-ConnectionValue $connection 'Port'
+    $database = Read-ConnectionValue $connection 'Database'
+    $applicationUser = Read-ConnectionValue $connection 'Username'
+    if ($database -ne 'punto_venta' -or $applicationUser -notmatch '^[A-Za-z_][A-Za-z0-9_]{0,62}$') { throw 'La instalación local tiene una configuración de base de datos no admitida.' }
+    $databasePassword = $adminPassword
+}
 
-$env:PGPASSWORD = $adminPassword
+$env:PGPASSWORD = $databasePassword
 try {
     $backupDirectory = Join-Path $dataRoot 'backups'
     New-Item -ItemType Directory -Force -Path $backupDirectory | Out-Null
     $safetyBackup = Join-Path $backupDirectory ("antes-de-restaurar-{0:yyyyMMdd-HHmmss}.dump" -f (Get-Date))
     Write-RestoreLog 'Creando copia preventiva de la base local.'
-    Invoke-Native $pgDump @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', "--dbname=$database", '--format=custom', "--file=$safetyBackup", '--no-password')
+    $maintenanceUser = if ($isDevelopment) { $applicationUser } else { 'pos_admin' }
+    Invoke-Native $pgDump @('--host=127.0.0.1', "--port=$port", "--username=$maintenanceUser", "--dbname=$database", '--format=custom', "--file=$safetyBackup", '--no-password')
     $safetyHash = (Get-FileHash -LiteralPath $safetyBackup -Algorithm SHA256).Hash
     Set-Content -LiteralPath "$safetyBackup.sha256" -Value $safetyHash -Encoding ASCII
 
-    Write-RestoreLog 'Deteniendo temporalmente la API de JetVenta.'
-    Stop-Service -Name $apiService -Force -ErrorAction SilentlyContinue
-    Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$database' AND pid <> pg_backend_pid();")
-    Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "DROP DATABASE $database;")
-    Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "CREATE DATABASE $database OWNER $applicationUser;")
-    Write-RestoreLog 'Restaurando estructura y datos de JetVenta.'
-    Invoke-Native $pgRestore @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', "--dbname=$database", '--no-owner', '--exit-on-error', $backup)
-    Start-Service -Name $apiService
-    Write-RestoreLog 'Restauración terminada. JetVenta aplicará migraciones pendientes al iniciar la API.'
+    if ($isDevelopment) {
+        Write-RestoreLog 'Preparando la base de pruebas para la restauración.'
+        Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", "--username=$applicationUser", '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$database' AND pid <> pg_backend_pid();")
+        Write-RestoreLog 'Restaurando estructura y datos de JetVenta en modo de pruebas.'
+        Invoke-Native $pgRestore @('--host=127.0.0.1', "--port=$port", "--username=$applicationUser", "--dbname=$database", '--clean', '--if-exists', '--no-owner', '--exit-on-error', $backup)
+        Write-RestoreLog 'Restauración de pruebas terminada.'
+    } else {
+        Write-RestoreLog 'Deteniendo temporalmente la API de JetVenta.'
+        Stop-Service -Name $apiService -Force -ErrorAction SilentlyContinue
+        Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$database' AND pid <> pg_backend_pid();")
+        Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "DROP DATABASE $database;")
+        Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "CREATE DATABASE $database OWNER $applicationUser;")
+        Write-RestoreLog 'Restaurando estructura y datos de JetVenta.'
+        Invoke-Native $pgRestore @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', "--dbname=$database", '--no-owner', '--exit-on-error', $backup)
+        Start-Service -Name $apiService
+        Write-RestoreLog 'Restauración terminada. JetVenta aplicará migraciones pendientes al iniciar la API.'
+    }
 } finally {
     Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
-    $api = Get-Service -Name $apiService -ErrorAction SilentlyContinue
-    if ($null -ne $api -and $api.Status -ne 'Running') { Start-Service -Name $apiService -ErrorAction SilentlyContinue }
+    if (-not $isDevelopment) {
+        $api = Get-Service -Name $apiService -ErrorAction SilentlyContinue
+        if ($null -ne $api -and $api.Status -ne 'Running') { Start-Service -Name $apiService -ErrorAction SilentlyContinue }
+    }
 }
