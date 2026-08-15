@@ -6,6 +6,7 @@
     <PackageReference Include="ClosedXML" />
     <PackageReference Include="CsvHelper" />
     <PackageReference Include="MahApps.Metro.IconPacks.Material" />
+    <PackageReference Include="System.IO.Ports" />
   </ItemGroup>
 
   <ItemGroup>

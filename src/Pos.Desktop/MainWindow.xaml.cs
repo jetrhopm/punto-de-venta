@@ -33,11 +33,13 @@ public partial class MainWindow : Window
         Loaded += (_, _) => ApplyNavigationPermissions();
         Closing += OnClosing;
         PreviewTextInput += OnPreviewTextInput;
+        BarcodeScannerService.BarcodeScanned += OnSerialBarcodeScanned;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         ApiClient.ApplySession(SessionContext.AccessToken);
+        BarcodeScannerService.StartConfiguredProfile();
         try
         {
             using var response = await Client.GetAsync("/api/setup/status");
@@ -611,6 +613,21 @@ public partial class MainWindow : Window
         ProductSearchTextBox.Text += e.Text;
         ProductSearchTextBox.CaretIndex = ProductSearchTextBox.Text.Length;
         e.Handled = true;
+    }
+
+    private void OnSerialBarcodeScanned(object? sender, string code)
+    {
+        Dispatcher.BeginInvoke(async () =>
+        {
+            if (!string.Equals(WorkspaceTitleText.Text, "Venta en curso", StringComparison.OrdinalIgnoreCase))
+            {
+                StatusText.Text = "Se recibió un código del lector, pero Ventas no está abierto.";
+                return;
+            }
+
+            ProductSearchTextBox.Text = code;
+            await HandleProductEntryAsync(code);
+        });
     }
 
     private void OnCartKeyDown(object sender, KeyEventArgs e)

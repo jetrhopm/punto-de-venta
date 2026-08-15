@@ -16,6 +16,7 @@ public partial class App : System.Windows.Application
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+        Exit += (_, _) => BarcodeScannerService.Stop();
 
         var startup = new StartupWindow();
         MainWindow = startup;

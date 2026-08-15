@@ -21,6 +21,7 @@ public static class ApiClient
     public static double PrinterFontSize { get; private set; } = 9d;
     public static bool UseNormalTotals { get; private set; }
     public static int PrinterTicketWidthMm { get; private set; } = 80;
+    public static BarcodeScannerProfile BarcodeScanner { get; private set; } = BarcodeScannerProfile.Default;
 
     static ApiClient() => Load();
 
@@ -82,6 +83,12 @@ public static class ApiClient
 
     public static void SetPrinterTicketWidth(int widthMm) => SetPrinterProfile(PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, widthMm);
 
+    public static void SetBarcodeScannerProfile(BarcodeScannerProfile profile)
+    {
+        BarcodeScanner = profile.Normalize();
+        SaveSettings();
+    }
+
     private static void SaveSettings(string? protectedToken = null)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
@@ -91,7 +98,7 @@ public static class ApiClient
             try { currentToken = JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(SettingsPath))?.DeviceTokenProtected; }
             catch (JsonException) { }
         }
-        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm)));
+        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm, BarcodeScanner)));
     }
 
     private static void Load()
@@ -110,6 +117,7 @@ public static class ApiClient
                     PrinterFontSize = settings.PrinterFontSize is >= 6d and <= 24d ? settings.PrinterFontSize : 9d;
                     UseNormalTotals = settings.UseNormalTotals;
                     PrinterTicketWidthMm = settings.PrinterTicketWidthMm == 58 ? 58 : 80;
+                    BarcodeScanner = (settings.BarcodeScanner ?? BarcodeScannerProfile.Default).Normalize();
                     ClientInstance.BaseAddress = new Uri(BaseUrl + "/");
                     return;
                 }
@@ -129,5 +137,19 @@ public static class ApiClient
         string? PrinterFontFamily = null,
         double PrinterFontSize = 9d,
         bool UseNormalTotals = false,
-        int PrinterTicketWidthMm = 80);
+        int PrinterTicketWidthMm = 80,
+        BarcodeScannerProfile? BarcodeScanner = null);
+}
+
+public enum BarcodeScannerMode { Keyboard, Serial, Disabled }
+
+public sealed record BarcodeScannerProfile(BarcodeScannerMode Mode, string? PortName, int BaudRate, string Terminator)
+{
+    public static BarcodeScannerProfile Default { get; } = new(BarcodeScannerMode.Keyboard, null, 9600, "CRLF");
+
+    public BarcodeScannerProfile Normalize() => new(
+        Enum.IsDefined(Mode) ? Mode : BarcodeScannerMode.Keyboard,
+        string.IsNullOrWhiteSpace(PortName) ? null : PortName.Trim().ToUpperInvariant(),
+        BaudRate is >= 1200 and <= 115200 ? BaudRate : 9600,
+        Terminator is "CR" or "LF" or "CRLF" ? Terminator : "CRLF");
 }
