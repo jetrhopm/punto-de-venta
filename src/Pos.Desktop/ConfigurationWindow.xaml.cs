@@ -23,4 +23,11 @@ public partial class ConfigurationWindow : UserControl
     private void OnTicketClick(object sender, RoutedEventArgs e) => new TicketSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnBackupClick(object sender, RoutedEventArgs e) => new BackupWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnImportClick(object sender, RoutedEventArgs e) => new ProductImportWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+
+    private void OnPendingClick(object sender, RoutedEventArgs e)
+    {
+        var name = (sender as Button)?.Tag?.ToString() ?? "Esta función";
+        StatusText.Text = $"{name}: función en preparación. Se habilitará cuando el módulo esté validado para operación real.";
+        MessageBox.Show($"{name} aún está en preparación. JetVenta no simula integraciones ni operaciones que todavía no estén implementadas.", "Función en preparación", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
 }
