@@ -201,6 +201,27 @@ public partial class MainWindow : Window
         new SalesHistoryWindow(false) { Owner = this }.ShowDialog();
     }
 
+    private async void OnPrintLastTicketClick(object sender, RoutedEventArgs e)
+    {
+        if (!SessionContext.HasPermission("ReprintTickets")) { StatusText.Text = "No tienes permiso para imprimir copias de tickets."; return; }
+        try
+        {
+            var saleId = _lastSaleId;
+            if (saleId is null)
+            {
+                var from = DateTimeOffset.UtcNow.AddDays(-30).ToString("O");
+                var to = DateTimeOffset.UtcNow.ToString("O");
+                var recent = await Client.GetFromJsonAsync<List<LatestSaleRow>>($"/api/sales/history?from={Uri.EscapeDataString(from)}&to={Uri.EscapeDataString(to)}");
+                saleId = recent?.FirstOrDefault()?.SaleId;
+            }
+
+            if (saleId is null) { StatusText.Text = "No hay una compra confirmada para imprimir."; return; }
+            StatusText.Text = await OutputTicketAsync(saleId.Value);
+        }
+        catch (HttpRequestException) { StatusText.Text = "No se pudo consultar la última compra confirmada."; }
+        catch (Exception exception) { StatusText.Text = $"No se pudo imprimir el último ticket: {exception.Message}"; }
+    }
+
     private async Task SelectCustomerForActiveTicketAsync()
     {
         if (_activeTicket is null) return;
@@ -650,6 +671,7 @@ public partial class MainWindow : Window
     private sealed record RegisterResponse(Guid Id, string Name);
     private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
     private sealed record CurrentShiftResponse(Guid ShiftId, Guid RegisterId, Guid UserId, decimal InitialCash, DateTimeOffset OpenedAtUtc);
+    private sealed record LatestSaleRow(Guid SaleId, DateTimeOffset CreatedAtUtc, decimal Total, string Status);
 
     private async void OnNewTicketClick(object sender, RoutedEventArgs e) => await CreateNewTicketAsync();
 
