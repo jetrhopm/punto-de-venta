@@ -830,7 +830,7 @@ public partial class MainWindow : Window
         var ticket = _activeTicket;
         if (ticket is null || ticket.Lines.Count == 0) { StatusText.Text = "Agrega al menos un producto antes de cobrar."; return; }
         if (!await PersistActiveTicketAsync()) return;
-        var cashWindow = new CashWindow(ticket.Lines.Sum(item => item.Total), ticket.Lines.Sum(item => item.Quantity)) { Owner = this };
+        var cashWindow = new CashWindow(ticket.Lines.Sum(item => item.Total), ticket.Lines.Sum(item => item.Quantity), ticket.CustomerId, ticket.CustomerName) { Owner = this };
         if (cashWindow.ShowDialog() != true || cashWindow.Received is null) return;
         try
         {

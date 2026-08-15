@@ -19,16 +19,18 @@ public partial class CashWindow : Window
     public bool CreditRequested { get; private set; }
     public bool PrintRequested { get; private set; } = true;
 
-    public CashWindow(decimal total, decimal totalItems)
+    public CashWindow(decimal total, decimal totalItems, Guid? selectedCustomerId = null, string? selectedCustomerName = null)
     {
         InitializeComponent();
         _total = decimal.Round(total, 2);
+        CustomerId = selectedCustomerId;
         _controlsReady = true;
         TotalText.Text = $"Total: ${_total:0.00}";
         ItemsText.Text = $"Artículos: {totalItems:0.###}";
         ReceivedTextBox.Text = _total.ToString("0.00", CultureInfo.InvariantCulture);
         ReceivedTextBox.Focus();
         ReceivedTextBox.SelectAll();
+        if (CustomerId is not null) MessageText.Text = $"Cliente seleccionado para esta venta: {selectedCustomerName ?? "Cliente"}.";
         UpdatePaymentView();
     }
 
@@ -79,8 +81,13 @@ public partial class CashWindow : Window
 
     private void OnCreditClick(object sender, RoutedEventArgs e)
     {
-        var customers = new CustomerWindow(true) { Owner = this }; if (customers.ShowDialog() != true || customers.SelectedCustomerId is null) return;
-        CustomerId = customers.SelectedCustomerId; CreditRequested = true; _paymentMethod = "Credit"; Received = 0m; PrintRequested = true; DialogResult = true;
+        if (CustomerId is null)
+        {
+            var customers = new CustomerWindow(true) { Owner = this };
+            if (customers.ShowDialog() != true || customers.SelectedCustomerId is null) return;
+            CustomerId = customers.SelectedCustomerId;
+        }
+        CreditRequested = true; _paymentMethod = "Credit"; Received = 0m; PrintRequested = true; DialogResult = true;
     }
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
