@@ -6,7 +6,7 @@ using System.Windows.Controls;
 
 namespace Pos.Desktop;
 
-public partial class ProductCatalogWindow : Window
+public partial class ProductCatalogWindow : UserControl
 {
     private CancellationTokenSource? _loadCancellation;
     private CatalogProductRow? _selected;
@@ -155,8 +155,8 @@ public partial class ProductCatalogWindow : Window
         return true;
     }
 
-    private void OnDepartmentsClick(object sender, RoutedEventArgs e) { var window = new DepartmentManagerWindow { Owner = this }; window.Closed += async (_, _) => await LoadDepartmentsAsync(); window.ShowDialog(); }
-    private void OnPromotionsClick(object sender, RoutedEventArgs e) { new PromotionWindow { Owner = this }.ShowDialog(); }
+    private void OnDepartmentsClick(object sender, RoutedEventArgs e) { var window = new DepartmentManagerWindow { Owner = Window.GetWindow(this) }; window.Closed += async (_, _) => await LoadDepartmentsAsync(); window.ShowDialog(); }
+    private void OnPromotionsClick(object sender, RoutedEventArgs e) { new PromotionWindow { Owner = Window.GetWindow(this) }.ShowDialog(); }
     private void ClearForm() { _selected = null; _loadingForm = true; ProductsGrid.SelectedItem = null; FormTitleText.Text = "Nuevo producto"; CodeBox.Clear(); DescriptionBox.Clear(); DepartmentBox.SelectedIndex = -1; UnitBox.SelectedIndex = 0; CostBox.Text = "0.00"; ProfitPercentBox.Text = "20"; PriceBox.Text = "0.00"; ProfitAmountBox.Text = "0.00"; WholesalePriceBox.Text = "0.00"; WholesaleProfitPercentBox.Text = string.Empty; WholesaleProfitAmountBox.Text = "0.00"; WholesaleMinimumBox.Text = "0"; IsKitBox.IsChecked = false; _loadingForm = false; CodeBox.Focus(); }
     private static bool TryDecimal(string? value, out decimal result) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out result) || decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
     private static string Money(decimal value) => value.ToString("0.00", CultureInfo.InvariantCulture);

@@ -15,8 +15,8 @@ public partial class InventoryOnboardingWindow : Window
 
     private void OnManualClick(object sender, RoutedEventArgs e)
     {
-        new ProductCatalogWindow { Owner = this }.ShowDialog();
-        MessageText.Text = "Puedes continuar agregando productos más adelante desde Productos.";
+        MessageText.Text = "La configuración inicial quedó lista. Agrega productos desde Productos cuando termines este asistente.";
+        DialogResult = true;
     }
 
     private void OnSkipClick(object sender, RoutedEventArgs e) => DialogResult = true;

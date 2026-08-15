@@ -78,7 +78,7 @@ public partial class MainWindow : Window
                 if (window.ShowDialog() == true && window.RequestCloseShift) _ = CloseShiftFromDialogAsync(openNewShift: true);
                 return;
             }
-            if (section == "Productos") { var window = new ProductCatalogWindow { Owner = this }; window.ShowDialog(); return; }
+            if (section == "Productos") { ShowEmbeddedModule(new ProductCatalogWindow(), "Productos", "Administra el catálogo sin cerrar los tickets en atención."); return; }
             if (section == "Inventario") { OpenInventory(); return; }
             if (section == "Clientes") { OpenCustomers(); return; }
             if (section == "Creditos") { OpenCustomers(creditMode: true); return; }
@@ -116,7 +116,7 @@ public partial class MainWindow : Window
             if (section == "Clientes") { OpenCustomers(); e.Handled = true; return; }
             if (section == "Creditos") { OpenCustomers(creditMode: true); e.Handled = true; return; }
             if (section == "Ventas") { ShowSalesWorkspace(); e.Handled = true; return; }
-            if (section == "Productos") { new ProductCatalogWindow { Owner = this }.ShowDialog(); e.Handled = true; return; }
+            if (section == "Productos") { ShowEmbeddedModule(new ProductCatalogWindow(), "Productos", "Administra el catálogo sin cerrar los tickets en atención."); e.Handled = true; return; }
             if (section == "Inventario") { OpenInventory(); e.Handled = true; return; }
             e.Handled = true;
             return;
