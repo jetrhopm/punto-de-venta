@@ -54,7 +54,7 @@
                 <DataGridTextColumn Header="Tipo" Binding="{Binding UnitOfMeasure}" SortMemberPath="unit" IsReadOnly="True" Width="105"/>
                 <DataGridTextColumn Header="Costo" Binding="{Binding Cost, StringFormat={}{0:C2}}" SortMemberPath="cost" IsReadOnly="True" Width="92"/>
                 <DataGridTextColumn Header="P. venta" Binding="{Binding Price, StringFormat={}{0:C2}}" SortMemberPath="price" IsReadOnly="True" Width="98"/>
-                <DataGridTextColumn Header="Existencia" Binding="{Binding Stock, StringFormat={}{0:0.###}}" SortMemberPath="stock" IsReadOnly="True" Width="100"/>
+                <DataGridTextColumn Header="Existencia" Binding="{Binding StockText, UpdateSourceTrigger=LostFocus}" SortMemberPath="stock" Width="100"/>
                 <DataGridTextColumn Header="Inv. mínimo" Binding="{Binding MinimumStockText, UpdateSourceTrigger=LostFocus}" SortMemberPath="minimum" Width="105"/>
                 <DataGridTextColumn Header="Inv. máximo" Binding="{Binding MaximumStockText, UpdateSourceTrigger=LostFocus}" SortMemberPath="maximum" Width="105"/>
                 <DataGridTextColumn Header="Valor compra" Binding="{Binding CostValue, StringFormat={}{0:C2}}" IsReadOnly="True" Width="110"/>
@@ -68,7 +68,7 @@
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <Button Width="110" Height="35" Click="OnPreviousPageClick">Anterior</Button><Button Grid.Column="1" Width="110" Height="35" Margin="8,0,0,0" Click="OnNextPageClick">Siguiente</Button>
             <TextBlock Grid.Column="2" x:Name="PageInfoText" VerticalAlignment="Center" Margin="15,0,0,0" Foreground="#637589"/>
-            <TextBlock Grid.Column="3" Text="Los mínimos y máximos se editan directamente; la existencia cambia mediante movimientos." VerticalAlignment="Center" Foreground="#637589" FontSize="11"/>
+            <TextBlock Grid.Column="3" Text="Edita existencia, mínimos y máximos. Cada cambio de existencia queda registrado como movimiento." VerticalAlignment="Center" Foreground="#637589" FontSize="11"/>
         </Grid>
     </Grid>
 </Window>

@@ -18,6 +18,7 @@ public partial class InventoryAdjustmentWindow : Window
     {
         InitializeComponent();
         Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", SessionContext.AccessToken);
+        Closed += (_, _) => _searchCancellation?.Cancel();
     }
 
     private async void OnSearchChanged(object sender, TextChangedEventArgs e)
@@ -37,7 +38,7 @@ public partial class InventoryAdjustmentWindow : Window
             ResultsList.Visibility = results.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         }
         catch (OperationCanceledException) { }
-        catch (HttpRequestException) { MessageText.Text = "No se pudo consultar el catalogo."; }
+        catch (HttpRequestException) { MessageText.Text = "No hay conexión con los servicios de JetVenta. Puedes cerrar esta ventana e intentar de nuevo."; }
     }
 
     private void OnProductSelected(object sender, MouseButtonEventArgs e)
@@ -65,7 +66,8 @@ public partial class InventoryAdjustmentWindow : Window
             MessageText.Text = result is null ? "Ajuste registrado." : $"Ajuste registrado. Existencia: {result.StockBefore:0.###} -> {result.StockAfter:0.###}";
             QuantityTextBox.Clear(); ReasonTextBox.Clear();
         }
-        catch (HttpRequestException) { MessageText.Text = "No se pudo conectar con la API."; }
+        catch (OperationCanceledException) { MessageText.Text = "La conexión tardó demasiado. No se confirmó el ajuste."; }
+        catch (HttpRequestException) { MessageText.Text = "No se pudo conectar con los servicios de JetVenta. No se confirmó el ajuste."; }
     }
 
     private static bool TryParseDecimal(string value, out decimal result) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.CurrentCulture, out result) || decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
