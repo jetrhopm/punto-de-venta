@@ -195,6 +195,11 @@ public partial class MainWindow : Window
 
     private async void OnFindCustomerClick(object sender, RoutedEventArgs e) => await SelectCustomerForActiveTicketAsync();
     private async void OnSelectCustomerClick(object sender, RoutedEventArgs e) => await SelectCustomerForActiveTicketAsync();
+    private void OnTicketHistoryClick(object sender, RoutedEventArgs e)
+    {
+        if (!SessionContext.HasPermission("ViewSalesHistory")) { StatusText.Text = "No tienes permiso para consultar el historial de tickets."; return; }
+        new SalesHistoryWindow(false) { Owner = this }.ShowDialog();
+    }
 
     private async Task SelectCustomerForActiveTicketAsync()
     {

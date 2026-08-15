@@ -11,10 +11,21 @@ namespace Pos.Desktop;
 public partial class SalesHistoryWindow : Window
 {
     private static HttpClient Client => ApiClient.Client;
+    private readonly bool _allowSaleActions;
     private HistoryRow? _selected;
     private Detail? _detail;
 
-    public SalesHistoryWindow() => InitializeComponent();
+    public SalesHistoryWindow(bool allowSaleActions = true)
+    {
+        InitializeComponent();
+        _allowSaleActions = allowSaleActions;
+        if (!allowSaleActions)
+        {
+            ReturnButton.Visibility = Visibility.Collapsed;
+            CancelButton.Visibility = Visibility.Collapsed;
+            Title = "Historial de tickets";
+        }
+    }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -89,6 +100,7 @@ public partial class SalesHistoryWindow : Window
     private async void OnPrintClick(object sender, RoutedEventArgs e)
     {
         if (_selected is null) return;
+        if (!SessionContext.HasPermission("ReprintTickets")) { MessageBox.Show("No tienes permiso para reimprimir tickets.", "Permiso requerido", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
         try
         {
             using var response = await Client.GetAsync($"/api/sales/{_selected.SaleId}/ticket.pdf");
