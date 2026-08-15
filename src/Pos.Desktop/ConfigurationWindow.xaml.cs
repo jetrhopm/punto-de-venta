@@ -1,8 +1,9 @@
 using System.Windows;
+using System.Windows.Controls;
 
 namespace Pos.Desktop;
 
-public partial class ConfigurationWindow : Window
+public partial class ConfigurationWindow : UserControl
 {
     public ConfigurationWindow()
     {
@@ -16,10 +17,10 @@ public partial class ConfigurationWindow : Window
         StatusText.Text = "Las opciones deshabilitadas requieren un permiso del administrador.";
     }
 
-    private void OnStoreClick(object sender, RoutedEventArgs e) => new StoreSettingsWindow { Owner = this }.ShowDialog();
-    private void OnUsersClick(object sender, RoutedEventArgs e) => new UserAdministrationWindow { Owner = this }.ShowDialog();
-    private void OnPrinterClick(object sender, RoutedEventArgs e) => new PrinterSettingsWindow { Owner = this }.ShowDialog();
-    private void OnTicketClick(object sender, RoutedEventArgs e) => new TicketSettingsWindow { Owner = this }.ShowDialog();
-    private void OnBackupClick(object sender, RoutedEventArgs e) => new BackupWindow { Owner = this }.ShowDialog();
-    private void OnImportClick(object sender, RoutedEventArgs e) => new ProductImportWindow { Owner = this }.ShowDialog();
+    private void OnStoreClick(object sender, RoutedEventArgs e) => new StoreSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+    private void OnUsersClick(object sender, RoutedEventArgs e) => new UserAdministrationWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+    private void OnPrinterClick(object sender, RoutedEventArgs e) => new PrinterSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+    private void OnTicketClick(object sender, RoutedEventArgs e) => new TicketSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+    private void OnBackupClick(object sender, RoutedEventArgs e) => new BackupWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+    private void OnImportClick(object sender, RoutedEventArgs e) => new ProductImportWindow { Owner = Window.GetWindow(this) }.ShowDialog();
 }

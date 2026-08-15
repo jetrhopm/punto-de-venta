@@ -1,13 +1,13 @@
-<Window x:Class="Pos.Desktop.ConfigurationWindow"
+<UserControl x:Class="Pos.Desktop.ConfigurationWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
-        Title="Configuración" Width="820" Height="590" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
-    <Window.Resources>
+        >
+    <UserControl.Resources>
         <Style x:Key="ToolButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Margin" Value="7"/><Setter Property="Padding" Value="16"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="VerticalContentAlignment" Value="Stretch"/>
         </Style>
-    </Window.Resources>
+    </UserControl.Resources>
     <Grid Margin="28">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <StackPanel>
@@ -24,4 +24,4 @@
         </UniformGrid>
         <Border Grid.Row="2" Margin="7,14,7,0" Padding="12,8" Background="{StaticResource SurfaceMutedBrush}" CornerRadius="4"><TextBlock x:Name="StatusText" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/></Border>
     </Grid>
-</Window>
+</UserControl>

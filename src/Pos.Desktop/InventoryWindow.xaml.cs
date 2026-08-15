@@ -9,7 +9,7 @@ using System.Windows.Threading;
 
 namespace Pos.Desktop;
 
-public partial class InventoryWindow : Window
+public partial class InventoryWindow : UserControl
 {
     private readonly DispatcherTimer _filterTimer = new() { Interval = TimeSpan.FromMilliseconds(350) };
     private CancellationTokenSource? _loadCancellation;
@@ -24,14 +24,15 @@ public partial class InventoryWindow : Window
         InitializeComponent();
         _filterTimer.Tick += async (_, _) => { _filterTimer.Stop(); _page = 1; await LoadAsync(); };
         Loaded += async (_, _) => await LoadAsync();
-        Closed += (_, _) => _loadCancellation?.Cancel();
+        Unloaded += (_, _) => _loadCancellation?.Cancel();
     }
 
     private void OnFilterChanged(object sender, RoutedEventArgs e) { if (IsLoaded) { _filterTimer.Stop(); _filterTimer.Start(); } }
     private async void OnRefreshClick(object sender, RoutedEventArgs e) => await LoadAsync();
     private async void OnPreviousPageClick(object sender, RoutedEventArgs e) { if (_page <= 1) return; _page--; await LoadAsync(); }
     private async void OnNextPageClick(object sender, RoutedEventArgs e) { if (_page >= _totalPages) return; _page++; await LoadAsync(); }
-    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
+    public event EventHandler? CloseRequested;
+    private void OnCloseClick(object sender, RoutedEventArgs e) => CloseRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnSorting(object sender, DataGridSortingEventArgs e)
     {
@@ -162,8 +163,8 @@ public partial class InventoryWindow : Window
         finally { _saving = false; }
     }
 
-    private void OnAdjustmentClick(object sender, RoutedEventArgs e) { new InventoryAdjustmentWindow { Owner = this }.ShowDialog(); _ = LoadAsync(); }
-    private void OnImportClick(object sender, RoutedEventArgs e) { new ProductImportWindow { Owner = this }.ShowDialog(); _ = LoadAsync(); }
+    private void OnAdjustmentClick(object sender, RoutedEventArgs e) { new InventoryAdjustmentWindow { Owner = Window.GetWindow(this) }.ShowDialog(); _ = LoadAsync(); }
+    private void OnImportClick(object sender, RoutedEventArgs e) { new ProductImportWindow { Owner = Window.GetWindow(this) }.ShowDialog(); _ = LoadAsync(); }
     private async void OnExportClick(object sender, RoutedEventArgs e)
     {
         var dialog = new SaveFileDialog { Title = "Exportar inventario", Filter = "CSV (*.csv)|*.csv", FileName = $"inventario-{DateTime.Now:yyyyMMdd-HHmmss}.csv", AddExtension = true };
@@ -173,7 +174,7 @@ public partial class InventoryWindow : Window
         await using var source = await response.Content.ReadAsStreamAsync(); await using var target = File.Create(dialog.FileName); await source.CopyToAsync(target);
         StatusText.Text = $"Inventario exportado: {dialog.FileName}";
     }
-    private void OnMovementsClick(object sender, RoutedEventArgs e) => new InventoryMovementsWindow { Owner = this }.ShowDialog();
+    private void OnMovementsClick(object sender, RoutedEventArgs e) => new InventoryMovementsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
 
     private sealed class InventoryPage
     {

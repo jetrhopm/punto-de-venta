@@ -1,0 +1,28 @@
+<UserControl x:Class="Pos.Desktop.CustomerModule"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Border Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="7" Padding="18">
+            <StackPanel Orientation="Horizontal">
+                <Border Width="48" Height="48" Background="#E4F2EC" CornerRadius="6"><icons:PackIconMaterial Kind="AccountCreditCardOutline" Width="28" Height="28" Foreground="#238A68" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                <StackPanel Margin="13,0,0,0"><TextBlock x:Name="TitleText" Text="Clientes y créditos" FontSize="23" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/><TextBlock x:Name="SubtitleText" Text="Busca clientes, consulta su saldo, registra abonos o crea un cliente nuevo." Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}"/></StackPanel>
+            </StackPanel>
+        </Border>
+        <Border Grid.Row="1" Margin="0,14,0,0" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="7" Padding="14">
+            <StackPanel><TextBlock Text="Buscar cliente" FontWeight="SemiBold"/><TextBox x:Name="SearchTextBox" Height="36" Margin="0,6,0,0" TextChanged="OnSearchChanged" ToolTip="Nombre, teléfono o correo del cliente"/></StackPanel>
+        </Border>
+        <Border Grid.Row="2" Margin="0,14,0,0" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="7" Padding="14">
+            <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions><TextBlock Text="Clientes encontrados" FontWeight="SemiBold"/><ListBox Grid.Row="1" x:Name="CustomersList" Margin="0,9,0,0" DisplayMemberPath="DisplayText" MouseDoubleClick="OnCustomerSelected" ToolTip="Doble clic para consultar o registrar un abono"/></Grid>
+        </Border>
+        <Border Grid.Row="3" Margin="0,14,0,0" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="7" Padding="14">
+            <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock Text="Alta y abonos" FontWeight="SemiBold" FontSize="16"/><TextBlock Grid.Row="1" x:Name="SelectedSummaryText" Text="Selecciona un cliente para registrar un abono." Foreground="{StaticResource TextMutedBrush}" Margin="0,4,0,10"/><Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="2*"/><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,8,0"><TextBlock Text="Nombre del cliente"/><TextBox x:Name="NameTextBox" Height="34" Margin="0,5,0,0"/></StackPanel><StackPanel Grid.Column="1" Margin="8,0"><TextBlock Text="Límite de crédito"/><TextBox x:Name="LimitTextBox" Height="34" Margin="0,5,0,0" Text="0.00"/></StackPanel><StackPanel Grid.Column="2" Margin="8,0"><TextBlock Text="Importe del abono"/><TextBox x:Name="AmountTextBox" Height="34" Margin="0,5,0,0"/></StackPanel><Button Grid.Column="3" Margin="12,20,0,0" Height="34" Click="OnCreateClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="AccountPlusOutline" Width="18" Height="18" Margin="0,0,5,0"/><TextBlock Text="Crear cliente"/></StackPanel></Button><Button Grid.Column="4" Margin="8,20,0,0" Height="34" Background="#238A68" Foreground="White" Click="OnPaymentClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="CashPlus" Width="18" Height="18" Margin="0,0,5,0"/><TextBlock Text="Registrar abono"/></StackPanel></Button></Grid></Grid>
+        </Border>
+    </Grid>
+</UserControl>

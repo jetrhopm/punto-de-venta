@@ -3,14 +3,17 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Windows;
+using System.Windows.Controls;
 
 namespace Pos.Desktop;
 
-public partial class CutWindow : Window
+public partial class CutWindow : UserControl
 {
     private static HttpClient Client => ApiClient.Client;
     private bool _cashierMode;
     public bool RequestCloseShift { get; private set; }
+    public event EventHandler? CloseRequested;
+    public event EventHandler? CloseShiftRequested;
 
     public CutWindow()
     {
@@ -30,8 +33,8 @@ public partial class CutWindow : Window
     private async void OnDayCutClick(object sender, RoutedEventArgs e) => await LoadDayAsync(false);
     private async void OnDateChanged(object sender, RoutedEventArgs e) { if (IsLoaded) { await LoadCashiersAsync(); await LoadDayAsync(_cashierMode); } }
     private async void OnCashierChanged(object sender, RoutedEventArgs e) { if (IsLoaded && _cashierMode) await LoadDayAsync(true); }
-    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
-    private void OnMakeCutClick(object sender, RoutedEventArgs e) { RequestCloseShift = true; DialogResult = true; }
+    private void OnCloseClick(object sender, RoutedEventArgs e) => CloseRequested?.Invoke(this, EventArgs.Empty);
+    private void OnMakeCutClick(object sender, RoutedEventArgs e) { RequestCloseShift = true; CloseShiftRequested?.Invoke(this, EventArgs.Empty); }
 
     private async Task LoadCashiersAsync()
     {

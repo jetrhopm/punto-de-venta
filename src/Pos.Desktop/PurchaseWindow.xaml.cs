@@ -3,11 +3,12 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 
 namespace Pos.Desktop;
 
-public partial class PurchaseWindow : Window
+public partial class PurchaseWindow : UserControl
 {
     private static HttpClient Client => ApiClient.Client;
     private CancellationTokenSource? _searchCancellation;

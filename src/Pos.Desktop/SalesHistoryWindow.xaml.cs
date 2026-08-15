@@ -5,10 +5,11 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Windows;
+using System.Windows.Controls;
 
 namespace Pos.Desktop;
 
-public partial class SalesHistoryWindow : Window
+public partial class SalesHistoryWindow : UserControl
 {
     private static HttpClient Client => ApiClient.Client;
     private readonly bool _allowSaleActions;
@@ -23,7 +24,6 @@ public partial class SalesHistoryWindow : Window
         {
             ReturnButton.Visibility = Visibility.Collapsed;
             CancelButton.Visibility = Visibility.Collapsed;
-            Title = "Historial de tickets";
         }
     }
 
@@ -80,7 +80,7 @@ public partial class SalesHistoryWindow : Window
     private async void OnCancelClick(object sender, RoutedEventArgs e)
     {
         if (_selected is null || !SessionContext.HasPermission("CancelSales")) { MessageBox.Show("No tienes permiso para cancelar ventas o no has seleccionado una venta.", "Historial", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-        var window = new CancelSaleWindow { Owner = this };
+        var window = new CancelSaleWindow { Owner = Window.GetWindow(this) };
         if (window.ShowDialog() != true) return;
         try
         {
@@ -94,7 +94,7 @@ public partial class SalesHistoryWindow : Window
     private void OnReturnClick(object sender, RoutedEventArgs e)
     {
         if (_selected is null || !SessionContext.HasPermission("ProcessReturns")) { MessageBox.Show("No tienes permiso para procesar devoluciones o no has seleccionado una venta.", "Historial", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-        new ReturnSaleWindow(_selected.SaleId) { Owner = this }.ShowDialog();
+        new ReturnSaleWindow(_selected.SaleId) { Owner = Window.GetWindow(this) }.ShowDialog();
     }
 
     private async void OnPrintClick(object sender, RoutedEventArgs e)
@@ -106,7 +106,7 @@ public partial class SalesHistoryWindow : Window
             using var response = await Client.GetAsync($"/api/sales/{_selected.SaleId}/ticket.pdf");
             if (!response.IsSuccessStatusCode) { MessageBox.Show("No se pudo generar la copia del ticket.", "Historial", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
             var dialog = new SaveFileDialog { Title = "Guardar copia del ticket", Filter = "Documento PDF (*.pdf)|*.pdf", FileName = $"Copia-{_selected.ShortId}.pdf" };
-            if (dialog.ShowDialog(this) == true) await File.WriteAllBytesAsync(dialog.FileName, await response.Content.ReadAsByteArrayAsync());
+            if (dialog.ShowDialog(Window.GetWindow(this)) == true) await File.WriteAllBytesAsync(dialog.FileName, await response.Content.ReadAsByteArrayAsync());
         }
         catch (Exception exception) { MessageBox.Show(exception.Message, "No se pudo imprimir", MessageBoxButton.OK, MessageBoxImage.Error); }
     }

@@ -74,20 +74,22 @@ public partial class MainWindow : Window
             if (section == "Ventas") { ShowSalesWorkspace(); return; }
             if (section == "Corte")
             {
-                var window = new CutWindow { Owner = this };
-                if (window.ShowDialog() == true && window.RequestCloseShift) _ = CloseShiftFromDialogAsync(openNewShift: true);
+                var module = new CutWindow();
+                module.CloseRequested += (_, _) => ShowSalesWorkspace();
+                module.CloseShiftRequested += async (_, _) => await CloseShiftFromDialogAsync(openNewShift: true);
+                ShowEmbeddedModule(module, "Corte", "Consulta cortes sin cerrar los tickets en atención.");
                 return;
             }
             if (section == "Productos") { ShowEmbeddedModule(new ProductCatalogWindow(), "Productos", "Administra el catálogo sin cerrar los tickets en atención."); return; }
             if (section == "Inventario") { OpenInventory(); return; }
             if (section == "Clientes") { OpenCustomers(); return; }
             if (section == "Creditos") { OpenCustomers(creditMode: true); return; }
-            if (section == "Compras") { var window = new PurchaseWindow { Owner = this }; window.ShowDialog(); return; }
+            if (section == "Compras") { ShowEmbeddedModule(new PurchaseWindow(), "Compras", "Registra compras sin cerrar los tickets en atención."); return; }
             if (section == "Reportes") { ShowEmbeddedModule(new ReportsWindow(), "Reportes", "Consulta ventas y análisis sin cerrar los tickets en atención."); return; }
-            if (section == "Historial") { var window = new SalesHistoryWindow { Owner = this }; window.ShowDialog(); return; }
-            if (section == "Facturas") { ShowPendingFeature("Facturas CFDI"); return; }
+            if (section == "Historial") { ShowEmbeddedModule(new SalesHistoryWindow(), "Historial", "Consulta ventas anteriores sin cerrar los tickets en atención."); return; }
+            if (section == "Facturas") { ShowEmbeddedModule(new InvoicePlaceholderView(), "Facturas", "El módulo CFDI permanece deshabilitado hasta completar su validación fiscal."); return; }
             if (section == "Promociones") { var window = new PromotionWindow { Owner = this }; window.ShowDialog(); return; }
-            if (section == "Configuracion") { var window = new ConfigurationWindow { Owner = this }; window.ShowDialog(); return; }
+            if (section == "Configuracion") { ShowEmbeddedModule(new ConfigurationWindow(), "Configuración", "Administra JetVenta sin cerrar los tickets en atención."); return; }
             if (section == "Kits") { var window = new KitWindow { Owner = this }; window.ShowDialog(); return; }
             NavigateTo(section);
         }
@@ -192,7 +194,7 @@ public partial class MainWindow : Window
     private void OnTicketHistoryClick(object sender, RoutedEventArgs e)
     {
         if (!SessionContext.HasPermission("ViewSalesHistory")) { StatusText.Text = "No tienes permiso para consultar el historial de tickets."; return; }
-        new SalesHistoryWindow(false) { Owner = this }.ShowDialog();
+        ShowEmbeddedModule(new SalesHistoryWindow(false), "Historial", "Consulta tickets anteriores sin cerrar los tickets en atención.");
     }
 
     private async void OnPrintLastTicketClick(object sender, RoutedEventArgs e)
@@ -879,7 +881,7 @@ public partial class MainWindow : Window
         if (_lastSaleId is null)
         {
             StatusText.Text = "Selecciona la venta que deseas devolver desde el historial.";
-            new SalesHistoryWindow { Owner = this }.ShowDialog();
+            ShowEmbeddedModule(new SalesHistoryWindow(), "Historial", "Selecciona una venta para procesar una devolución.");
             return;
         }
         var window = new ReturnSaleWindow(_lastSaleId.Value) { Owner = this };
@@ -1081,12 +1083,19 @@ public partial class MainWindow : Window
 
     private void OpenCustomers(bool creditMode = false)
     {
-        var window = new CustomerWindow(creditMode: creditMode) { Owner = this };
-        window.ShowDialog();
-        CurrentSectionText.Text = "Ventas";
+        var section = creditMode ? "Créditos" : "Clientes";
+        var detail = creditMode
+            ? "Consulta créditos y registra abonos sin cerrar los tickets en atención."
+            : "Administra clientes sin cerrar los tickets en atención.";
+        ShowEmbeddedModule(new CustomerModule(creditMode), section, detail);
     }
 
-    private void OpenInventory() => new InventoryWindow { Owner = this }.ShowDialog();
+    private void OpenInventory()
+    {
+        var module = new InventoryWindow();
+        module.CloseRequested += (_, _) => ShowSalesWorkspace();
+        ShowEmbeddedModule(module, "Inventario", "Consulta y ajusta inventario sin cerrar los tickets en atención.");
+    }
 
     private void ShowPendingFeature(string feature)
     {
