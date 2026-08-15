@@ -126,6 +126,11 @@ public partial class MainWindow : Window
             SelectNextTicket();
             e.Handled = true;
         }
+        else if (e.Key == Key.F6)
+        {
+            OnNewTicketClick(sender, e);
+            e.Handled = true;
+        }
         else if (e.Key == Key.F10)
         {
             OpenProductLookup();
