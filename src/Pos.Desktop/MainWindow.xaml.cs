@@ -181,6 +181,8 @@ public partial class MainWindow : Window
     private void OnSalesActionClick(object sender, RoutedEventArgs e) =>
         ShowPendingFeature("Accion de ventas");
 
+    private void OnChangeTicketClick(object sender, RoutedEventArgs e) => SelectNextTicket();
+
     private async void OnAddProductFromEntryClick(object sender, RoutedEventArgs e) =>
         await HandleProductEntryAsync(ProductSearchTextBox.Text.Trim());
 
