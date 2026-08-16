@@ -8,7 +8,7 @@ namespace Pos.Desktop;
 
 public static class ApiClient
 {
-    private static readonly HttpClient ClientInstance = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private static HttpClient ClientInstance = CreateClient("http://127.0.0.1:5000");
     private static readonly string SettingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PuntoDeVenta", "client-settings.json");
 
     public static HttpClient Client => ClientInstance;
@@ -33,7 +33,7 @@ public static class ApiClient
         if (!value.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !value.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) value = $"http://{value}";
         var uri = new UriBuilder(value) { Port = port }.Uri;
         BaseUrl = uri.ToString().TrimEnd('/');
-        ClientInstance.BaseAddress = new Uri(BaseUrl + "/");
+        ReplaceClient(BaseUrl);
         Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
         SaveSettings();
     }
@@ -118,13 +118,29 @@ public static class ApiClient
                     UseNormalTotals = settings.UseNormalTotals;
                     PrinterTicketWidthMm = settings.PrinterTicketWidthMm == 58 ? 58 : 80;
                     BarcodeScanner = (settings.BarcodeScanner ?? BarcodeScannerProfile.Default).Normalize();
-                    ClientInstance.BaseAddress = new Uri(BaseUrl + "/");
+                    ReplaceClient(BaseUrl);
                     return;
                 }
             }
         }
         catch (IOException) { }
-        ClientInstance.BaseAddress = new Uri(BaseUrl + "/");
+        ReplaceClient(BaseUrl);
+    }
+
+    private static HttpClient CreateClient(string baseUrl) => new()
+    {
+        BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/"),
+        Timeout = TimeSpan.FromSeconds(10)
+    };
+
+    private static void ReplaceClient(string baseUrl)
+    {
+        var previous = ClientInstance;
+        var replacement = CreateClient(baseUrl);
+        var authorization = previous.DefaultRequestHeaders.Authorization;
+        if (authorization is not null) replacement.DefaultRequestHeaders.Authorization = authorization;
+        ClientInstance = replacement;
+        previous.Dispose();
     }
 
     private sealed record ClientSettings(
