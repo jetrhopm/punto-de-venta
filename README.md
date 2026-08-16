@@ -20,6 +20,7 @@ El estado completo y los pendientes se mantienen en `docs/PLAN_PROYECTO.md`.
 
 El respaldo, restauracion de prueba y diagnostico estan documentados en `docs/RESPALDO_RESTAURACION_DIAGNOSTICO.md`.
 El alcance y la prueba manual de F4 están documentados en `docs/INVENTARIO.md`.
+La configuración y validación de Mercado Pago Point están documentadas en `docs/INTEGRACION_MERCADO_PAGO_POINT.md`.
 
 ## Compilar
 

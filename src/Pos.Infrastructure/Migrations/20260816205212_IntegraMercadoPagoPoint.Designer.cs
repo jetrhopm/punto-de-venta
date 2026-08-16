@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pos.Infrastructure;
@@ -11,9 +12,11 @@ using Pos.Infrastructure;
 namespace Pos.Infrastructure.Migrations
 {
     [DbContext(typeof(PosDbContext))]
-    partial class PosDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260816205212_IntegraMercadoPagoPoint")]
+    partial class IntegraMercadoPagoPoint
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -411,10 +414,12 @@ namespace Pos.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("ProviderOrderId")
+                        .IsRequired()
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 
                     b.Property<string>("ProviderPaymentId")
+                        .IsRequired()
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 

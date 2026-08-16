@@ -62,6 +62,13 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         }
         var totalSale = RoundSaleAmount(lines.Sum(line => line.LineTotal), store);
         ValidatePaymentMethodEnabled(store, command, totalSale);
+        var mercadoPagoAmount = command.PaymentMethod == "Card" ? totalSale : command.PaymentMethod == "Mixed" ? command.CardAmount : 0m;
+        if (store.MercadoPagoEnabled && mercadoPagoAmount > 0m)
+        {
+            var pointPayment = await database.MercadoPagoOrders.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
+            if (pointPayment is null || pointPayment.Status != "Approved" || pointPayment.Amount != mercadoPagoAmount)
+                throw new InvalidOperationException("El cobro con Mercado Pago todavía no está aprobado o no coincide con el total de la venta.");
+        }
         CustomerRecord? customer = null;
         var currentCredit = 0m;
         if (command.PaymentMethod == "Credit")

@@ -1,6 +1,9 @@
 # Changelog
 
 ## Sin liberar
+- Se integra Mercado Pago Point con Orders API, autorización OAuth con PKCE, tokens cifrados y renovación automática.
+- Se permite asociar una terminal PDV por caja y se exige aprobación autoritativa e idempotente antes de confirmar pagos con tarjeta o pagos mixtos.
+- Los estados rechazado, cancelado, vencido o desconocido conservan el ticket abierto sin afectar inventario ni caja.
 - Se agrega una unidad de peso predeterminada configurable por tienda para productos de granel: kilogramo, gramo, libra u onza.
 - Se agrega la configuración administrativa de folios de venta: cada venta confirmada recibe un consecutivo único y se puede avanzar el siguiente folio sin reutilizar números ya emitidos.
 - Las ventas históricas se numeran durante la migración de folios y el consecutivo continúa después de la última venta registrada.

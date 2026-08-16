@@ -732,6 +732,7 @@ public partial class MainWindow : Window
     private sealed record RegisterResponse(Guid Id, string Name);
     private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
     private sealed record CutSettingsResponse(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, decimal CashLimit, string CashLimitMessage);
+    private sealed record MercadoPagoStatus(bool Enabled);
     private sealed record CurrentShiftResponse(Guid ShiftId, Guid RegisterId, Guid UserId, decimal InitialCash, DateTimeOffset OpenedAtUtc);
     private sealed record LatestSaleRow(Guid SaleId, DateTimeOffset CreatedAtUtc, decimal Total, string Status);
 
@@ -894,6 +895,12 @@ public partial class MainWindow : Window
         if (cashWindow.ShowDialog() != true || cashWindow.Received is null) return;
         try
         {
+            var pointAmount = cashWindow.PaymentMethod == "Card" ? ticket.Lines.Sum(item => item.Total) : cashWindow.PaymentMethod == "Mixed" ? cashWindow.CardAmount : 0m;
+            if (pointAmount > 0m && await IsMercadoPagoEnabledAsync())
+            {
+                var point = new MercadoPagoPaymentWindow(ticket.OperationId, pointAmount) { Owner = this };
+                if (point.ShowDialog() != true || !point.Approved) { StatusText.Text = "La venta sigue abierta porque el cobro con Mercado Pago no fue aprobado."; return; }
+            }
             var command = new { operationId = ticket.OperationId, draftId = ticket.Id, lines = ticket.Lines.Select(item => new { productId = item.ProductId, quantity = item.Quantity }).ToArray(), cashReceived = cashWindow.CreditRequested ? 0m : cashWindow.Received.Value, cardAmount = cashWindow.CreditRequested ? 0m : cashWindow.CardAmount, transferAmount = cashWindow.CreditRequested ? 0m : cashWindow.TransferAmount, customerId = cashWindow.CustomerId ?? ticket.CustomerId, paymentMethod = cashWindow.PaymentMethod, printRequested = cashWindow.PrintRequested };
             using var response = await Client.PostAsJsonAsync("/api/sales/complete", command);
             if (!response.IsSuccessStatusCode) { StatusText.Text = await ReadApiMessageAsync(response); MessageBox.Show(StatusText.Text, "No se pudo confirmar la venta", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
@@ -918,6 +925,12 @@ public partial class MainWindow : Window
             FocusProductInput();
         }
         catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API para confirmar la venta."; }
+    }
+
+    private static async Task<bool> IsMercadoPagoEnabledAsync()
+    {
+        try { return (await Client.GetFromJsonAsync<MercadoPagoStatus>("/api/integrations/mercado-pago/settings"))?.Enabled == true; }
+        catch { return false; }
     }
 
     private async void OnCancelLastSaleClick(object sender, RoutedEventArgs e)

@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\src\Pos.Domain\Pos.Domain.csproj" />
     <ProjectReference Include="..\..\src\Pos.Application\Pos.Application.csproj" />
     <ProjectReference Include="..\..\src\Pos.Printing\Pos.Printing.csproj" />
+    <ProjectReference Include="..\..\src\Pos.Integrations.MercadoPago\Pos.Integrations.MercadoPago.csproj" />
   </ItemGroup>
 
 </Project>

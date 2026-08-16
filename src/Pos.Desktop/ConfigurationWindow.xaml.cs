@@ -33,6 +33,7 @@ public partial class ConfigurationWindow : UserControl
     private void OnMeasureClick(object sender, RoutedEventArgs e) => new MeasureSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnCurrencyClick(object sender, RoutedEventArgs e) => new CurrencySettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnPaymentMethodsClick(object sender, RoutedEventArgs e) => new PaymentMethodSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+    private void OnMercadoPagoClick(object sender, RoutedEventArgs e) => new MercadoPagoSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnCutClick(object sender, RoutedEventArgs e) => new CutSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnOptionsClick(object sender, RoutedEventArgs e) => new StoreOptionsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnUsersClick(object sender, RoutedEventArgs e) => new UserAdministrationWindow { Owner = Window.GetWindow(this) }.ShowDialog();
