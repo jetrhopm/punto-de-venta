@@ -22,7 +22,8 @@ public sealed record TicketPdfData(
     DateTimeOffset CreatedAtUtc,
     IReadOnlyList<TicketPdfLine> Lines,
     IReadOnlyList<TicketPdfPayment> Payments,
-    decimal Total)
+    decimal Total,
+    string CurrencySymbol = "$")
 {
     public TicketPdfData(string storeName, Guid saleId, DateTimeOffset createdAtUtc, IReadOnlyList<TicketPdfLine> lines, decimal total, decimal received, decimal change)
         : this(storeName, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, "Gracias por su compra", 80, saleId, Guid.Empty, "Caja principal", "Administrador", createdAtUtc, lines, [new TicketPdfPayment("Cash", total, received, change)], total) { }
@@ -88,8 +89,8 @@ public static class TicketPdfWriter
             for (var index = 0; index < descriptionLines.Length; index++)
             {
                 var quantity = index == 0 ? line.Quantity.ToString("0.###", CultureInfo.InvariantCulture) : string.Empty;
-                var price = index == 0 ? Money(line.UnitPrice) : string.Empty;
-                var amount = index == 0 ? Money(line.Total) : string.Empty;
+                var price = index == 0 ? Money(ticket, line.UnitPrice) : string.Empty;
+                var amount = index == 0 ? Money(ticket, line.Total) : string.Empty;
                 rows.Add(new LayoutRow(
                     $"{FitRight(quantity, quantityWidth)} {FitLeft(descriptionLines[index], descriptionWidth)} {FitRight(price, priceWidth)} {FitRight(amount, amountWidth)}",
                     normalSize,
@@ -102,16 +103,16 @@ public static class TicketPdfWriter
         AddRule(rows);
         var itemCount = ticket.Lines.Sum(line => line.Quantity);
         rows.Add(new LayoutRow($"ARTICULOS: {itemCount:0.###}", normalSize, false, TextAlignment.Left, 4m));
-        rows.Add(new LayoutRow($"SUBTOTAL: {Money(ticket.Total)}", normalSize + 1m, true, TextAlignment.Right, 3m));
-        rows.Add(new LayoutRow($"TOTAL: {Money(ticket.Total)}", totalSize, true, TextAlignment.Right, 5m));
+        rows.Add(new LayoutRow($"SUBTOTAL: {Money(ticket, ticket.Total)}", normalSize + 1m, true, TextAlignment.Right, 3m));
+        rows.Add(new LayoutRow($"TOTAL: {Money(ticket, ticket.Total)}", totalSize, true, TextAlignment.Right, 5m));
 
         foreach (var payment in ticket.Payments.Where(payment => payment.Amount > 0m))
-            rows.Add(new LayoutRow($"{PaymentLabel(payment.Method)}: {Money(payment.Amount)}", normalSize, false, TextAlignment.Right, 2m));
+            rows.Add(new LayoutRow($"{PaymentLabel(payment.Method)}: {Money(ticket, payment.Amount)}", normalSize, false, TextAlignment.Right, 2m));
 
         var cashReceived = ticket.Payments.Where(payment => payment.Method.Equals("Cash", StringComparison.OrdinalIgnoreCase)).Sum(payment => payment.Received);
         var change = ticket.Payments.Sum(payment => payment.Change);
-        if (cashReceived > 0m) rows.Add(new LayoutRow($"RECIBIDO: {Money(cashReceived)}", normalSize, false, TextAlignment.Right, 2m));
-        if (change > 0m || cashReceived > 0m) rows.Add(new LayoutRow($"CAMBIO: {Money(change)}", normalSize + 1m, true, TextAlignment.Right, 4m));
+        if (cashReceived > 0m) rows.Add(new LayoutRow($"RECIBIDO: {Money(ticket, cashReceived)}", normalSize, false, TextAlignment.Right, 2m));
+        if (change > 0m || cashReceived > 0m) rows.Add(new LayoutRow($"CAMBIO: {Money(ticket, change)}", normalSize + 1m, true, TextAlignment.Right, 4m));
 
         AddRule(rows);
         AddWrapped(rows, string.IsNullOrWhiteSpace(ticket.Footer) ? "GRACIAS POR SU COMPRA" : ticket.Footer, maxCharacters, TextAlignment.Center, normalSize, false, 3m);
@@ -213,7 +214,7 @@ public static class TicketPdfWriter
     private static void AddRule(List<LayoutRow> rows) => rows.Add(new LayoutRow(null, 0m, false, TextAlignment.Left, 6m, true));
     private static string ValueOrDefault(string value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim().ToUpperInvariant();
     private static string ShortId(Guid value) => value == Guid.Empty ? "N/D" : value.ToString("N")[..8].ToUpperInvariant();
-    private static string Money(decimal value) => "$" + value.ToString("#,##0.00", CultureInfo.InvariantCulture);
+    private static string Money(TicketPdfData ticket, decimal value) => (string.IsNullOrWhiteSpace(ticket.CurrencySymbol) ? "$" : ticket.CurrencySymbol.Trim()) + value.ToString("#,##0.00", CultureInfo.InvariantCulture);
     private static string PaymentLabel(string method) => method.ToUpperInvariant() switch { "CASH" => "EFECTIVO", "CARD" => "TARJETA", "TRANSFER" => "TRANSFERENCIA", "CREDIT" => "CREDITO", _ => method.ToUpperInvariant() };
     private static string FitLeft(string value, int width) => value.Length > width ? value[..width] : value.PadRight(width);
     private static string FitRight(string value, int width) => value.Length > width ? value[^width..] : value.PadLeft(width);

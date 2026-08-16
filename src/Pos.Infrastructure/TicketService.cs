@@ -46,7 +46,8 @@ public sealed class TicketService(PosDbContext database)
             sale.CreatedAtUtc,
             lines,
             payments,
-            sale.Total);
+            sale.Total,
+            store.CurrencySymbol);
     }
 
     public async Task<bool?> MarkPrintedAsync(string token, Guid saleId, CancellationToken cancellationToken)

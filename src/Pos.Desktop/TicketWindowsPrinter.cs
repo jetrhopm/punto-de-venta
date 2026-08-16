@@ -82,7 +82,7 @@ public static class TicketWindowsPrinter
             root.Children.Add(Metadata("Fecha", ticket.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss"), baseSize));
             root.Children.Add(Metadata("Motivo", ticket.Lines.FirstOrDefault()?.Description ?? "Retiro de efectivo", baseSize));
             root.Children.Add(Rule());
-            root.Children.Add(AmountLine("TOTAL RETIRADO", ticket.Total, baseSize + 3d, FontWeights.Bold));
+            root.Children.Add(AmountLine(ticket, "TOTAL RETIRADO", ticket.Total, baseSize + 3d, FontWeights.Bold));
             root.Children.Add(Rule());
             AddOptionalCentered(root, string.IsNullOrWhiteSpace(ticket.Footer) ? "Conserve este comprobante" : ticket.Footer, baseSize);
             return new Border { Width = pageWidth, Padding = new Thickness(padding), Background = Brushes.White, Child = root };
@@ -105,20 +105,20 @@ public static class TicketWindowsPrinter
         root.Children.Add(Rule());
 
         root.Children.Add(ProductHeader(baseSize));
-        foreach (var line in ticket.Lines) root.Children.Add(ProductLine(line, baseSize));
+        foreach (var line in ticket.Lines) root.Children.Add(ProductLine(ticket, line, baseSize));
         root.Children.Add(Rule());
 
         root.Children.Add(Text($"Articulos: {ticket.Lines.Sum(line => line.Quantity):0.###}", baseSize, FontWeights.Normal, TextAlignment.Left, new Thickness(0, 1, 0, 4)));
         var totalWeight = profile.UseNormalTotals ? FontWeights.Normal : FontWeights.Bold;
-        root.Children.Add(AmountLine("Subtotal", ticket.Total, baseSize + 1d, totalWeight));
-        root.Children.Add(AmountLine("TOTAL", ticket.Total, baseSize + 4d, totalWeight));
+        root.Children.Add(AmountLine(ticket, "Subtotal", ticket.Total, baseSize + 1d, totalWeight));
+        root.Children.Add(AmountLine(ticket, "TOTAL", ticket.Total, baseSize + 4d, totalWeight));
         foreach (var payment in ticket.Payments.Where(payment => payment.Amount > 0m))
-            root.Children.Add(AmountLine(PaymentLabel(payment.Method), payment.Amount, baseSize, FontWeights.Normal));
+            root.Children.Add(AmountLine(ticket, PaymentLabel(payment.Method), payment.Amount, baseSize, FontWeights.Normal));
 
         var received = ticket.Payments.Where(payment => payment.Method.Equals("Cash", StringComparison.OrdinalIgnoreCase)).Sum(payment => payment.Received);
         var change = ticket.Payments.Sum(payment => payment.Change);
-        if (received > 0m) root.Children.Add(AmountLine("Recibido", received, baseSize, FontWeights.Normal));
-        if (received > 0m || change > 0m) root.Children.Add(AmountLine("Cambio", change, baseSize + 1d, totalWeight));
+        if (received > 0m) root.Children.Add(AmountLine(ticket, "Recibido", received, baseSize, FontWeights.Normal));
+        if (received > 0m || change > 0m) root.Children.Add(AmountLine(ticket, "Cambio", change, baseSize + 1d, totalWeight));
 
         root.Children.Add(Rule());
         AddOptionalCentered(root, string.IsNullOrWhiteSpace(ticket.Footer) ? "Gracias por su compra" : ticket.Footer, baseSize);
@@ -217,23 +217,23 @@ public static class TicketWindowsPrinter
         return grid;
     }
 
-    private static Grid ProductLine(TicketPdfLine line, double size)
+    private static Grid ProductLine(TicketPdfData ticket, TicketPdfLine line, double size)
     {
         var grid = ProductGrid();
         grid.Margin = new Thickness(0, 1, 0, 2);
         AddCell(grid, line.Quantity.ToString("0.###", CultureInfo.InvariantCulture), 0, size, FontWeights.Normal, TextAlignment.Left);
         AddCell(grid, line.Description, 1, size, FontWeights.Normal, TextAlignment.Left);
-        AddCell(grid, Money(line.UnitPrice), 2, size, FontWeights.Normal, TextAlignment.Right);
-        AddCell(grid, Money(line.Total), 3, size, FontWeights.Normal, TextAlignment.Right);
+        AddCell(grid, Money(ticket, line.UnitPrice), 2, size, FontWeights.Normal, TextAlignment.Right);
+        AddCell(grid, Money(ticket, line.Total), 3, size, FontWeights.Normal, TextAlignment.Right);
         return grid;
     }
 
-    private static Grid AmountLine(string label, decimal amount, double size, FontWeight weight)
+    private static Grid AmountLine(TicketPdfData ticket, string label, decimal amount, double size, FontWeight weight)
     {
         var grid = TwoColumnGrid(0.55d, 0.45d);
         grid.Margin = new Thickness(0, 1, 0, 1);
         AddCell(grid, label + ":", 0, size, weight, TextAlignment.Right);
-        AddCell(grid, Money(amount), 1, size, weight, TextAlignment.Right);
+        AddCell(grid, Money(ticket, amount), 1, size, weight, TextAlignment.Right);
         return grid;
     }
 
@@ -264,7 +264,7 @@ public static class TicketWindowsPrinter
 
     private static string ValueOrDefault(string value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
     private static string ShortId(Guid value) => value == Guid.Empty ? "N/D" : value.ToString("N")[..8].ToUpperInvariant();
-    private static string Money(decimal value) => "$" + value.ToString("#,##0.00", CultureInfo.InvariantCulture);
+    private static string Money(TicketPdfData ticket, decimal value) => (string.IsNullOrWhiteSpace(ticket.CurrencySymbol) ? "$" : ticket.CurrencySymbol.Trim()) + value.ToString("#,##0.00", CultureInfo.InvariantCulture);
     private static string PaymentLabel(string method) => method.ToUpperInvariant() switch
     {
         "CASH" => "Efectivo",
