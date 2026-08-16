@@ -13,11 +13,23 @@ public partial class ProductCatalogWindow : UserControl
     private List<DepartmentRow> _departments = [];
     private int _page = 1;
     private bool _loadingForm;
+    private string _configuredWeightUnit = "Kilogramo";
 
     public ProductCatalogWindow()
     {
         InitializeComponent();
-        Loaded += async (_, _) => { await LoadDepartmentsAsync(); await LoadCatalogAsync(); SearchBox.Focus(); };
+        Loaded += async (_, _) => { await LoadMeasureSettingsAsync(); await LoadDepartmentsAsync(); await LoadCatalogAsync(); SearchBox.Focus(); };
+    }
+
+    private async Task LoadMeasureSettingsAsync()
+    {
+        try
+        {
+            var settings = await ApiClient.Client.GetFromJsonAsync<MeasureSettings>("/api/measure-settings");
+            if (!string.IsNullOrWhiteSpace(settings?.DefaultWeightUnit)) _configuredWeightUnit = settings.DefaultWeightUnit;
+            WeightUnitHintText.Text = $"Granel usará {_configuredWeightUnit.ToLowerInvariant()} según Configuración.";
+        }
+        catch (Exception exception) { StatusText.Text = $"No se pudo cargar la unidad de peso: {exception.Message}"; }
     }
 
     private async Task LoadDepartmentsAsync()
@@ -151,7 +163,9 @@ public partial class ProductCatalogWindow : UserControl
         var wholesaleProfit = TryDecimal(WholesaleProfitPercentBox.Text, out var parsedWholesaleProfit) ? parsedWholesaleProfit : 0m;
         var wholesaleMinimum = TryDecimal(WholesaleMinimumBox.Text, out var parsedWholesaleMinimum) ? parsedWholesaleMinimum : 0m;
         if (cost < 0 || profit < 0 || price < 0 || wholesalePrice < 0 || wholesaleProfit < 0 || wholesaleMinimum < 0) { StatusText.Text = "Los importes y porcentajes no pueden ser negativos."; return false; }
-        command = new { code = CodeBox.Text.Trim(), description = DescriptionBox.Text.Trim(), price, cost, profitPercent = profit, wholesalePrice, wholesaleProfitPercent = wholesaleProfit, wholesaleMinimumQuantity = wholesaleMinimum, isKit = IsKitBox.IsChecked == true, unitOfMeasure = UnitBox.SelectedItem?.ToString() ?? "Pieza", departmentId = DepartmentBox.SelectedValue is Guid department && department != Guid.Empty ? department : (Guid?)null };
+        var unit = UnitBox.SelectedItem?.ToString() ?? "Pieza";
+        if (string.Equals(unit, "Granel (unidad configurada)", StringComparison.OrdinalIgnoreCase)) unit = _configuredWeightUnit;
+        command = new { code = CodeBox.Text.Trim(), description = DescriptionBox.Text.Trim(), price, cost, profitPercent = profit, wholesalePrice, wholesaleProfitPercent = wholesaleProfit, wholesaleMinimumQuantity = wholesaleMinimum, isKit = IsKitBox.IsChecked == true, unitOfMeasure = unit, departmentId = DepartmentBox.SelectedValue is Guid department && department != Guid.Empty ? department : (Guid?)null };
         return true;
     }
 
@@ -165,4 +179,5 @@ public partial class ProductCatalogWindow : UserControl
     private sealed record DepartmentRow(Guid Id, string Name, bool IsActive);
     private sealed record CatalogProductRow(Guid Id, string Code, string Description, string Department, Guid? DepartmentId, decimal Cost, decimal Price, decimal ProfitPercent, decimal ProfitAmount, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleProfitAmount, decimal WholesaleMinimumQuantity, decimal Stock, decimal MinimumStock, decimal MaximumStock, string UnitOfMeasure, bool IsKit, bool IsActive);
     private sealed record CatalogPage(List<CatalogProductRow> Items, int Page, int PageSize, int TotalCount, int TotalPages);
+    private sealed record MeasureSettings(string DefaultWeightUnit);
 }

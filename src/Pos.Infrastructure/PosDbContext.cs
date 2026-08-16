@@ -53,6 +53,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             entity.Property(store => store.TimeZoneId).HasMaxLength(100).IsRequired();
             entity.Property(store => store.CreatedAtUtc).HasColumnType("timestamp with time zone"); entity.Property(store => store.TicketHeader).HasMaxLength(300); entity.Property(store => store.TicketFooter).HasMaxLength(300);
             entity.Property(store => store.NextSaleFolio).HasDefaultValue(1L);
+            entity.Property(store => store.DefaultWeightUnit).HasMaxLength(20).HasDefaultValue("Kilogramo");
         });
         modelBuilder.Entity<UserRecord>(entity =>
         {
@@ -252,7 +253,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     }
 }
 
-public sealed class StoreRecord { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string BusinessType { get; set; } = string.Empty; public string LegalName { get; set; } = string.Empty; public string TaxId { get; set; } = string.Empty; public string Address { get; set; } = string.Empty; public string Phone { get; set; } = string.Empty; public string TimeZoneId { get; set; } = "America/Mexico_City"; public string TicketHeader { get; set; } = string.Empty; public string TicketFooter { get; set; } = "Gracias por su compra"; public int TicketWidthMm { get; set; } = 80; public long NextSaleFolio { get; set; } = 1; public DateTimeOffset CreatedAtUtc { get; set; } }
+public sealed class StoreRecord { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string BusinessType { get; set; } = string.Empty; public string LegalName { get; set; } = string.Empty; public string TaxId { get; set; } = string.Empty; public string Address { get; set; } = string.Empty; public string Phone { get; set; } = string.Empty; public string TimeZoneId { get; set; } = "America/Mexico_City"; public string TicketHeader { get; set; } = string.Empty; public string TicketFooter { get; set; } = "Gracias por su compra"; public int TicketWidthMm { get; set; } = 80; public long NextSaleFolio { get; set; } = 1; public string DefaultWeightUnit { get; set; } = "Kilogramo"; public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class UserRecord { public Guid Id { get; set; } public string NormalizedUserName { get; set; } = string.Empty; public string PasswordHash { get; set; } = string.Empty; public string DisplayName { get; set; } = string.Empty; public bool IsAdministrator { get; set; } public bool IsActive { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class RegisterRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public string Name { get; set; } = string.Empty; public bool IsActive { get; set; } }
 public sealed class DeviceRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public Guid RegisterId { get; set; } public string Name { get; set; } = string.Empty; public string DeviceType { get; set; } = "Register"; public string DeviceTokenHash { get; set; } = string.Empty; public bool IsActive { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset? LastSeenAtUtc { get; set; } }

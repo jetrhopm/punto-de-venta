@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se agrega una unidad de peso predeterminada configurable por tienda para productos de granel: kilogramo, gramo, libra u onza.
 - Se agrega la configuración administrativa de folios de venta: cada venta confirmada recibe un consecutivo único y se puede avanzar el siguiente folio sin reutilizar números ya emitidos.
 - Las ventas históricas se numeran durante la migración de folios y el consecutivo continúa después de la última venta registrada.
 - Se corrige el cálculo de precio y utilidad al editar productos: un porcentaje numérico recalcula el precio, mientras un porcentaje vacío conserva el precio manual sin mostrar errores.

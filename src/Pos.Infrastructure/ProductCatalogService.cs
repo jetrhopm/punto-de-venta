@@ -84,7 +84,18 @@ public sealed class ProductCatalogService(PosDbContext database)
     private static decimal ResolveWholesalePrice(decimal price, decimal cost, decimal profit) => price > 0m ? decimal.Round(price, 2) : profit > 0m ? decimal.Round(cost * (1m + profit / 100m), 2, MidpointRounding.AwayFromZero) : 0m;
     private static string NormalizeName(string value) => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToUpperInvariant();
     private static ProductResult ToResult(ProductRecord product) => new(product.Id, product.Code, product.Description, product.Price, product.Cost, product.ProfitPercent, product.WholesalePrice, product.WholesaleProfitPercent, product.WholesaleMinimumQuantity, product.DepartmentId, product.IsKit, product.UnitOfMeasure, product.IsActive);
-    private static string NormalizeUnit(string value) { var normalized = string.IsNullOrWhiteSpace(value) ? "Pieza" : value.Trim(); return normalized.Equals("Kilogramo", StringComparison.OrdinalIgnoreCase) || normalized.Equals("Gramo", StringComparison.OrdinalIgnoreCase) ? "Granel (peso)" : normalized; }
+    private static string NormalizeUnit(string value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? "Pieza" : value.Trim();
+        return normalized.ToUpperInvariant() switch
+        {
+            "KG" or "KILO" or "KILOGRAMO" => "Kilogramo",
+            "G" or "GR" or "GRAMO" => "Gramo",
+            "LB" or "LIBRA" => "Libra",
+            "OZ" or "ONZA" => "Onza",
+            _ => normalized
+        };
+    }
 
     private async Task<Guid?> GetAuthorizedUserAsync(string accessToken, string permission, CancellationToken cancellationToken)
     {

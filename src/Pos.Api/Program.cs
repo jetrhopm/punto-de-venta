@@ -48,6 +48,7 @@ builder.Services.AddScoped<TicketSettingsService>();
 builder.Services.AddScoped<LanPairingService>();
 builder.Services.AddScoped<StoreSettingsService>();
 builder.Services.AddScoped<SaleFolioService>();
+builder.Services.AddScoped<MeasureSettingsService>();
 builder.Services.AddScoped<ProductImportService>();
 builder.Services.AddScoped<DatabaseMaintenanceService>();
 builder.Services.AddHostedService<DailyBackupHostedService>();
@@ -140,6 +141,20 @@ app.MapPut("/api/sale-folios", async (HttpRequest request, SetNextSaleFolioComma
         return result is null ? Results.Unauthorized() : Results.Ok(result);
     }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["folio"] = [exception.Message] }); }
+});
+app.MapGet("/api/measure-settings", async (HttpRequest request, MeasureSettingsService settings, CancellationToken cancellationToken) =>
+{
+    var result = await settings.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapPut("/api/measure-settings", async (HttpRequest request, SetMeasureSettingsCommand command, MeasureSettingsService settings, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await settings.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["unit"] = [exception.Message] }); }
 });
 app.MapPost("/api/products/import", async (HttpRequest request, ProductImportCommand command, ProductImportService importer, CancellationToken cancellationToken) =>
 {
