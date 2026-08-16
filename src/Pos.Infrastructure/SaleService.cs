@@ -6,7 +6,7 @@ using System.Text;
 namespace Pos.Infrastructure;
 
 public sealed record SaleLineCommand(Guid ProductId, decimal Quantity, bool UseWholesale = false);
-public sealed record CompleteSaleCommand(Guid OperationId, IReadOnlyList<SaleLineCommand> Lines, decimal CashReceived, Guid? CustomerId = null, string PaymentMethod = "Cash", decimal CardAmount = 0m, decimal TransferAmount = 0m, Guid? DraftId = null);
+public sealed record CompleteSaleCommand(Guid OperationId, IReadOnlyList<SaleLineCommand> Lines, decimal CashReceived, Guid? CustomerId = null, string PaymentMethod = "Cash", decimal CardAmount = 0m, decimal TransferAmount = 0m, Guid? DraftId = null, bool PrintRequested = true);
 public sealed record CompleteSaleResult(Guid SaleId, Guid OperationId, decimal Total, decimal CashReceived, decimal Change, bool Existing);
 
 public sealed class SaleService(PosDbContext database, PromotionService promotions, KitService kits)
@@ -96,7 +96,8 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         if (transferAmountToRecord > 0m) database.Payments.Add(new PaymentRecord { Id = Guid.NewGuid(), SaleId = sale.Id, Method = "Transfer", Amount = transferAmountToRecord, Received = transferAmountToRecord, Change = 0m });
         if (command.PaymentMethod == "Credit") database.Payments.Add(new PaymentRecord { Id = Guid.NewGuid(), SaleId = sale.Id, Method = "Credit", Amount = totalSale, Received = 0m, Change = 0m });
         if (customer is not null) database.CreditTransactions.Add(new CreditTransactionRecord { Id = Guid.NewGuid(), CustomerId = customer.Id, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Type = "Sale", Amount = totalSale, BalanceBefore = currentCredit, BalanceAfter = currentCredit + totalSale, Reason = "Venta a credito", CreatedAtUtc = sale.CreatedAtUtc });
-        database.PrintJobs.Add(new PrintJobRecord { Id = Guid.NewGuid(), SaleId = sale.Id, CreatedAtUtc = sale.CreatedAtUtc });
+        if (command.PrintRequested)
+            database.PrintJobs.Add(new PrintJobRecord { Id = Guid.NewGuid(), SaleId = sale.Id, PrintRequested = true, CreatedAtUtc = sale.CreatedAtUtc });
         if (draft is not null)
         {
             draft.Status = "Completed";

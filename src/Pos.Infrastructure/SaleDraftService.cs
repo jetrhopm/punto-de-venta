@@ -31,6 +31,15 @@ public sealed class SaleDraftService(PosDbContext database)
         if (context is null) return null;
 
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        var emptyDrafts = await database.SaleDrafts
+            .Where(item => item.ShiftId == context.ShiftId && item.UserId == context.UserId && item.Status == "Open" && !item.Lines.Any())
+            .ToListAsync(cancellationToken);
+        foreach (var emptyDraft in emptyDrafts)
+        {
+            emptyDraft.Status = "Discarded";
+            emptyDraft.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        }
+
         var nextTicket = (await database.SaleDrafts
             .Where(item => item.ShiftId == context.ShiftId)
             .Select(item => (int?)item.TicketNumber)

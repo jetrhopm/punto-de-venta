@@ -62,8 +62,8 @@ public sealed class SystemDiagnosticsService(PosDbContext database)
             customerCount = await database.Customers.CountAsync(item => item.IsActive, cancellationToken);
             supplierCount = await database.Suppliers.CountAsync(cancellationToken);
             completedSaleCount = await database.Sales.CountAsync(item => item.Status == "Completed", cancellationToken);
-            openTicketCount = await database.SaleDrafts.CountAsync(item => item.Status == "Open", cancellationToken);
-            pendingPrintJobCount = await database.PrintJobs.CountAsync(item => item.Status == "Pending" || item.Status == "Processing", cancellationToken);
+            openTicketCount = await database.SaleDrafts.CountAsync(item => item.Status == "Open" && item.Lines.Any(), cancellationToken);
+            pendingPrintJobCount = await database.PrintJobs.CountAsync(item => item.PrintRequested && (item.Status == "Pending" || item.Status == "Processing"), cancellationToken);
 
             checks.Add(openTicketCount == 0
                 ? new("Tickets pendientes", "Correcto", "No hay tickets abiertos pendientes de recuperar.", "")

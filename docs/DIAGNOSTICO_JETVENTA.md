@@ -8,11 +8,13 @@ El diagnóstico se abre desde **Configuración > Diagnóstico** y requiere el pe
 - Migraciones pendientes.
 - Tienda configurada.
 - Productos, usuarios, clientes, proveedores y ventas confirmadas.
-- Tickets abiertos que pueden recuperarse.
+- Tickets abiertos con productos que pueden recuperarse. Los borradores vacíos no se consideran pendientes.
 - Cola de impresión pendiente.
 - Respaldo local más reciente y validación de su SHA-256.
 - Número de respaldos y espacio libre del equipo servidor.
 - Impresoras instaladas en Windows y la impresora seleccionada para esta caja.
+
+Las ventas cobradas con **Cobrar sin imprimir** no crean trabajos de impresión. Las ventas cobradas e impresas sí dejan un trabajo hasta que el sistema confirma que fue enviado a la impresora.
 
 El reporte no muestra contraseñas, tokens, cadenas de conexión ni claves privadas. Se puede copiar para enviarlo a soporte.
 
