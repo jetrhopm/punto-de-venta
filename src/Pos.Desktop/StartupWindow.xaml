@@ -74,7 +74,7 @@
 
                 <StackPanel Grid.Row="4" x:Name="ErrorPanel" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Visibility="Collapsed">
                     <Button Width="165" Height="38" Margin="0,0,10,0" Content="Configurar conexión" Click="OnConfigureClick"/>
-                    <Button Width="145" Height="38" Margin="0,0,10,0" Content="Intentar de nuevo" Click="OnRetryClick"/>
+                    <Button Width="145" Height="38" Margin="0,0,10,0" Content="Reparar servicios" Click="OnRepairClick"/>
                     <Button Width="90" Height="38" Content="Cerrar" Click="OnCloseClick"/>
                 </StackPanel>
             </Grid>

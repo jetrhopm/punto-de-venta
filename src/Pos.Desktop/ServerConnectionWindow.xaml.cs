@@ -16,15 +16,29 @@ public partial class ServerConnectionWindow : Window
     private async void OnTestClick(object sender, RoutedEventArgs e)
     {
         if (!TryRead(out var host, out var port)) return;
+        var previous = new Uri(ApiClient.BaseUrl);
         try
         {
-            ApiClient.SetServer(host, port);
-            using var response = await ApiClient.Client.GetAsync("health");
-            MessageText.Text = response.IsSuccessStatusCode ? "Conexion correcta con el servidor." : $"El servidor respondio {response.StatusCode}.";
+            ApiClient.SetServer(host, port, persist: false);
+            using var health = await ApiClient.Client.GetAsync("health");
+            if (!health.IsSuccessStatusCode)
+            {
+                MessageText.Text = $"El servicio respondió {health.StatusCode}. Revisa la dirección y el puerto.";
+                return;
+            }
+
+            using var setup = await ApiClient.Client.GetAsync("api/setup/status");
+            MessageText.Text = setup.IsSuccessStatusCode
+                ? "Conexión correcta: el servicio y la base de datos responden."
+                : "El servicio responde, pero no se pudo consultar la tienda. Revisa PostgreSQL y las migraciones en el servidor.";
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or UriFormatException)
         {
             MessageText.Text = "No se pudo conectar. Revisa IP, puerto y Firewall de Windows.";
+        }
+        finally
+        {
+            ApiClient.SetServer(previous.Host, previous.Port, persist: false);
         }
     }
 

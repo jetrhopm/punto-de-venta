@@ -34,6 +34,8 @@ public partial class StartupWindow : Window
 
     private async void OnRetryClick(object sender, RoutedEventArgs e) => await RunStartupCheckAsync();
 
+    private async void OnRepairClick(object sender, RoutedEventArgs e) => await RunStartupCheckAsync(forceRepair: true);
+
     private async void OnConfigureClick(object sender, RoutedEventArgs e)
     {
         if (_isChecking) return;
@@ -43,7 +45,7 @@ public partial class StartupWindow : Window
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => System.Windows.Application.Current.Shutdown();
 
-    private async Task RunStartupCheckAsync()
+    private async Task RunStartupCheckAsync(bool forceRepair = false)
     {
         if (_isChecking) return;
         _isChecking = true;
@@ -57,7 +59,7 @@ public partial class StartupWindow : Window
             if (!available)
             {
                 SetStatus(IsLocalApi() ? "JetVenta esta intentando iniciar sus servicios locales..." : "JetVenta esta intentando conectar con el servidor configurado...", 25, "Preparando", "Recuperando", "Pendiente");
-                await TryStartLocalServicesAsync();
+                await TryStartLocalServicesAsync(forceRepair);
                 available = await WaitForApiAsync();
             }
 
@@ -73,7 +75,7 @@ public partial class StartupWindow : Window
             if (setup is null)
             {
                 SetStatus("La base de datos no responde. JetVenta intentara recuperar sus servicios...", 78, "Revisando", "Recuperando", "Pendiente");
-                await TryStartLocalServicesAsync();
+                await TryStartLocalServicesAsync(forceRepair);
                 available = await WaitForApiAsync();
                 setup = available ? await ReadSetupStatusAsync() : null;
                 if (setup is null)
@@ -147,7 +149,7 @@ public partial class StartupWindow : Window
         }
     }
 
-    private async Task TryStartLocalServicesAsync()
+    private async Task TryStartLocalServicesAsync(bool forceRepair = false)
     {
         if (!IsLocalApi())
         {
@@ -158,8 +160,16 @@ public partial class StartupWindow : Window
         var developmentRoot = FindDevelopmentRoot();
         if (developmentRoot is not null)
         {
-            await TryStartDevelopmentServicesAsync(developmentRoot);
+            await TryStartDevelopmentServicesAsync(developmentRoot, forceRepair);
             return;
+        }
+
+        if (forceRepair)
+        {
+            Log("El usuario solicito reparar servicios locales. Deteniendo servicios de JetVenta antes de iniciarlos.");
+            await TryRunAsync("sc.exe", $"stop {ApiServiceName}");
+            await TryRunAsync("sc.exe", $"stop {PostgreSqlServiceName}");
+            await Task.Delay(TimeSpan.FromSeconds(1));
         }
 
         await TryRunAsync("sc.exe", $"start {PostgreSqlServiceName}");
@@ -207,7 +217,7 @@ public partial class StartupWindow : Window
         }
     }
 
-    private async Task TryStartDevelopmentServicesAsync(string root)
+    private async Task TryStartDevelopmentServicesAsync(string root, bool forceRepair = false)
     {
         var settingsPath = Path.Combine(root, ".postgres", "development-settings.json");
         var dataPath = Path.Combine(root, ".postgres", "data");
@@ -226,7 +236,19 @@ public partial class StartupWindow : Window
                 $"-D \"{dataPath}\" -l \"{logPath}\" -o \"-p {port} -c listen_addresses=127.0.0.1 -c fsync=on -c synchronous_commit=on -c full_page_writes=on\" -w start");
         }
 
-        if (await CheckApiAsync()) return;
+        if (await CheckApiAsync() && (!forceRepair || _fallbackApiProcess is null)) return;
+
+        if (forceRepair && _fallbackApiProcess is { HasExited: false })
+        {
+            try
+            {
+                _fallbackApiProcess.Kill(entireProcessTree: true);
+                await _fallbackApiProcess.WaitForExitAsync();
+                Log("API de desarrollo detenida para aplicar la reparación solicitada.");
+            }
+            catch (Exception exception) { Log($"No se pudo detener la API de desarrollo durante la reparación: {exception.Message}"); }
+            finally { _fallbackApiProcess.Dispose(); _fallbackApiProcess = null; }
+        }
 
         var dotnetPath = Path.Combine(root, ".tools", "dotnet", "dotnet.exe");
         var apiAssembly = Path.Combine(root, "src", "Pos.Api", "bin", "Debug", "net10.0", "Pos.Api.dll");

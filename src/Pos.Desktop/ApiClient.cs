@@ -25,7 +25,7 @@ public static class ApiClient
 
     static ApiClient() => Load();
 
-    public static void SetServer(string host, int port)
+    public static void SetServer(string host, int port, bool persist = true)
     {
         if (string.IsNullOrWhiteSpace(host)) throw new ArgumentException("El servidor es obligatorio.", nameof(host));
         if (port is < 1 or > 65535) throw new ArgumentOutOfRangeException(nameof(port));
@@ -34,8 +34,11 @@ public static class ApiClient
         var uri = new UriBuilder(value) { Port = port }.Uri;
         BaseUrl = uri.ToString().TrimEnd('/');
         ReplaceClient(BaseUrl);
-        Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-        SaveSettings();
+        if (persist)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
+            SaveSettings();
+        }
     }
 
     public static void ApplySession(string? accessToken) => ClientInstance.DefaultRequestHeaders.Authorization = string.IsNullOrWhiteSpace(accessToken) ? null : new AuthenticationHeaderValue("Bearer", accessToken);
