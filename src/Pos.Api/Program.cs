@@ -55,6 +55,7 @@ builder.Services.AddScoped<CutSettingsService>();
 builder.Services.AddScoped<StoreOptionsService>();
 builder.Services.AddScoped<CashDrawerSettingsService>();
 builder.Services.AddScoped<ScaleSettingsService>();
+builder.Services.AddScoped<SystemDiagnosticsService>();
 builder.Services.AddScoped<ProductImportService>();
 builder.Services.AddScoped<DatabaseMaintenanceService>();
 builder.Services.AddHostedService<DailyBackupHostedService>();
@@ -124,6 +125,22 @@ app.MapGet("/api/setup/status", async (PosDbContext database, CancellationToken 
             detail: "La base de datos no está lista o requiere reparación. Usa Reparar servicios y vuelve a intentar.",
             statusCode: StatusCodes.Status503ServiceUnavailable,
             extensions: new Dictionary<string, object?> { ["code"] = "database_unavailable" });
+    }
+});
+
+app.MapGet("/api/diagnostics", async (HttpRequest request, SystemDiagnosticsService diagnostics, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+        var version = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "No disponible";
+        var result = await diagnostics.RunAsync(token, version, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (Exception exception)
+    {
+        WriteStartupLog($"No se pudo generar el diagnóstico: {exception.GetType().Name}: {exception.Message}");
+        return Results.Problem("No se pudo generar el diagnóstico. Revisa la conexión y vuelve a intentarlo.", statusCode: StatusCodes.Status503ServiceUnavailable);
     }
 });
 

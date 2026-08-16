@@ -22,6 +22,7 @@ public partial class ConfigurationWindow : UserControl
         CashDrawerButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
         ScaleButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
         SystemDetailsButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
+        DiagnosticButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
         BackupButton.IsEnabled = SessionContext.HasPermission("ImportOrExportData");
         ImportButton.IsEnabled = SessionContext.HasPermission("ImportOrExportData");
         StatusText.Text = "Las opciones deshabilitadas requieren un permiso del administrador.";
@@ -41,6 +42,7 @@ public partial class ConfigurationWindow : UserControl
     private void OnCashDrawerClick(object sender, RoutedEventArgs e) => new CashDrawerSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnScaleClick(object sender, RoutedEventArgs e) => new ScaleSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnSystemDetailsClick(object sender, RoutedEventArgs e) => new SystemDetailsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+    private void OnDiagnosticClick(object sender, RoutedEventArgs e) => new DiagnosticWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnBackupClick(object sender, RoutedEventArgs e) => new BackupWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnImportClick(object sender, RoutedEventArgs e) => new ProductImportWindow { Owner = Window.GetWindow(this) }.ShowDialog();
 
