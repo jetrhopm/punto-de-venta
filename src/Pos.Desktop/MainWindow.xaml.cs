@@ -892,6 +892,8 @@ public partial class MainWindow : Window
             else { TicketTabs.SelectedIndex = 0; ActivateTicket(_tickets[0]); }
             StatusText.Text = result is null ? "Venta confirmada." : result.Existing ? "La venta ya estaba confirmada; no se registró un cobro duplicado." : cashWindow.CreditRequested ? "Venta a crédito confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
             if (result is not null && !result.Existing) await NotifyCashLimitAsync();
+            if (result is not null && !result.Existing && !cashWindow.CreditRequested && cashWindow.PaymentMethod is "Cash" or "Mixed")
+                await TryOpenCashDrawerAsync();
             if (result is not null && !result.Existing && cashWindow.PrintRequested)
             {
                 try { StatusText.Text += " " + await OutputTicketAsync(result.SaleId); }
@@ -960,6 +962,23 @@ public partial class MainWindow : Window
             ? $"Ticket enviado a {ApiClient.PrinterName}."
             : $"Ticket enviado a {ApiClient.PrinterName}; no se pudo actualizar el estado de impresión.";
     }
+
+    private async Task TryOpenCashDrawerAsync()
+    {
+        try
+        {
+            var settings = await Client.GetFromJsonAsync<CashDrawerSettingsResult>("/api/cash-drawer-settings");
+            if (settings is not { Enabled: true }) return;
+            TicketWindowsPrinter.OpenCashDrawer(settings.PrinterName, settings.Model);
+            StatusText.Text += " Cajón abierto.";
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text += $" La venta quedó registrada, pero no se pudo abrir el cajón: {exception.Message}";
+        }
+    }
+
+    private sealed record CashDrawerSettingsResult(bool Enabled, string PrinterName, string Model, string Port);
 
     private void OnMinimizeClick(object sender, RoutedEventArgs e) =>
         WindowState = WindowState.Minimized;

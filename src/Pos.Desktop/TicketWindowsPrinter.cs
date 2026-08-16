@@ -1,6 +1,7 @@
 using Pos.Printing;
 using System.Globalization;
 using System.Printing;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -160,6 +161,30 @@ public static class TicketWindowsPrinter
         writer.Write(document.DocumentPaginator, validatedTicket);
     }
 
+    public static void OpenCashDrawer(string printerName, string model)
+    {
+        if (string.IsNullOrWhiteSpace(printerName)) throw new InvalidOperationException("Selecciona una impresora de Windows.");
+        var pin = model.EndsWith("2", StringComparison.OrdinalIgnoreCase) ? (byte)1 : (byte)0;
+        var pulse = new byte[] { 0x1B, 0x70, pin, 0x19, 0xFA };
+        if (!OpenPrinter(printerName, out var handle, nint.Zero)) ThrowWin32("Windows no pudo abrir la cola de impresión");
+        try
+        {
+            var document = new NativeDocInfo { DocName = "JetVenta - Apertura de cajón", DataType = "RAW" };
+            if (StartDocPrinter(handle, 1, document) == 0) ThrowWin32("No se pudo iniciar el trabajo de apertura");
+            try
+            {
+                if (!StartPagePrinter(handle)) ThrowWin32("No se pudo iniciar la página de apertura");
+                try
+                {
+                    if (!WritePrinter(handle, pulse, pulse.Length, out var written) || written != pulse.Length) ThrowWin32("La impresora no aceptó el pulso del cajón");
+                }
+                finally { EndPagePrinter(handle); }
+            }
+            finally { EndDocPrinter(handle); }
+        }
+        finally { ClosePrinter(handle); }
+    }
+
     public static void PrintCashMovement(string printerName, decimal amount, string type, string reason, string? providerName, TicketPrintProfile profile)
     {
         var detail = string.IsNullOrWhiteSpace(providerName) ? reason : $"{reason} ({providerName})";
@@ -273,4 +298,22 @@ public static class TicketWindowsPrinter
         "CREDIT" => "Credito",
         _ => method
     };
+
+    private static void ThrowWin32(string message) => throw new InvalidOperationException($"{message}. Código de Windows: {Marshal.GetLastWin32Error()}.");
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private sealed class NativeDocInfo
+    {
+        [MarshalAs(UnmanagedType.LPWStr)] public string DocName = string.Empty;
+        [MarshalAs(UnmanagedType.LPWStr)] public string? OutputFile;
+        [MarshalAs(UnmanagedType.LPWStr)] public string DataType = "RAW";
+    }
+
+    [DllImport("winspool.drv", SetLastError = true, CharSet = CharSet.Unicode)] private static extern bool OpenPrinter(string printerName, out nint printer, nint defaults);
+    [DllImport("winspool.drv", SetLastError = true)] private static extern bool ClosePrinter(nint printer);
+    [DllImport("winspool.drv", SetLastError = true, CharSet = CharSet.Unicode)] private static extern int StartDocPrinter(nint printer, int level, [In] NativeDocInfo document);
+    [DllImport("winspool.drv", SetLastError = true)] private static extern bool EndDocPrinter(nint printer);
+    [DllImport("winspool.drv", SetLastError = true)] private static extern bool StartPagePrinter(nint printer);
+    [DllImport("winspool.drv", SetLastError = true)] private static extern bool EndPagePrinter(nint printer);
+    [DllImport("winspool.drv", SetLastError = true)] private static extern bool WritePrinter(nint printer, byte[] data, int count, out int written);
 }

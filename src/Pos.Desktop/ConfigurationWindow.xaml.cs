@@ -19,6 +19,7 @@ public partial class ConfigurationWindow : UserControl
         PrinterButton.IsEnabled = SessionContext.HasPermission("ConfigurePrinters");
         ScannerButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
         TicketButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
+        CashDrawerButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
         BackupButton.IsEnabled = SessionContext.HasPermission("ImportOrExportData");
         ImportButton.IsEnabled = SessionContext.HasPermission("ImportOrExportData");
         StatusText.Text = "Las opciones deshabilitadas requieren un permiso del administrador.";
@@ -35,6 +36,7 @@ public partial class ConfigurationWindow : UserControl
     private void OnPrinterClick(object sender, RoutedEventArgs e) => new PrinterSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnScannerClick(object sender, RoutedEventArgs e) => new BarcodeScannerSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnTicketClick(object sender, RoutedEventArgs e) => new TicketSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+    private void OnCashDrawerClick(object sender, RoutedEventArgs e) => new CashDrawerSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnBackupClick(object sender, RoutedEventArgs e) => new BackupWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnImportClick(object sender, RoutedEventArgs e) => new ProductImportWindow { Owner = Window.GetWindow(this) }.ShowDialog();
 

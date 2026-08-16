@@ -53,6 +53,7 @@ builder.Services.AddScoped<CurrencySettingsService>();
 builder.Services.AddScoped<PaymentMethodSettingsService>();
 builder.Services.AddScoped<CutSettingsService>();
 builder.Services.AddScoped<StoreOptionsService>();
+builder.Services.AddScoped<CashDrawerSettingsService>();
 builder.Services.AddScoped<ProductImportService>();
 builder.Services.AddScoped<DatabaseMaintenanceService>();
 builder.Services.AddHostedService<DailyBackupHostedService>();
@@ -129,6 +130,8 @@ app.MapGet("/api/cut-settings", async (HttpRequest request, CutSettingsService s
 app.MapPut("/api/cut-settings", async (HttpRequest request, SetCutSettingsCommand command, CutSettingsService settings, CancellationToken cancellationToken) => { try { var result = await settings.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); } catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["cut"] = [exception.Message] }); } });
 app.MapGet("/api/store-options", async (HttpRequest request, StoreOptionsService settings, CancellationToken cancellationToken) => { var result = await settings.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); });
 app.MapPut("/api/store-options", async (HttpRequest request, SetStoreOptionsCommand command, StoreOptionsService settings, CancellationToken cancellationToken) => { try { var result = await settings.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); } catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["options"] = [exception.Message] }); } });
+app.MapGet("/api/cash-drawer-settings", async (HttpRequest request, CashDrawerSettingsService settings, CancellationToken cancellationToken) => { var result = await settings.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); });
+app.MapPut("/api/cash-drawer-settings", async (HttpRequest request, SetCashDrawerSettingsCommand command, CashDrawerSettingsService settings, CancellationToken cancellationToken) => { try { var result = await settings.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); } catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["cashDrawer"] = [exception.Message] }); } });
 
 app.MapGet("/api/store-settings", async (HttpRequest request, StoreSettingsService settings, CancellationToken cancellationToken) =>
 {
