@@ -56,3 +56,6 @@ https://github.com/jetrhopm/punto-de-venta
 ```
 
 Los commits deben usar mensajes descriptivos en espanol.
+## Diagnóstico y báscula
+
+La configuración incluye `Báscula` para equipos RS-232 o USB que Windows exponga como puerto COM, y `Detalles del sistema` para consultar versión, equipo, API y dispositivos sin mostrar secretos. Consulta [docs/CONFIGURACION_BASCULA.md](docs/CONFIGURACION_BASCULA.md) antes de probar un modelo nuevo.

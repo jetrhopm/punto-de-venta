@@ -1,0 +1,12 @@
+<Window x:Class="Pos.Desktop.SystemDetailsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
+        Title="Detalles del sistema - JetVenta" Width="780" Height="650" MinWidth="680" WindowStartupLocation="CenterOwner">
+    <Grid Margin="28">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel Orientation="Horizontal"><Border Width="48" Height="48" Background="#E8F3FB" CornerRadius="6"><icons:PackIconMaterial Kind="InformationOutline" Width="28" Height="28" Foreground="#376A9A" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><StackPanel Margin="14,0,0,0"><TextBlock Text="Detalles del sistema" FontSize="24" FontWeight="Bold" Foreground="#17324D"/><TextBlock Text="Información útil para revisar el estado de JetVenta." Foreground="#526577" Margin="0,4,0,0"/></StackPanel></StackPanel>
+        <Grid Grid.Row="1" Margin="0,22,0,10"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions><Border Padding="12" Background="#E8F3FB" BorderBrush="#B9D7EA" BorderThickness="1" CornerRadius="5"><TextBlock Text="El diagnóstico no incluye contraseñas, tokens ni claves privadas. Puedes copiarlo para enviarlo al soporte." TextWrapping="Wrap" Foreground="#17324D"/></Border><TextBox Grid.Row="1" x:Name="DetailsText" Margin="0,16,0,0" IsReadOnly="True" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="13" Padding="14" TextWrapping="NoWrap"/></Grid>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"><Button Width="180" Margin="0,0,8,0" Click="OnRefreshClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="Refresh" Width="18" Height="18" Margin="0,0,7,0"/><TextBlock Text="Actualizar diagnóstico"/></StackPanel></Button><Button Width="170" Margin="0,0,8,0" Click="OnCopyClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ContentCopy" Width="18" Height="18" Margin="0,0,7,0"/><TextBlock Text="Copiar información"/></StackPanel></Button><Button Style="{StaticResource PrimaryButtonStyle}" Width="110" Click="OnCloseClick">Cerrar</Button></StackPanel>
+    </Grid>
+</Window>
