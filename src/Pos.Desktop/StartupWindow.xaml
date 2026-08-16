@@ -73,7 +73,8 @@
                 <ProgressBar Grid.Row="3" x:Name="StartupProgress" Height="12" Margin="0,26,0,0" Minimum="0" Maximum="100" Value="8"/>
 
                 <StackPanel Grid.Row="4" x:Name="ErrorPanel" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Visibility="Collapsed">
-                    <Button Width="118" Height="38" Margin="0,0,10,0" Content="Intentar de nuevo" Click="OnRetryClick"/>
+                    <Button Width="165" Height="38" Margin="0,0,10,0" Content="Configurar conexión" Click="OnConfigureClick"/>
+                    <Button Width="145" Height="38" Margin="0,0,10,0" Content="Intentar de nuevo" Click="OnRetryClick"/>
                     <Button Width="90" Height="38" Content="Cerrar" Click="OnCloseClick"/>
                 </StackPanel>
             </Grid>

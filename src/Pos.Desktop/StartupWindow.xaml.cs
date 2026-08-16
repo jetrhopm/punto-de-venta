@@ -34,6 +34,13 @@ public partial class StartupWindow : Window
 
     private async void OnRetryClick(object sender, RoutedEventArgs e) => await RunStartupCheckAsync();
 
+    private async void OnConfigureClick(object sender, RoutedEventArgs e)
+    {
+        if (_isChecking) return;
+        var window = new ServerConnectionWindow { Owner = this };
+        if (window.ShowDialog() == true) await RunStartupCheckAsync();
+    }
+
     private void OnCloseClick(object sender, RoutedEventArgs e) => System.Windows.Application.Current.Shutdown();
 
     private async Task RunStartupCheckAsync()
@@ -49,14 +56,14 @@ public partial class StartupWindow : Window
 
             if (!available)
             {
-                SetStatus("JetVenta esta iniciando sus servicios locales...", 25, "Preparando", "Encendiendo", "Pendiente");
+                SetStatus(IsLocalApi() ? "JetVenta esta intentando iniciar sus servicios locales..." : "JetVenta esta intentando conectar con el servidor configurado...", 25, "Preparando", "Recuperando", "Pendiente");
                 await TryStartLocalServicesAsync();
                 available = await WaitForApiAsync();
             }
 
             if (!available)
             {
-                SetStatus("No se pudo preparar JetVenta. Intenta de nuevo o reinicia la computadora principal.", 100, "Sin conexion", "Revisar", "Pendiente");
+                SetStatus(IsLocalApi() ? "No se pudo iniciar JetVenta. Revisa los servicios locales o configura otra conexión." : "No se pudo conectar con el servidor. Revisa la IP, el puerto y la red local.", 100, "Sin conexión", "Revisar", "Pendiente");
                 ErrorPanel.Visibility = Visibility.Visible;
                 return;
             }
@@ -71,7 +78,7 @@ public partial class StartupWindow : Window
                 setup = available ? await ReadSetupStatusAsync() : null;
                 if (setup is null)
                 {
-                    SetStatus("No se pudo preparar JetVenta. Intenta de nuevo o reinicia la computadora principal.", 100, "Sin respuesta", "Revisar", "Pendiente");
+                    SetStatus(IsLocalApi() ? "Los servicios locales no respondieron. Puedes configurar otra conexión o reintentar." : "El servidor configurado no respondió. Puedes corregir la conexión o reintentar.", 100, "Sin respuesta", "Revisar", "Pendiente");
                     ErrorPanel.Visibility = Visibility.Visible;
                     return;
                 }
@@ -90,7 +97,7 @@ public partial class StartupWindow : Window
         catch (Exception exception)
         {
             Log(exception.ToString());
-            SetStatus("No se pudo preparar JetVenta. Intenta de nuevo o reinicia la computadora principal.", 100, "Revisar", "Revisar", "Pendiente");
+            SetStatus("No se pudo preparar JetVenta. Puedes configurar la conexión o intentar de nuevo.", 100, "Revisar", "Revisar", "Pendiente");
             ErrorPanel.Visibility = Visibility.Visible;
         }
         finally
@@ -142,6 +149,12 @@ public partial class StartupWindow : Window
 
     private async Task TryStartLocalServicesAsync()
     {
+        if (!IsLocalApi())
+        {
+            Log($"No se iniciaron servicios locales porque el servidor configurado es remoto: {ApiClient.BaseUrl}");
+            return;
+        }
+
         var developmentRoot = FindDevelopmentRoot();
         if (developmentRoot is not null)
         {
@@ -298,6 +311,13 @@ public partial class StartupWindow : Window
         {
             return false;
         }
+    }
+
+    private static bool IsLocalApi()
+    {
+        if (!Uri.TryCreate(ApiClient.BaseUrl, UriKind.Absolute, out var uri)) return true;
+        return string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+               System.Net.IPAddress.TryParse(uri.Host, out var address) && System.Net.IPAddress.IsLoopback(address);
     }
 
     private static async Task TryRunAsync(string fileName, string arguments)
