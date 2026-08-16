@@ -38,6 +38,7 @@ public sealed class SupplierPurchaseService(PosDbContext database)
         var existing = await database.Purchases.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new ReceivePurchaseResult(existing.Id, existing.OperationId, existing.Total, true);
         if (!await database.Suppliers.AnyAsync(item => item.Id == command.SupplierId, cancellationToken)) throw new KeyNotFoundException("Proveedor no encontrado.");
+        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
         var ids = command.Lines.Select(item => item.ProductId).Distinct().ToArray();
         var products = await database.Products.Where(item => ids.Contains(item.Id) && item.IsActive).ToDictionaryAsync(item => item.Id, cancellationToken);
         if (products.Count != ids.Length) throw new KeyNotFoundException("Una o mas partidas no existen o estan inactivas.");
@@ -47,10 +48,12 @@ public sealed class SupplierPurchaseService(PosDbContext database)
         {
             if (line.Quantity <= 0m || line.UnitCost < 0m) throw new ArgumentException("La cantidad debe ser positiva y el costo no puede ser negativo.");
             var product = products[line.ProductId]; var before = product.Stock; var oldValue = before * product.Cost; var receivedValue = line.Quantity * line.UnitCost; var after = before + line.Quantity;
-            product.Cost = after == 0m ? 0m : decimal.Round((oldValue + receivedValue) / after, 2, MidpointRounding.AwayFromZero); product.Stock = decimal.Round(after, 3, MidpointRounding.AwayFromZero);
+            product.Cost = after == 0m ? 0m : decimal.Round((oldValue + receivedValue) / after, 2, MidpointRounding.AwayFromZero);
+            if (store.InventoryEnabled) product.Stock = decimal.Round(after, 3, MidpointRounding.AwayFromZero);
+            if (store.AutoPriceWithProfit && product.Price <= 0m) product.Price = decimal.Round(product.Cost * (1m + (product.ProfitPercent > 0m ? product.ProfitPercent : store.DefaultProfitPercent) / 100m), 2, MidpointRounding.AwayFromZero);
             var lineTotal = decimal.Round(receivedValue, 2, MidpointRounding.AwayFromZero); total += lineTotal;
             database.PurchaseLines.Add(new PurchaseLineRecord { Id = Guid.NewGuid(), PurchaseId = purchase.Id, ProductId = product.Id, Quantity = line.Quantity, UnitCost = decimal.Round(line.UnitCost, 2), LineTotal = lineTotal });
-            database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = line.Quantity, StockBefore = before, StockAfter = product.Stock, Reason = "Purchase", CreatedAtUtc = purchase.CreatedAtUtc });
+            if (store.InventoryEnabled) database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = line.Quantity, StockBefore = before, StockAfter = product.Stock, Reason = "Purchase", CreatedAtUtc = purchase.CreatedAtUtc });
         }
         purchase.Total = decimal.Round(total, 2); database.Purchases.Add(purchase); await database.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
         return new ReceivePurchaseResult(purchase.Id, purchase.OperationId, purchase.Total, false);

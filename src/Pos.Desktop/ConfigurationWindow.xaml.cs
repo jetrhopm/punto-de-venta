@@ -14,6 +14,7 @@ public partial class ConfigurationWindow : UserControl
         CurrencyButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
         PaymentMethodsButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
         CutButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
+        OptionsButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
         UsersButton.IsEnabled = SessionContext.IsAdministrator || SessionContext.HasPermission("ManageUsers");
         PrinterButton.IsEnabled = SessionContext.HasPermission("ConfigurePrinters");
         ScannerButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
@@ -29,6 +30,7 @@ public partial class ConfigurationWindow : UserControl
     private void OnCurrencyClick(object sender, RoutedEventArgs e) => new CurrencySettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnPaymentMethodsClick(object sender, RoutedEventArgs e) => new PaymentMethodSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnCutClick(object sender, RoutedEventArgs e) => new CutSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+    private void OnOptionsClick(object sender, RoutedEventArgs e) => new StoreOptionsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnUsersClick(object sender, RoutedEventArgs e) => new UserAdministrationWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnPrinterClick(object sender, RoutedEventArgs e) => new PrinterSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnScannerClick(object sender, RoutedEventArgs e) => new BarcodeScannerSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();

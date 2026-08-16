@@ -19,6 +19,8 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         if (session is null) return null;
         var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
         if (!user.IsAdministrator && !await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "Sell", cancellationToken)) return null;
+        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        if (command.PaymentMethod == "Credit" && !store.CreditSalesEnabled) throw new InvalidOperationException("Las ventas a crédito están deshabilitadas en Opciones habilitadas.");
         if (command.PaymentMethod == "Credit" && !user.IsAdministrator && !await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "SellOnCredit", cancellationToken)) throw new UnauthorizedAccessException("El usuario no tiene permiso para cobrar a credito.");
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var existing = await database.Sales.AsNoTracking().SingleOrDefaultAsync(sale => sale.OperationId == command.OperationId, cancellationToken);
@@ -55,11 +57,10 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
             var promotionCalculation = await promotions.CalculateAsync(product.Id, unitPrice, DateTimeOffset.UtcNow, cancellationToken, requestedQuantity);
             unitPrice = promotionCalculation.UnitPrice;
             var total = originalLine is null ? 0m : promotionCalculation.Total;
-            if (!product.IsKit) product.Stock -= requested;
+            if (store.InventoryEnabled && !product.IsKit) product.Stock -= requested;
             if (originalLine is not null) lines.Add(new SaleLineRecord { Id = Guid.NewGuid(), ProductId = product.Id, Quantity = requestedQuantity, UnitPrice = unitPrice, LineTotal = total, StockBefore = stockBefore, StockAfter = product.Stock });
         }
-        var totalSale = decimal.Round(lines.Sum(line => line.LineTotal), 2, MidpointRounding.AwayFromZero);
-        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        var totalSale = RoundSaleAmount(lines.Sum(line => line.LineTotal), store);
         ValidatePaymentMethodEnabled(store, command, totalSale);
         CustomerRecord? customer = null;
         var currentCredit = 0m;
@@ -83,8 +84,8 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         var folio = store.NextSaleFolio;
         store.NextSaleFolio++;
         var sale = new SaleRecord { Id = Guid.NewGuid(), OperationId = command.OperationId, ShiftId = shift.Id, CustomerId = command.CustomerId, Folio = folio, Total = totalSale, CreatedAtUtc = DateTimeOffset.UtcNow };
-        foreach (var line in lines) { line.SaleId = sale.Id; if (!products[line.ProductId].IsKit) database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = line.ProductId, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -line.Quantity, StockBefore = line.StockBefore, StockAfter = line.StockAfter, CreatedAtUtc = sale.CreatedAtUtc }); }
-        foreach (var component in expanded.Where(item => !command.Lines.Any(line => line.ProductId == item.Key))) { var product = products[component.Key]; var before = product.Stock; product.Stock -= component.Value; database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -component.Value, StockBefore = before, StockAfter = product.Stock, Reason = "KitSale", CreatedAtUtc = sale.CreatedAtUtc }); }
+        foreach (var line in lines) { line.SaleId = sale.Id; if (store.InventoryEnabled && !products[line.ProductId].IsKit) database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = line.ProductId, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -line.Quantity, StockBefore = line.StockBefore, StockAfter = line.StockAfter, CreatedAtUtc = sale.CreatedAtUtc }); }
+        foreach (var component in expanded.Where(item => !command.Lines.Any(line => line.ProductId == item.Key))) { var product = products[component.Key]; var before = product.Stock; if (store.InventoryEnabled) { product.Stock -= component.Value; database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -component.Value, StockBefore = before, StockAfter = product.Stock, Reason = "KitSale", CreatedAtUtc = sale.CreatedAtUtc }); } }
         var cashAmountToRecord = command.PaymentMethod switch { "Card" or "Transfer" or "Credit" => 0m, _ => decimal.Round(totalSale - (command.PaymentMethod == "Mixed" ? command.CardAmount + command.TransferAmount : 0m), 2, MidpointRounding.AwayFromZero) };
         var cardAmountToRecord = command.PaymentMethod == "Card" ? totalSale : decimal.Round(command.CardAmount, 2, MidpointRounding.AwayFromZero);
         var transferAmountToRecord = command.PaymentMethod == "Transfer" ? totalSale : decimal.Round(command.TransferAmount, 2, MidpointRounding.AwayFromZero);
@@ -116,5 +117,14 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         if (command.PaymentMethod != "Credit" && cash > 0m && !store.CashPaymentEnabled) throw new InvalidOperationException("El pago en efectivo está desactivado en esta tienda.");
         if (card > 0m && !store.CardPaymentEnabled) throw new InvalidOperationException("El pago con tarjeta está desactivado en esta tienda.");
         if (transfer > 0m && !store.TransferPaymentEnabled) throw new InvalidOperationException("El pago por transferencia está desactivado en esta tienda.");
+    }
+
+    private static decimal RoundSaleAmount(decimal amount, StoreRecord store)
+    {
+        var value = decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
+        if (!store.RoundSaleAmounts) return value;
+        return store.RoundingMode.Equals("Whole", StringComparison.OrdinalIgnoreCase)
+            ? decimal.Ceiling(value)
+            : decimal.Ceiling(value * 10m) / 10m;
     }
 }

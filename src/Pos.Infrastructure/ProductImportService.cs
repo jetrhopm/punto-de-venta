@@ -17,6 +17,7 @@ public sealed class ProductImportService(PosDbContext database)
         var existing = await database.ImportBatches.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new(existing.Id, existing.CreatedCount, existing.UpdatedCount, existing.SkippedCount, true);
         Validate(command);
+        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
 
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
         var normalizedCodes = command.Rows.Select(item => ProductCatalogService.NormalizeCode(item.Code)).ToArray();
@@ -32,21 +33,21 @@ public sealed class ProductImportService(PosDbContext database)
             {
                 if (command.DuplicateRule.Equals("Skip", StringComparison.OrdinalIgnoreCase)) { skipped++; continue; }
                 product.Description = row.Description.Trim();
-                product.Price = decimal.Round(row.Price, 2);
+                product.Price = ResolvePrice(row.Price, row.Cost, product.ProfitPercent, store);
                 product.Cost = decimal.Round(row.Cost, 2);
                 product.WholesalePrice = decimal.Round(row.WholesalePrice, 2);
                 product.WholesaleMinimumQuantity = decimal.Round(row.WholesaleMinimumQuantity, 3);
                 ApplyCatalogFields(product, row, ResolveSupplier(row.SupplierName, suppliers));
-                AddStockMovement(product, row.Stock, userId.Value, command.OperationId, row.RowNumber);
+                if (store.InventoryEnabled) AddStockMovement(product, row.Stock, userId.Value, command.OperationId, row.RowNumber);
                 updated++;
             }
             else
             {
-                product = new ProductRecord { Id = Guid.NewGuid(), Code = row.Code.Trim(), NormalizedCode = normalized, Description = row.Description.Trim(), Price = decimal.Round(row.Price, 2), Cost = decimal.Round(row.Cost, 2), WholesalePrice = decimal.Round(row.WholesalePrice, 2), WholesaleMinimumQuantity = decimal.Round(row.WholesaleMinimumQuantity, 3), Stock = 0m, IsActive = true };
+                product = new ProductRecord { Id = Guid.NewGuid(), Code = row.Code.Trim(), NormalizedCode = normalized, Description = row.Description.Trim(), Price = ResolvePrice(row.Price, row.Cost, store.DefaultProfitPercent, store), Cost = decimal.Round(row.Cost, 2), WholesalePrice = decimal.Round(row.WholesalePrice, 2), WholesaleMinimumQuantity = decimal.Round(row.WholesaleMinimumQuantity, 3), Stock = 0m, ProfitPercent = store.DefaultProfitPercent, IsActive = true };
                 ApplyCatalogFields(product, row, ResolveSupplier(row.SupplierName, suppliers));
                 database.Products.Add(product);
                 products.Add(normalized, product);
-                AddStockMovement(product, row.Stock, userId.Value, command.OperationId, row.RowNumber);
+                if (store.InventoryEnabled) AddStockMovement(product, row.Stock, userId.Value, command.OperationId, row.RowNumber);
                 created++;
             }
         }
@@ -88,6 +89,7 @@ public sealed class ProductImportService(PosDbContext database)
     }
 
     private static string NormalizeName(string value) => value.Trim().ToUpperInvariant();
+    private static decimal ResolvePrice(decimal price, decimal cost, decimal profit, StoreRecord store) => price > 0m || !store.AutoPriceWithProfit ? decimal.Round(price, 2) : decimal.Round(cost * (1m + (profit > 0m ? profit : store.DefaultProfitPercent) / 100m), 2, MidpointRounding.AwayFromZero);
 
     private static Guid RowOperationId(Guid operationId, int rowNumber)
     {

@@ -52,6 +52,7 @@ builder.Services.AddScoped<MeasureSettingsService>();
 builder.Services.AddScoped<CurrencySettingsService>();
 builder.Services.AddScoped<PaymentMethodSettingsService>();
 builder.Services.AddScoped<CutSettingsService>();
+builder.Services.AddScoped<StoreOptionsService>();
 builder.Services.AddScoped<ProductImportService>();
 builder.Services.AddScoped<DatabaseMaintenanceService>();
 builder.Services.AddHostedService<DailyBackupHostedService>();
@@ -126,6 +127,8 @@ app.MapGet("/api/payment-method-settings", async (HttpRequest request, PaymentMe
 app.MapPut("/api/payment-method-settings", async (HttpRequest request, SetPaymentMethodSettingsCommand command, PaymentMethodSettingsService settings, CancellationToken cancellationToken) => { try { var result = await settings.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); } catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["paymentMethods"] = [exception.Message] }); } });
 app.MapGet("/api/cut-settings", async (HttpRequest request, CutSettingsService settings, CancellationToken cancellationToken) => { var result = await settings.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); });
 app.MapPut("/api/cut-settings", async (HttpRequest request, SetCutSettingsCommand command, CutSettingsService settings, CancellationToken cancellationToken) => { try { var result = await settings.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); } catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["cut"] = [exception.Message] }); } });
+app.MapGet("/api/store-options", async (HttpRequest request, StoreOptionsService settings, CancellationToken cancellationToken) => { var result = await settings.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); });
+app.MapPut("/api/store-options", async (HttpRequest request, SetStoreOptionsCommand command, StoreOptionsService settings, CancellationToken cancellationToken) => { try { var result = await settings.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); } catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["options"] = [exception.Message] }); } });
 
 app.MapGet("/api/store-settings", async (HttpRequest request, StoreSettingsService settings, CancellationToken cancellationToken) =>
 {
@@ -320,6 +323,8 @@ app.MapPost("/api/products/quick-sale", async (HttpRequest request, ProductComma
     if (session is null) return Results.Unauthorized();
     var user = await database.Users.AsNoTracking().SingleOrDefaultAsync(item => item.Id == session.UserId && item.IsActive, cancellationToken);
     if (user is null) return Results.Unauthorized();
+    var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+    if (command.IsCommonProduct && !store.CommonProductsEnabled) return Results.Conflict(new { message = "La venta de producto común está deshabilitada en Opciones habilitadas." });
     var requiredPermission = command.IsCommonProduct ? "UseCommonProduct" : "ManageProducts";
     var allowed = user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == requiredPermission, cancellationToken);
     if (!allowed) return Results.StatusCode(StatusCodes.Status403Forbidden);
@@ -341,6 +346,7 @@ app.MapPost("/api/products/quick-sale", async (HttpRequest request, ProductComma
         WholesaleMinimumQuantity = decimal.Round(command.WholesaleMinimumQuantity, 3),
         UnitOfMeasure = string.IsNullOrWhiteSpace(command.UnitOfMeasure) ? "Pieza" : command.UnitOfMeasure.Trim(),
         Stock = 0m,
+        IsCommonProduct = command.IsCommonProduct,
         IsActive = true
     };
     database.Products.Add(product);
