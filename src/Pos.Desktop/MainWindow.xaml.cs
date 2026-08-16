@@ -328,6 +328,17 @@ public partial class MainWindow : Window
 
     private async void OnCashMovementClick(object sender, RoutedEventArgs e) => await OpenCashMovementAsync(null);
 
+    private async void OnOpenCashDrawerClick(object sender, RoutedEventArgs e)
+    {
+        if (!SessionContext.HasPermission("OpenCashDrawer"))
+        {
+            StatusText.Text = "No tienes permiso para abrir el cajón de dinero.";
+            return;
+        }
+
+        await TryOpenCashDrawerAsync(explainIfDisabled: true);
+    }
+
     private void OpenCashMovement(string type) => _ = OpenCashMovementAsync(type);
 
     private async Task OpenCashMovementAsync(string? type)
@@ -340,6 +351,7 @@ public partial class MainWindow : Window
             using var response = await Client.PostAsJsonAsync("/api/shifts/cash-movements", new { type = window.Type, amount = window.Amount.Value, reason = window.Reason });
             if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
             StatusText.Text = "Movimiento de efectivo registrado.";
+            await TryOpenCashDrawerAsync();
             if (window.Type == "Out")
             {
                 if (string.IsNullOrWhiteSpace(ApiClient.PrinterName)) StatusText.Text += " No hay impresora configurada; no se imprimió comprobante.";
@@ -963,18 +975,26 @@ public partial class MainWindow : Window
             : $"Ticket enviado a {ApiClient.PrinterName}; no se pudo actualizar el estado de impresión.";
     }
 
-    private async Task TryOpenCashDrawerAsync()
+    private async Task<bool> TryOpenCashDrawerAsync(bool explainIfDisabled = false)
     {
         try
         {
             var settings = await Client.GetFromJsonAsync<CashDrawerSettingsResult>("/api/cash-drawer-settings");
-            if (settings is not { Enabled: true }) return;
+            if (settings is not { Enabled: true })
+            {
+                if (explainIfDisabled) StatusText.Text = "El cajón no está configurado o está desactivado.";
+                return false;
+            }
             TicketWindowsPrinter.OpenCashDrawer(settings.PrinterName, settings.Model);
             StatusText.Text += " Cajón abierto.";
+            return true;
         }
         catch (Exception exception)
         {
-            StatusText.Text += $" La venta quedó registrada, pero no se pudo abrir el cajón: {exception.Message}";
+            StatusText.Text += explainIfDisabled
+                ? $" No se pudo abrir el cajón: {exception.Message}"
+                : $" La operación quedó registrada, pero no se pudo abrir el cajón: {exception.Message}";
+            return false;
         }
     }
 
@@ -1189,6 +1209,7 @@ public partial class MainWindow : Window
 
     private void ApplyNavigationPermissions()
     {
+        OpenCashDrawerButton.IsEnabled = SessionContext.HasPermission("OpenCashDrawer");
         foreach (var button in FindVisualChildren<Button>(this))
         {
             if (button.Tag is string section) button.IsEnabled = HasPermissionFor(section);
