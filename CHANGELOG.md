@@ -1,6 +1,8 @@
 # Changelog
 
 ## Sin liberar
+- Se agrega la configuración administrativa de folios de venta: cada venta confirmada recibe un consecutivo único y se puede avanzar el siguiente folio sin reutilizar números ya emitidos.
+- Las ventas históricas se numeran durante la migración de folios y el consecutivo continúa después de la última venta registrada.
 - Se corrige el cálculo de precio y utilidad al editar productos: un porcentaje numérico recalcula el precio, mientras un porcentaje vacío conserva el precio manual sin mostrar errores.
 - La ventana principal de ventas ahora inicia maximizada, sin bordes ni barra de tareas visible; la pantalla inicial y el login conservan su diseño.
 - Se corrige la apertura de F3/Productos: el cálculo automático de utilidad ya no se ejecuta antes de que la ventana termine de inicializar sus controles.

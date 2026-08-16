@@ -52,6 +52,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             entity.Property(store => store.Phone).HasMaxLength(30);
             entity.Property(store => store.TimeZoneId).HasMaxLength(100).IsRequired();
             entity.Property(store => store.CreatedAtUtc).HasColumnType("timestamp with time zone"); entity.Property(store => store.TicketHeader).HasMaxLength(300); entity.Property(store => store.TicketFooter).HasMaxLength(300);
+            entity.Property(store => store.NextSaleFolio).HasDefaultValue(1L);
         });
         modelBuilder.Entity<UserRecord>(entity =>
         {
@@ -159,7 +160,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
         {
             entity.ToTable("sale"); entity.HasKey(sale => sale.Id);
             entity.Property(sale => sale.OperationId).IsRequired(); entity.HasIndex(sale => sale.OperationId).IsUnique();
-            entity.Property(sale => sale.Total).HasPrecision(18, 2); entity.Property(sale => sale.Status).HasMaxLength(20).IsRequired(); entity.HasIndex(sale => sale.CustomerId); entity.HasOne<CustomerRecord>().WithMany().HasForeignKey(sale => sale.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            entity.Property(sale => sale.Total).HasPrecision(18, 2); entity.Property(sale => sale.Status).HasMaxLength(20).IsRequired(); entity.HasIndex(sale => sale.Folio).IsUnique(); entity.HasIndex(sale => sale.CustomerId); entity.HasOne<CustomerRecord>().WithMany().HasForeignKey(sale => sale.CustomerId).OnDelete(DeleteBehavior.Restrict);
             entity.Property(sale => sale.CreatedAtUtc).HasColumnType("timestamp with time zone");
         });
         modelBuilder.Entity<SaleLineRecord>(entity =>
@@ -251,7 +252,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     }
 }
 
-public sealed class StoreRecord { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string BusinessType { get; set; } = string.Empty; public string LegalName { get; set; } = string.Empty; public string TaxId { get; set; } = string.Empty; public string Address { get; set; } = string.Empty; public string Phone { get; set; } = string.Empty; public string TimeZoneId { get; set; } = "America/Mexico_City"; public string TicketHeader { get; set; } = string.Empty; public string TicketFooter { get; set; } = "Gracias por su compra"; public int TicketWidthMm { get; set; } = 80; public DateTimeOffset CreatedAtUtc { get; set; } }
+public sealed class StoreRecord { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string BusinessType { get; set; } = string.Empty; public string LegalName { get; set; } = string.Empty; public string TaxId { get; set; } = string.Empty; public string Address { get; set; } = string.Empty; public string Phone { get; set; } = string.Empty; public string TimeZoneId { get; set; } = "America/Mexico_City"; public string TicketHeader { get; set; } = string.Empty; public string TicketFooter { get; set; } = "Gracias por su compra"; public int TicketWidthMm { get; set; } = 80; public long NextSaleFolio { get; set; } = 1; public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class UserRecord { public Guid Id { get; set; } public string NormalizedUserName { get; set; } = string.Empty; public string PasswordHash { get; set; } = string.Empty; public string DisplayName { get; set; } = string.Empty; public bool IsAdministrator { get; set; } public bool IsActive { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class RegisterRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public string Name { get; set; } = string.Empty; public bool IsActive { get; set; } }
 public sealed class DeviceRecord { public Guid Id { get; set; } public Guid StoreId { get; set; } public Guid RegisterId { get; set; } public string Name { get; set; } = string.Empty; public string DeviceType { get; set; } = "Register"; public string DeviceTokenHash { get; set; } = string.Empty; public bool IsActive { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset? LastSeenAtUtc { get; set; } }
@@ -264,7 +265,7 @@ public sealed class KitComponentRecord { public Guid Id { get; set; } public Gui
 public sealed class SessionRecord { public Guid Id { get; set; } public Guid UserId { get; set; } public string TokenHash { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset ExpiresAtUtc { get; set; } public DateTimeOffset? RevokedAtUtc { get; set; } }
 public sealed class PermissionRecord { public Guid Id { get; set; } public Guid UserId { get; set; } public string Code { get; set; } = string.Empty; }
 public sealed class ShiftRecord { public Guid Id { get; set; } public Guid RegisterId { get; set; } public Guid UserId { get; set; } public decimal InitialCash { get; set; } public string Status { get; set; } = "Open"; public DateTimeOffset OpenedAtUtc { get; set; } public DateTimeOffset? ClosedAtUtc { get; set; } public decimal? CountedCash { get; set; } public decimal? Difference { get; set; } }
-public sealed class SaleRecord { public Guid Id { get; set; } public Guid OperationId { get; set; } public Guid ShiftId { get; set; } public Guid? CustomerId { get; set; } public decimal Total { get; set; } public string Status { get; set; } = "Completed"; public DateTimeOffset CreatedAtUtc { get; set; } }
+public sealed class SaleRecord { public Guid Id { get; set; } public Guid OperationId { get; set; } public Guid ShiftId { get; set; } public Guid? CustomerId { get; set; } public long Folio { get; set; } public decimal Total { get; set; } public string Status { get; set; } = "Completed"; public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class SaleLineRecord { public Guid Id { get; set; } public Guid SaleId { get; set; } public Guid ProductId { get; set; } public decimal Quantity { get; set; } public decimal UnitPrice { get; set; } public decimal LineTotal { get; set; } public decimal StockBefore { get; set; } public decimal StockAfter { get; set; } }
 public sealed class SaleDraftRecord { public Guid Id { get; set; } public Guid OperationId { get; set; } public Guid ShiftId { get; set; } public Guid UserId { get; set; } public int TicketNumber { get; set; } public string Status { get; set; } = "Open"; public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset UpdatedAtUtc { get; set; } public DateTimeOffset? CompletedAtUtc { get; set; } public List<SaleDraftLineRecord> Lines { get; set; } = []; }
 public sealed class SaleDraftLineRecord { public Guid Id { get; set; } public Guid DraftId { get; set; } public Guid ProductId { get; set; } public string Code { get; set; } = string.Empty; public string Description { get; set; } = string.Empty; public decimal Quantity { get; set; } public decimal UnitPrice { get; set; } }

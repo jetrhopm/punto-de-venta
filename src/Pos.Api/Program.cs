@@ -47,6 +47,7 @@ builder.Services.AddScoped<KitService>();
 builder.Services.AddScoped<TicketSettingsService>();
 builder.Services.AddScoped<LanPairingService>();
 builder.Services.AddScoped<StoreSettingsService>();
+builder.Services.AddScoped<SaleFolioService>();
 builder.Services.AddScoped<ProductImportService>();
 builder.Services.AddScoped<DatabaseMaintenanceService>();
 builder.Services.AddHostedService<DailyBackupHostedService>();
@@ -125,6 +126,20 @@ app.MapPut("/api/store-settings", async (HttpRequest request, StoreSettingsComma
 {
     try { var result = await settings.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["store"] = [exception.Message] }); }
+});
+app.MapGet("/api/sale-folios", async (HttpRequest request, SaleFolioService folios, CancellationToken cancellationToken) =>
+{
+    var result = await folios.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapPut("/api/sale-folios", async (HttpRequest request, SetNextSaleFolioCommand command, SaleFolioService folios, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await folios.SetNextAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["folio"] = [exception.Message] }); }
 });
 app.MapPost("/api/products/import", async (HttpRequest request, ProductImportCommand command, ProductImportService importer, CancellationToken cancellationToken) =>
 {

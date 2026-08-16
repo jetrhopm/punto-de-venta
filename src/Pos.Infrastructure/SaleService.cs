@@ -76,7 +76,12 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
             if (cashAmount < 0m || decimal.Round(cashAmount + cardAmount + transferAmount, 2) != totalSale) throw new InvalidOperationException("Los importes de pago no cubren exactamente el total.");
             if (command.CashReceived < cashAmount) throw new InvalidOperationException("El efectivo recibido es insuficiente.");
         }
-        var sale = new SaleRecord { Id = Guid.NewGuid(), OperationId = command.OperationId, ShiftId = shift.Id, CustomerId = command.CustomerId, Total = totalSale, CreatedAtUtc = DateTimeOffset.UtcNow };
+        // El consecutivo se reserva dentro de la misma transacción serializable de la venta.
+        // Una venta que se revierte conserva su folio y los folios omitidos no se reutilizan.
+        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        var folio = store.NextSaleFolio;
+        store.NextSaleFolio++;
+        var sale = new SaleRecord { Id = Guid.NewGuid(), OperationId = command.OperationId, ShiftId = shift.Id, CustomerId = command.CustomerId, Folio = folio, Total = totalSale, CreatedAtUtc = DateTimeOffset.UtcNow };
         foreach (var line in lines) { line.SaleId = sale.Id; if (!products[line.ProductId].IsKit) database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = line.ProductId, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -line.Quantity, StockBefore = line.StockBefore, StockAfter = line.StockAfter, CreatedAtUtc = sale.CreatedAtUtc }); }
         foreach (var component in expanded.Where(item => !command.Lines.Any(line => line.ProductId == item.Key))) { var product = products[component.Key]; var before = product.Stock; product.Stock -= component.Value; database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -component.Value, StockBefore = before, StockAfter = product.Stock, Reason = "KitSale", CreatedAtUtc = sale.CreatedAtUtc }); }
         var cashAmountToRecord = command.PaymentMethod switch { "Card" or "Transfer" or "Credit" => 0m, _ => decimal.Round(totalSale - (command.PaymentMethod == "Mixed" ? command.CardAmount + command.TransferAmount : 0m), 2, MidpointRounding.AwayFromZero) };
