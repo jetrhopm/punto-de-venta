@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net.Http.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -32,6 +33,26 @@ public partial class CashWindow : Window
         ReceivedTextBox.Focus();
         ReceivedTextBox.SelectAll();
         if (CustomerId is not null) MessageText.Text = $"Cliente seleccionado para esta venta: {selectedCustomerName ?? "Cliente"}.";
+        Loaded += OnLoaded;
+    }
+
+    private async void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = await ApiClient.Client.GetFromJsonAsync<PaymentSettings>("api/payment-method-settings") ?? new PaymentSettings(true, true, true, true);
+            CashMethodButton.Visibility = settings.CashEnabled ? Visibility.Visible : Visibility.Collapsed;
+            CardMethodButton.Visibility = settings.CardEnabled ? Visibility.Visible : Visibility.Collapsed;
+            TransferMethodButton.Visibility = settings.TransferEnabled ? Visibility.Visible : Visibility.Collapsed;
+            CreditButton.Visibility = settings.CreditEnabled ? Visibility.Visible : Visibility.Collapsed;
+            MixedMethodButton.Visibility = (settings.CashEnabled ? 1 : 0) + (settings.CardEnabled ? 1 : 0) + (settings.TransferEnabled ? 1 : 0) >= 2 ? Visibility.Visible : Visibility.Collapsed;
+            _paymentMethod = settings.CashEnabled ? "Cash" : settings.CardEnabled ? "Card" : settings.TransferEnabled ? "Transfer" : "Credit";
+        }
+        catch
+        {
+            _paymentMethod = "Cash";
+            MessageText.Text = "No se pudo leer la configuración de pagos. Se usará efectivo.";
+        }
         UpdatePaymentView();
     }
 
@@ -39,7 +60,7 @@ public partial class CashWindow : Window
 
     private void UpdatePaymentView()
     {
-        MethodText.Text = _paymentMethod switch { "Card" => "Pago completo con tarjeta", "Transfer" => "Pago completo por transferencia", "Mixed" => "Distribuye el total entre efectivo, tarjeta y transferencia", _ => "Pago completo en efectivo" };
+        MethodText.Text = _paymentMethod switch { "Card" => "Pago completo con tarjeta", "Transfer" => "Pago completo por transferencia", "Mixed" => "Distribuye el total entre efectivo, tarjeta y transferencia", "Credit" => "Venta a crédito para el cliente seleccionado", _ => "Pago completo en efectivo" };
         CashPanel.Visibility = _paymentMethod is "Cash" or "Mixed" ? Visibility.Visible : Visibility.Collapsed;
         MixedPanel.Visibility = _paymentMethod == "Mixed" ? Visibility.Visible : Visibility.Collapsed;
         MarkSelectedMethod(CashMethodButton, _paymentMethod == "Cash");
@@ -74,6 +95,7 @@ public partial class CashWindow : Window
 
     private void Confirm(bool print)
     {
+        if (_paymentMethod == "Credit") { OnCreditClick(this, new RoutedEventArgs()); return; }
         var received = ParseAmount(ReceivedTextBox.Text); var card = _paymentMethod == "Card" ? _total : ParseAmount(CardAmountTextBox.Text); var transfer = _paymentMethod == "Transfer" ? _total : ParseAmount(TransferAmountTextBox.Text);
         var cashDue = _paymentMethod switch { "Card" or "Transfer" => 0m, "Mixed" => _total - card - transfer, _ => _total };
         if (cashDue < 0m || card < 0m || transfer < 0m || received < cashDue || decimal.Round(cashDue + card + transfer, 2) != _total) { MessageText.Text = "Verifica que los importes cubran exactamente el total y que el efectivo recibido sea suficiente."; return; }
@@ -105,4 +127,5 @@ public partial class CashWindow : Window
     }
 
     private static decimal ParseAmount(string? value) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out var amount) ? decimal.Round(amount, 2) : -1m;
+    private sealed record PaymentSettings(bool CashEnabled, bool CardEnabled, bool TransferEnabled, bool CreditEnabled);
 }

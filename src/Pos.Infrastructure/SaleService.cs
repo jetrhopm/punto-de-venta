@@ -59,6 +59,8 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
             if (originalLine is not null) lines.Add(new SaleLineRecord { Id = Guid.NewGuid(), ProductId = product.Id, Quantity = requestedQuantity, UnitPrice = unitPrice, LineTotal = total, StockBefore = stockBefore, StockAfter = product.Stock });
         }
         var totalSale = decimal.Round(lines.Sum(line => line.LineTotal), 2, MidpointRounding.AwayFromZero);
+        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        ValidatePaymentMethodEnabled(store, command, totalSale);
         CustomerRecord? customer = null;
         var currentCredit = 0m;
         if (command.PaymentMethod == "Credit")
@@ -78,7 +80,6 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         }
         // El consecutivo se reserva dentro de la misma transacción serializable de la venta.
         // Una venta que se revierte conserva su folio y los folios omitidos no se reutilizan.
-        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
         var folio = store.NextSaleFolio;
         store.NextSaleFolio++;
         var sale = new SaleRecord { Id = Guid.NewGuid(), OperationId = command.OperationId, ShiftId = shift.Id, CustomerId = command.CustomerId, Folio = folio, Total = totalSale, CreatedAtUtc = DateTimeOffset.UtcNow };
@@ -103,5 +104,17 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         }
         await database.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
         return new CompleteSaleResult(sale.Id, sale.OperationId, totalSale, command.CashReceived, change, false);
+    }
+
+    private static void ValidatePaymentMethodEnabled(StoreRecord store, CompleteSaleCommand command, decimal total)
+    {
+        var card = command.PaymentMethod == "Card" ? total : decimal.Round(command.CardAmount, 2, MidpointRounding.AwayFromZero);
+        var transfer = command.PaymentMethod == "Transfer" ? total : decimal.Round(command.TransferAmount, 2, MidpointRounding.AwayFromZero);
+        var cash = decimal.Round(total - card - transfer, 2, MidpointRounding.AwayFromZero);
+
+        if (command.PaymentMethod == "Credit" && !store.CreditPaymentEnabled) throw new InvalidOperationException("El pago a crédito está desactivado en esta tienda.");
+        if (command.PaymentMethod != "Credit" && cash > 0m && !store.CashPaymentEnabled) throw new InvalidOperationException("El pago en efectivo está desactivado en esta tienda.");
+        if (card > 0m && !store.CardPaymentEnabled) throw new InvalidOperationException("El pago con tarjeta está desactivado en esta tienda.");
+        if (transfer > 0m && !store.TransferPaymentEnabled) throw new InvalidOperationException("El pago por transferencia está desactivado en esta tienda.");
     }
 }
