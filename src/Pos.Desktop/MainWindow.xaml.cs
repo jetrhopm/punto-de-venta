@@ -349,6 +349,7 @@ public partial class MainWindow : Window
                     catch (Exception exception) { StatusText.Text += $" La salida quedó registrada, pero no se pudo imprimir: {exception.Message}"; }
                 }
             }
+            await NotifyCashLimitAsync();
         }
         catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API."; }
     }
@@ -374,11 +375,24 @@ public partial class MainWindow : Window
         var summary = await summaryResponse.Content.ReadFromJsonAsync<ShiftSummaryResponse>();
         summaryResponse.Dispose();
         if (summary is null) { StatusText.Text = "No se pudo calcular el efectivo esperado."; return false; }
-        var window = new CloseShiftWindow(summary.ExpectedCash) { Owner = this };
-        if (window.ShowDialog() != true || window.CountedCash is null) return false;
+        CutSettingsResponse? cutSettings = null;
+        try { cutSettings = await Client.GetFromJsonAsync<CutSettingsResponse>("/api/cut-settings"); }
+        catch (HttpRequestException) { StatusText.Text = "No se pudo consultar la configuración de corte."; return false; }
+        decimal? countedCash;
+        if (cutSettings?.RequireCashCountOnClose != false)
+        {
+            var window = new CloseShiftWindow(summary.ExpectedCash) { Owner = this };
+            if (window.ShowDialog() != true || window.CountedCash is null) return false;
+            countedCash = window.CountedCash.Value;
+        }
+        else
+        {
+            if (MessageBox.Show("Se cerrará el turno sin solicitar efectivo contado ni registrar ajuste. ¿Deseas continuar?", "Cerrar turno", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return false;
+            countedCash = null;
+        }
         try
         {
-            using var response = await Client.PostAsJsonAsync("/api/shifts/close", new { countedCash = window.CountedCash.Value });
+            using var response = await Client.PostAsJsonAsync("/api/shifts/close", new { countedCash });
             if (!response.IsSuccessStatusCode) { StatusText.Text = await ReadApiMessageAsync(response); return false; }
             var result = await response.Content.ReadFromJsonAsync<ShiftSummaryResponse>();
             if (result is null) { StatusText.Text = "Turno cerrado."; return true; }
@@ -663,6 +677,19 @@ public partial class MainWindow : Window
         CurrentSectionText.Text = _activeTicket?.Title ?? "Nueva venta";
     }
 
+    private async Task NotifyCashLimitAsync()
+    {
+        try
+        {
+            var settings = await Client.GetFromJsonAsync<CutSettingsResponse>("/api/cut-settings");
+            if (settings is not { CashLimitEnabled: true } || settings.CashLimit <= 0m) return;
+            var summary = await Client.GetFromJsonAsync<ShiftSummaryResponse>("/api/shifts/summary");
+            if (summary is null || summary.ExpectedCash < settings.CashLimit) return;
+            MessageBox.Show(settings.CashLimitMessage, "Límite de efectivo en caja", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (HttpRequestException) { }
+    }
+
     private sealed record ProductSearchResult(Guid Id, string Code, string Description, decimal Price, decimal Stock = 0m);
     private sealed record ProductSearchRow(ProductSearchResult Product)
     {
@@ -692,6 +719,7 @@ public partial class MainWindow : Window
     private sealed record SaleResponse(Guid SaleId, decimal Total, decimal Change, bool Existing);
     private sealed record RegisterResponse(Guid Id, string Name);
     private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
+    private sealed record CutSettingsResponse(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, decimal CashLimit, string CashLimitMessage);
     private sealed record CurrentShiftResponse(Guid ShiftId, Guid RegisterId, Guid UserId, decimal InitialCash, DateTimeOffset OpenedAtUtc);
     private sealed record LatestSaleRow(Guid SaleId, DateTimeOffset CreatedAtUtc, decimal Total, string Status);
 
@@ -863,6 +891,7 @@ public partial class MainWindow : Window
             if (_tickets.Count == 0) await CreateNewTicketAsync();
             else { TicketTabs.SelectedIndex = 0; ActivateTicket(_tickets[0]); }
             StatusText.Text = result is null ? "Venta confirmada." : result.Existing ? "La venta ya estaba confirmada; no se registró un cobro duplicado." : cashWindow.CreditRequested ? "Venta a crédito confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
+            if (result is not null && !result.Existing) await NotifyCashLimitAsync();
             if (result is not null && !result.Existing && cashWindow.PrintRequested)
             {
                 try { StatusText.Text += " " + await OutputTicketAsync(result.SaleId); }
