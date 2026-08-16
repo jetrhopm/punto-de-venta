@@ -1,10 +1,13 @@
 using System.Net.Http;
+using System.Text.Json;
 using System.Windows;
 
 namespace Pos.Desktop;
 
 public partial class ServerConnectionWindow : Window
 {
+    public bool RepairRequested { get; private set; }
+
     public ServerConnectionWindow()
     {
         InitializeComponent();
@@ -28,9 +31,20 @@ public partial class ServerConnectionWindow : Window
             }
 
             using var setup = await ApiClient.Client.GetAsync("api/setup/status");
-            MessageText.Text = setup.IsSuccessStatusCode
-                ? "Conexión correcta: el servicio y la base de datos responden."
-                : "El servicio responde, pero no se pudo consultar la tienda. Revisa PostgreSQL y las migraciones en el servidor.";
+            if (setup.IsSuccessStatusCode)
+            {
+                MessageText.Text = "Conexión correcta: el servicio y la base de datos responden.";
+                return;
+            }
+
+            var errorBody = await setup.Content.ReadAsStringAsync();
+            var code = TryReadErrorCode(errorBody);
+            MessageText.Text = code switch
+            {
+                "pending_migrations" => "El servidor responde, pero necesita actualizar la base de datos. Usa Reparar servicios en esta ventana.",
+                "database_unavailable" => "El servidor responde, pero su base de datos no está lista. Usa Reparar servicios en esta ventana.",
+                _ => "El servidor responde, pero no se pudo consultar la tienda. Usa Reparar servicios o revisa PostgreSQL en el servidor."
+            };
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or UriFormatException)
         {
@@ -47,6 +61,38 @@ public partial class ServerConnectionWindow : Window
         if (!TryRead(out var host, out var port)) return;
         ApiClient.SetServer(host, port);
         DialogResult = true;
+    }
+
+    private void OnRepairClick(object sender, RoutedEventArgs e)
+    {
+        if (!TryRead(out var host, out _)) return;
+        if (!IsLocalHost(host))
+        {
+            MessageText.Text = "La reparación automática solo está disponible para el servidor de esta computadora. Para otro equipo, revisa que esté encendido y que JetVenta esté instalado allí.";
+            return;
+        }
+
+        RepairRequested = true;
+        MessageText.Text = "JetVenta cerrará esta ventana y revisará PostgreSQL, la API y las migraciones. No se borrarán productos ni ventas.";
+        DialogResult = true;
+    }
+
+    private static bool IsLocalHost(string host) =>
+        host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+        host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+        host.Equals("::1", StringComparison.OrdinalIgnoreCase);
+
+    private static string? TryReadErrorCode(string body)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            return document.RootElement.TryGetProperty("code", out var code) ? code.GetString() : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private bool TryRead(out string host, out int port)

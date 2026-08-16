@@ -100,8 +100,31 @@ app.MapGet("/health", () =>
 
 app.MapGet("/api/setup/status", async (PosDbContext database, CancellationToken cancellationToken) =>
 {
-    var store = await database.Stores.AsNoTracking().OrderBy(store => store.CreatedAtUtc).FirstOrDefaultAsync(cancellationToken);
-    return Results.Ok(new { configured = store is not null, storeName = store?.Name });
+    try
+    {
+        var pendingMigrations = await database.Database.GetPendingMigrationsAsync(cancellationToken);
+        if (pendingMigrations.Any())
+        {
+            WriteStartupLog($"La base de datos tiene {pendingMigrations.Count()} migraciones pendientes al consultar el estado de la tienda.");
+            return Results.Problem(
+                title: "La base de datos necesita actualizarse",
+                detail: "JetVenta detectó una actualización pendiente. Usa Reparar servicios para aplicar la actualización de forma segura.",
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                extensions: new Dictionary<string, object?> { ["code"] = "pending_migrations" });
+        }
+
+        var store = await database.Stores.AsNoTracking().OrderBy(store => store.CreatedAtUtc).FirstOrDefaultAsync(cancellationToken);
+        return Results.Ok(new { configured = store is not null, storeName = store?.Name });
+    }
+    catch (Exception exception)
+    {
+        WriteStartupLog($"No se pudo consultar el estado de la tienda: {exception.GetType().Name}: {exception.Message}");
+        return Results.Problem(
+            title: "No se pudo consultar la tienda",
+            detail: "La base de datos no está lista o requiere reparación. Usa Reparar servicios y vuelve a intentar.",
+            statusCode: StatusCodes.Status503ServiceUnavailable,
+            extensions: new Dictionary<string, object?> { ["code"] = "database_unavailable" });
+    }
 });
 
 app.MapGet("/api/lan/info", () => Results.Ok(new

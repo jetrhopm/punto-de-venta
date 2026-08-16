@@ -40,7 +40,7 @@ public partial class StartupWindow : Window
     {
         if (_isChecking) return;
         var window = new ServerConnectionWindow { Owner = this };
-        if (window.ShowDialog() == true) await RunStartupCheckAsync();
+        if (window.ShowDialog() == true) await RunStartupCheckAsync(window.RepairRequested);
     }
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => System.Windows.Application.Current.Shutdown();

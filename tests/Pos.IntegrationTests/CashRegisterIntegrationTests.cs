@@ -30,8 +30,9 @@ public sealed class CashRegisterIntegrationTests
             var first = await shifts.OpenAsync(token, new OpenShiftCommand(register.Id, 500m), CancellationToken.None);
             Assert.NotNull(first);
 
-            var cashSale = new SaleRecord { Id = Guid.NewGuid(), OperationId = Guid.NewGuid(), ShiftId = first.ShiftId, Total = 100m, Status = "Completed", CreatedAtUtc = DateTimeOffset.UtcNow };
-            var cardSale = new SaleRecord { Id = Guid.NewGuid(), OperationId = Guid.NewGuid(), ShiftId = first.ShiftId, Total = 80m, Status = "Completed", CreatedAtUtc = DateTimeOffset.UtcNow };
+            var firstFolio = Random.Shared.NextInt64(1, long.MaxValue / 2);
+            var cashSale = new SaleRecord { Id = Guid.NewGuid(), OperationId = Guid.NewGuid(), ShiftId = first.ShiftId, Folio = firstFolio, Total = 100m, Status = "Completed", CreatedAtUtc = DateTimeOffset.UtcNow };
+            var cardSale = new SaleRecord { Id = Guid.NewGuid(), OperationId = Guid.NewGuid(), ShiftId = first.ShiftId, Folio = firstFolio + 1, Total = 80m, Status = "Completed", CreatedAtUtc = DateTimeOffset.UtcNow };
             database.Sales.AddRange(cashSale, cardSale);
             database.Payments.AddRange(
                 new PaymentRecord { Id = Guid.NewGuid(), SaleId = cashSale.Id, Method = "Cash", Amount = 100m, Received = 100m },
@@ -65,6 +66,8 @@ public sealed class CashRegisterIntegrationTests
             database.Payments.RemoveRange(database.Payments.Where(item => saleIds.Contains(item.SaleId)));
             database.CashMovements.RemoveRange(database.CashMovements.Where(item => shiftIds.Contains(item.ShiftId)));
             database.Sales.RemoveRange(database.Sales.Where(item => saleIds.Contains(item.Id)));
+            await database.SaveChangesAsync();
+
             database.Shifts.RemoveRange(database.Shifts.Where(item => shiftIds.Contains(item.Id)));
             database.Sessions.RemoveRange(database.Sessions.Where(item => item.UserId == user.Id));
             database.Registers.Remove(register);
