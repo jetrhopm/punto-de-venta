@@ -21,6 +21,8 @@ public partial class MercadoPagoSettingsWindow : Window
             _enabled = settings.Enabled;
             EnabledButton.Content = _enabled ? "Desactivar Point" : "Activar Point";
             EnabledButton.IsEnabled = settings.AccountConnected;
+            DisconnectButton.Visibility = settings.AccountConnected ? Visibility.Visible : Visibility.Collapsed;
+            DisconnectButton.ToolTip = "Quita de JetVenta los tokens, la cuenta y las terminales asociadas. No borra ventas ni cobros históricos.";
             AuthorizeButton.IsEnabled = true;
             AuthorizeButton.ToolTip = settings.OAuthAvailable ? "Abrir Mercado Pago para autorizar JetVenta" : "La API todavía necesita la aplicación OAuth y su callback HTTPS";
             StatusText.Text = settings.TerminalLabel;
@@ -92,6 +94,26 @@ public partial class MercadoPagoSettingsWindow : Window
             if (response.IsSuccessStatusCode) await LoadAsync();
         }
         catch (Exception exception) { StatusText.Text = exception.Message; }
+    }
+
+    private async void OnDisconnectClick(object sender, RoutedEventArgs e)
+    {
+        var confirmation = MessageBox.Show(
+            "Se eliminarán de JetVenta los tokens cifrados, la cuenta autorizada y las terminales asociadas a esta tienda.\n\nLas ventas, cobros, devoluciones e historial no se eliminarán. Esta acción tampoco revoca el permiso en Mercado Pago; para revocarlo debes hacerlo desde tu cuenta de Mercado Pago.\n\n¿Deseas continuar?",
+            "Eliminar datos de Mercado Pago",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (confirmation != MessageBoxResult.Yes) return;
+
+        try
+        {
+            using var response = await ApiClient.Client.PostAsync("api/integrations/mercado-pago/disconnect", null);
+            if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
+            TerminalBox.ItemsSource = null;
+            StatusText.Text = "Los datos de Mercado Pago se eliminaron de JetVenta. La información histórica se conservó.";
+            await LoadAsync();
+        }
+        catch (Exception exception) { StatusText.Text = "No se pudieron eliminar los datos: " + exception.Message; }
     }
 
     private async void OnRefreshTerminalsClick(object sender, RoutedEventArgs e) => await RefreshTerminalsAsync();

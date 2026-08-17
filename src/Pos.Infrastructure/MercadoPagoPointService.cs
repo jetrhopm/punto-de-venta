@@ -92,6 +92,30 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         return true;
     }
 
+    public async Task<bool?> DisconnectAsync(string token, CancellationToken cancellationToken)
+    {
+        if (!await AuthorizedAsync(token, true, cancellationToken)) return null;
+        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        var registers = await database.Registers.Where(item => item.StoreId == store.Id).ToListAsync(cancellationToken);
+        foreach (var register in registers)
+        {
+            register.MercadoPagoTerminalId = string.Empty;
+            register.MercadoPagoTerminalLabel = string.Empty;
+        }
+
+        store.MercadoPagoEnabled = false;
+        store.MercadoPagoEnvironment = "Test";
+        store.MercadoPagoAccessTokenProtected = string.Empty;
+        store.MercadoPagoRefreshTokenProtected = string.Empty;
+        store.MercadoPagoUserId = null;
+        store.MercadoPagoTokenExpiresAtUtc = null;
+        store.MercadoPagoOAuthState = string.Empty;
+        store.MercadoPagoOAuthVerifierProtected = string.Empty;
+        store.MercadoPagoOAuthStateExpiresAtUtc = null;
+        await database.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<string?> BeginOAuthAsync(string token, CancellationToken cancellationToken)
     {
         if (!await AuthorizedAsync(token, true, cancellationToken)) return null;

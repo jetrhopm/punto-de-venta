@@ -47,6 +47,10 @@ El `ClientSecret` solo vive en la API desplegada. La URL de retorno debe ser pú
 
 Una vez configurado el servidor, la experiencia del comerciante es: **Configuración > Mercado Pago Point > Autorizar cuenta > iniciar sesión en Mercado Pago > aceptar > seleccionar terminal**. El Access Token y el refresh token se renuevan y conservan automáticamente en la API. Si el comerciante revoca el acceso, JetVenta mostrará que la cuenta necesita autorizarse de nuevo.
 
+## Desconectar y eliminar datos locales
+
+El botón **Eliminar datos de JetVenta** requiere permisos de administrador o configuración de tienda y confirmación explícita. Elimina de la instalación los tokens cifrados, usuario OAuth, estado de autorización y terminales asociadas a las cajas. No elimina ventas, órdenes, cobros, devoluciones ni auditoría histórica, porque esos registros son necesarios para la trazabilidad. Tampoco revoca el permiso en Mercado Pago; esa revocación se realiza desde la cuenta del comerciante. Mercado Pago documenta que la revocación de la autorización invalida los tokens y concesiones asociados. ([gestión oficial de Access Token](https://www.mercadopago.com.mx/developers/es/docs/checkout-bricks/additional-content/security/oauth/management))
+
 ## Configuración de la terminal
 
 La terminal física debe:
