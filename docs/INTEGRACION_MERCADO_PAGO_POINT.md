@@ -4,15 +4,18 @@
 
 JetVenta integra terminales Mercado Pago Point mediante la API oficial de Orders. No utiliza la API anterior de intenciones de pago.
 
-El flujo es:
+El flujo de producción está pensado para que el usuario final no copie tokens:
 
-1. El administrador autoriza su cuenta de Mercado Pago mediante OAuth con PKCE, o captura un Access Token de prueba.
-2. JetVenta consulta las terminales asociadas a esa cuenta.
-3. El administrador asigna a la caja una terminal configurada en modo `PDV`.
-4. Al cobrar con tarjeta, JetVenta crea una orden con un `operation_id` e idempotency key únicos.
-5. La terminal recibe el importe y procesa la tarjeta de manera presencial.
-6. JetVenta consulta el estado autoritativo de la orden. Solo registra la venta cuando Mercado Pago responde `processed`.
-7. Un estado rechazado, cancelado, vencido o desconocido deja el ticket abierto y no modifica caja ni inventario.
+1. El administrador pulsa **Autorizar cuenta** en JetVenta.
+2. JetVenta abre el inicio de sesión oficial de Mercado Pago en el navegador.
+3. El administrador acepta el acceso para la cuenta que recibirá el dinero.
+4. Mercado Pago regresa al callback HTTPS de JetVenta. La API valida `state` y PKCE, intercambia el código por Access Token y refresh token, y cifra ambos en el servidor.
+5. JetVenta detecta automáticamente la autorización y consulta las terminales asociadas a esa cuenta; no hace falta pegar un Access Token ni pulsar actualizar.
+6. El administrador selecciona la terminal de esta caja y JetVenta valida que esté configurada en modo `PDV`.
+7. Al cobrar con tarjeta, JetVenta crea una orden con un `operation_id` e idempotency key únicos.
+8. La terminal recibe el importe y procesa la tarjeta de manera presencial.
+9. JetVenta consulta el estado autoritativo de la orden. Solo registra la venta cuando Mercado Pago responde `processed`.
+10. Un estado rechazado, cancelado, vencido o desconocido deja el ticket abierto y no modifica caja ni inventario.
 
 La impresión ocurre después de confirmar la venta local. Un fallo de impresora no crea otra orden ni otra venta.
 
@@ -28,7 +31,21 @@ MercadoPago__RedirectUri=https://<dominio-publico>/api/integrations/mercado-pago
 
 El callback debe ser HTTPS, público y coincidir exactamente con el registrado en la aplicación de Mercado Pago. El Access Token y el refresh token se cifran con DPAPI vinculado al equipo servidor. JetVenta renueva automáticamente el Access Token antes de su vencimiento y conserva el nuevo refresh token.
 
-Para una prueba sin OAuth se puede usar **Configuración > Mercado Pago Point > Access Token de prueba**. Esta opción valida el token contra la lista de terminales antes de guardarlo.
+Para desarrollo local se puede usar **Configuración > Mercado Pago Point > Solo pruebas de desarrollo**. Esa opción valida un Access Token de prueba contra la lista de terminales antes de guardarlo. No debe ser el flujo de una instalación distribuida.
+
+## Requisitos para habilitar el botón de autorización
+
+JetVenta debe tener una sola aplicación OAuth central, propiedad del proyecto, no una aplicación diferente por tienda. El usuario final no necesita conocer ni configurar estos valores:
+
+```text
+MercadoPago__ClientId=<APP_ID_DE_JETVENTA>
+MercadoPago__ClientSecret=<CLIENT_SECRET_DE_JETVENTA>
+MercadoPago__RedirectUri=https://<dominio-publico>/api/integrations/mercado-pago/oauth/callback
+```
+
+El `ClientSecret` solo vive en la API desplegada. La URL de retorno debe ser pública, HTTPS y coincidir exactamente con la registrada en la aplicación de Mercado Pago. Para el producto distribuido se requiere alojar la API en un servidor con dominio o subdominio estable; una URL `127.0.0.1`, un callback distinto por cliente o un secreto dentro del cliente WPF no son opciones válidas.
+
+Una vez configurado el servidor, la experiencia del comerciante es: **Configuración > Mercado Pago Point > Autorizar cuenta > iniciar sesión en Mercado Pago > aceptar > seleccionar terminal**. El Access Token y el refresh token se renuevan y conservan automáticamente en la API. Si el comerciante revoca el acceso, JetVenta mostrará que la cuenta necesita autorizarse de nuevo.
 
 ## Configuración de la terminal
 

@@ -7,6 +7,7 @@ namespace Pos.Desktop;
 public partial class MercadoPagoSettingsWindow : Window
 {
     private bool _enabled;
+    private CancellationTokenSource? _oauthPolling;
     public MercadoPagoSettingsWindow() { InitializeComponent(); Loaded += async (_, _) => await LoadAsync(); }
 
     private async Task LoadAsync()
@@ -20,8 +21,8 @@ public partial class MercadoPagoSettingsWindow : Window
             _enabled = settings.Enabled;
             EnabledButton.Content = _enabled ? "Desactivar Point" : "Activar Point";
             EnabledButton.IsEnabled = settings.AccountConnected;
-            AuthorizeButton.IsEnabled = settings.OAuthAvailable;
-            AuthorizeButton.ToolTip = settings.OAuthAvailable ? "Abrir Mercado Pago para autorizar JetVenta" : "Requiere registrar la aplicación OAuth y su callback HTTPS";
+            AuthorizeButton.IsEnabled = true;
+            AuthorizeButton.ToolTip = settings.OAuthAvailable ? "Abrir Mercado Pago para autorizar JetVenta" : "La API todavía necesita la aplicación OAuth y su callback HTTPS";
             StatusText.Text = settings.TerminalLabel;
             if (settings.AccountConnected) await RefreshTerminalsAsync();
         }
@@ -42,15 +43,44 @@ public partial class MercadoPagoSettingsWindow : Window
 
     private async void OnAuthorizeClick(object sender, RoutedEventArgs e)
     {
+        _oauthPolling?.Cancel();
+        _oauthPolling = new CancellationTokenSource();
+        var cancellationToken = _oauthPolling.Token;
         try
         {
             using var response = await ApiClient.Client.PostAsync("api/integrations/mercado-pago/oauth/start", null);
             if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
             var result = await response.Content.ReadFromJsonAsync<OAuthStartResult>();
             if (result is not null) Process.Start(new ProcessStartInfo(result.Url) { UseShellExecute = true });
-            StatusText.Text = "Autoriza la cuenta en el navegador y después pulsa Actualizar terminales.";
+            AuthorizeButton.IsEnabled = false;
+            StatusText.Text = "Autoriza tu cuenta en el navegador. JetVenta cargará las terminales automáticamente al terminar.";
+            await WaitForOAuthAsync(cancellationToken);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         catch (Exception exception) { StatusText.Text = exception.Message; }
+        finally
+        {
+            if (!cancellationToken.IsCancellationRequested) AuthorizeButton.IsEnabled = true;
+        }
+    }
+
+    private async Task WaitForOAuthAsync(CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 90; attempt++)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+            var settings = await ApiClient.Client.GetFromJsonAsync<SettingsResult>("api/integrations/mercado-pago/settings", cancellationToken);
+            if (settings?.AccountConnected == true && string.Equals(settings.Environment, "Production", StringComparison.OrdinalIgnoreCase))
+            {
+                ConnectionTitle.Text = "Cuenta conectada (Producción)";
+                ConnectionMessage.Text = "Cuenta autorizada. Cargando las terminales asociadas...";
+                await RefreshTerminalsAsync(cancellationToken);
+                StatusText.Text = "Cuenta autorizada. Selecciona la terminal de esta caja.";
+                return;
+            }
+        }
+
+        StatusText.Text = "La autorización no terminó todavía. Si ya aceptaste en Mercado Pago, espera unos segundos y pulsa Actualizar terminales.";
     }
 
     private async void OnEnabledClick(object sender, RoutedEventArgs e)
@@ -65,16 +95,22 @@ public partial class MercadoPagoSettingsWindow : Window
     }
 
     private async void OnRefreshTerminalsClick(object sender, RoutedEventArgs e) => await RefreshTerminalsAsync();
-    private async Task RefreshTerminalsAsync()
+    private async Task RefreshTerminalsAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            var terminals = await ApiClient.Client.GetFromJsonAsync<List<TerminalResult>>("api/integrations/mercado-pago/terminals") ?? [];
+            var terminals = await ApiClient.Client.GetFromJsonAsync<List<TerminalResult>>("api/integrations/mercado-pago/terminals", cancellationToken) ?? [];
             TerminalBox.ItemsSource = terminals;
             TerminalBox.SelectedItem = terminals.FirstOrDefault(item => item.Selected) ?? terminals.FirstOrDefault();
             TerminalHelp.Text = terminals.Count == 0 ? "No se encontraron terminales. Vincúlala a una sucursal y caja en Mercado Pago y activa el modo PDV." : $"{terminals.Count} terminal(es) encontradas. Solo las que indiquen PDV pueden guardarse.";
         }
         catch (Exception exception) { StatusText.Text = "No se pudieron listar terminales: " + exception.Message; }
+    }
+
+    private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        _oauthPolling?.Cancel();
+        _oauthPolling?.Dispose();
     }
 
     private async void OnSaveTerminalClick(object sender, RoutedEventArgs e)
