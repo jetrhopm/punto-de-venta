@@ -60,3 +60,7 @@ Los commits deben usar mensajes descriptivos en espanol.
 ## Diagnóstico y báscula
 
 La configuración incluye `Báscula` para equipos RS-232 o USB que Windows exponga como puerto COM, y `Detalles del sistema` para consultar versión, equipo, API y dispositivos sin mostrar secretos. Consulta [docs/CONFIGURACION_BASCULA.md](docs/CONFIGURACION_BASCULA.md) antes de probar un modelo nuevo.
+
+## Recargas y pagos de servicios
+
+JetVenta separa los proveedores Taecel y La Red+ para que cada tienda pueda activar uno, ambos o ninguno sin mezclar credenciales ni catálogos. Consulta [docs/INTEGRACIONES_RECARGAS.md](docs/INTEGRACIONES_RECARGAS.md). Las operaciones reales permanecen deshabilitadas hasta contar con contratos y credenciales oficiales de prueba.

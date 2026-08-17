@@ -23,6 +23,8 @@
     <ProjectReference Include="..\..\src\Pos.Application\Pos.Application.csproj" />
     <ProjectReference Include="..\..\src\Pos.Printing\Pos.Printing.csproj" />
     <ProjectReference Include="..\..\src\Pos.Integrations.MercadoPago\Pos.Integrations.MercadoPago.csproj" />
+    <ProjectReference Include="..\..\src\Pos.Integrations.DigitalServices\Pos.Integrations.DigitalServices.csproj" />
+    <ProjectReference Include="..\..\src\Pos.Integrations.LaRedMas\Pos.Integrations.LaRedMas.csproj" />
   </ItemGroup>
 
 </Project>

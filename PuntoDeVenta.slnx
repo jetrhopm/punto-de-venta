@@ -6,7 +6,9 @@
     <Project Path="src/Pos.Domain/Pos.Domain.csproj" />
     <Project Path="src/Pos.Infrastructure/Pos.Infrastructure.csproj" />
     <Project Path="src/Pos.Integrations.MercadoPago/Pos.Integrations.MercadoPago.csproj" />
+    <Project Path="src/Pos.Integrations.DigitalServices/Pos.Integrations.DigitalServices.csproj" />
     <Project Path="src/Pos.Integrations.Taecel/Pos.Integrations.Taecel.csproj" />
+    <Project Path="src/Pos.Integrations.LaRedMas/Pos.Integrations.LaRedMas.csproj" />
     <Project Path="src/Pos.Printing/Pos.Printing.csproj" />
     <Project Path="src/Pos.Worker/Pos.Worker.csproj" />
   </Folder>

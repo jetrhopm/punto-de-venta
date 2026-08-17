@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-08-16
+- Se separan Taecel y La Red+ como proveedores independientes de recargas y pagos de servicios, con contratos comunes y documentación de los requisitos oficiales pendientes.
+
 ## Sin liberar
 - Se integra Mercado Pago Point con Orders API, autorización OAuth con PKCE, tokens cifrados y renovación automática.
 - Se permite asociar una terminal PDV por caja y se exige aprobación autoritativa e idempotente antes de confirmar pagos con tarjeta o pagos mixtos.
