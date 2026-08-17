@@ -44,6 +44,21 @@ public sealed class MercadoPagoPointClientTests
     }
 
     [Fact]
+    public async Task ListTerminalsAcceptsNumericIdentifiers()
+    {
+        var handler = new RecordingHandler("""
+            {"data":{"terminals":[{"id":"TERM-2","pos_id":23545678,"store_id":12354567,"external_pos_id":"CAJA-2","operating_mode":"PDV"}]}}
+            """);
+        var client = CreateClient(handler);
+
+        var terminal = Assert.Single(await client.ListTerminalsAsync("TEST-token", CancellationToken.None));
+
+        Assert.Equal("23545678", terminal.PosId);
+        Assert.Equal("12354567", terminal.StoreId);
+        Assert.Equal("PDV", terminal.OperatingMode);
+    }
+
+    [Fact]
     public async Task RefreshTokenUsesOAuthGrant()
     {
         var handler = new RecordingHandler("""

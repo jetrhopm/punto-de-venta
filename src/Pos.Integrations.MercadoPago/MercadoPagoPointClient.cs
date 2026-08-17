@@ -27,11 +27,11 @@ public sealed class MercadoPagoPointClient(HttpClient client)
         EnsureSuccess(response, body);
         var result = JsonSerializer.Deserialize<TerminalListResponse>(body, JsonOptions);
         return result?.Data?.Terminals?.Select(item => new MercadoPagoTerminal(
-            item.Id ?? string.Empty,
-            item.PosId ?? string.Empty,
-            item.StoreId ?? string.Empty,
-            item.ExternalPosId ?? string.Empty,
-            item.OperatingMode ?? "UNDEFINED")).ToArray() ?? [];
+            JsonValue(item.Id),
+            JsonValue(item.PosId),
+            JsonValue(item.StoreId),
+            JsonValue(item.ExternalPosId),
+            string.IsNullOrWhiteSpace(JsonValue(item.OperatingMode)) ? "UNDEFINED" : JsonValue(item.OperatingMode))).ToArray() ?? [];
     }
 
     public async Task<MercadoPagoOrder> CreateOrderAsync(string accessToken, string terminalId, Guid operationId, decimal amount, string description, CancellationToken cancellationToken)
@@ -132,6 +132,14 @@ public sealed class MercadoPagoPointClient(HttpClient client)
 
     private static async Task<string> ReadBodyAsync(HttpResponseMessage response, CancellationToken cancellationToken) => await response.Content.ReadAsStringAsync(cancellationToken);
 
+    private static string JsonValue(JsonElement value) => value.ValueKind switch
+    {
+        JsonValueKind.String => value.GetString() ?? string.Empty,
+        JsonValueKind.Number => value.ToString(),
+        JsonValueKind.Null or JsonValueKind.Undefined => string.Empty,
+        _ => value.ToString()
+    };
+
     private static void EnsureSuccess(HttpResponseMessage response, string body)
     {
         if (response.IsSuccessStatusCode) return;
@@ -151,7 +159,8 @@ public sealed class MercadoPagoPointClient(HttpClient client)
 
     private sealed record TerminalListResponse(TerminalData? Data);
     private sealed record TerminalData(IReadOnlyList<TerminalResponse>? Terminals);
-    private sealed record TerminalResponse(string? Id, [property: JsonPropertyName("pos_id")] string? PosId, [property: JsonPropertyName("store_id")] string? StoreId, [property: JsonPropertyName("external_pos_id")] string? ExternalPosId, [property: JsonPropertyName("operating_mode")] string? OperatingMode);
+    // Mercado Pago puede devolver identificadores como texto o como número según la cuenta.
+    private sealed record TerminalResponse(JsonElement Id, [property: JsonPropertyName("pos_id")] JsonElement PosId, [property: JsonPropertyName("store_id")] JsonElement StoreId, [property: JsonPropertyName("external_pos_id")] JsonElement ExternalPosId, [property: JsonPropertyName("operating_mode")] JsonElement OperatingMode);
     private sealed record OrderResponse(string? Id, string? Status, [property: JsonPropertyName("status_detail")] string? StatusDetail, OrderTransactions? Transactions);
     private sealed record OrderTransactions(IReadOnlyList<OrderPayment>? Payments);
     private sealed record OrderPayment(string? Id, string? Amount, [property: JsonPropertyName("paid_amount")] string? PaidAmount);
