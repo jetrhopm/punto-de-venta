@@ -72,6 +72,7 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
     {
         if (!await AuthorizedAsync(token, true, cancellationToken)) return null;
         if (string.IsNullOrWhiteSpace(command.TerminalId)) throw new ArgumentException("Selecciona una terminal antes de activar el modo PDV.");
+        if (!IsPdvCompatible(command.TerminalId)) throw new InvalidOperationException("Este modelo de terminal no admite la integración PDV de Mercado Pago. La API oficial solo permite activar terminales NEWLAND_N950 y PAX_A910.");
         var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
         await client.ActivatePdvAsync(await GetAccessTokenAsync(store, cancellationToken), command.TerminalId.Trim(), cancellationToken);
         return true;
@@ -176,6 +177,7 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
     private static bool IsFinished(string status) => status is "Approved" or "Rejected" or "Canceled" or "Expired" or "Refunded" or "Unknown";
     private static MercadoPagoOrderResult ToResult(MercadoPagoOrderRecord item) => new(item.OperationId, item.ProviderOrderId ?? string.Empty, item.Status, item.StatusDetail, item.Amount, item.Status == "Approved", IsFinished(item.Status));
     private static string BuildTerminalLabel(MercadoPagoTerminal item) => $"{item.Id} | Caja {item.ExternalPosId} | {item.OperatingMode}";
+    private static bool IsPdvCompatible(string terminalId) => terminalId.StartsWith("NEWLAND_N950__", StringComparison.OrdinalIgnoreCase) || terminalId.StartsWith("PAX_A910__", StringComparison.OrdinalIgnoreCase);
     private async Task<string> GetAccessTokenAsync(StoreRecord store, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(store.MercadoPagoAccessTokenProtected)) throw new InvalidOperationException("La cuenta de Mercado Pago no está autorizada.");

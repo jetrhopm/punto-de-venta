@@ -93,6 +93,7 @@ public partial class MercadoPagoSettingsWindow : Window
     {
         if (TerminalBox.SelectedItem is not TerminalResult terminal) { StatusText.Text = "Selecciona una terminal."; return; }
         if (string.Equals(terminal.OperatingMode, "PDV", StringComparison.OrdinalIgnoreCase)) { StatusText.Text = "La terminal ya está configurada en modo PDV."; return; }
+        if (!terminal.Id.StartsWith("NEWLAND_N950__", StringComparison.OrdinalIgnoreCase) && !terminal.Id.StartsWith("PAX_A910__", StringComparison.OrdinalIgnoreCase)) { StatusText.Text = "Este modelo no es compatible con PDV integrado. Mercado Pago solo permite NEWLAND_N950 y PAX_A910."; return; }
         var confirmation = MessageBox.Show("JetVenta solicitará a Mercado Pago activar esta terminal en modo Punto de Venta (PDV). La terminal dejará de operar como terminal independiente.", "Activar modo PDV", MessageBoxButton.OKCancel, MessageBoxImage.Information);
         if (confirmation != MessageBoxResult.OK) return;
         try
