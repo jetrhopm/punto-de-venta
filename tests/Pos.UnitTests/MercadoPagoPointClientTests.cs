@@ -59,6 +59,19 @@ public sealed class MercadoPagoPointClientTests
     }
 
     [Fact]
+    public async Task ActivatePdvUsesSetupEndpoint()
+    {
+        var handler = new RecordingHandler("""{"terminals":[{"id":"TERM-1","operating_mode":"PDV"}]}""");
+        var client = CreateClient(handler);
+
+        await client.ActivatePdvAsync("TEST-token", "TERM-1", CancellationToken.None);
+
+        Assert.Equal(HttpMethod.Patch, handler.Request!.Method);
+        Assert.Equal("https://api.mercadopago.com/terminals/v1/setup", handler.Request.RequestUri!.ToString());
+        Assert.Contains("\"operating_mode\":\"PDV\"", handler.Body);
+    }
+
+    [Fact]
     public async Task RefreshTokenUsesOAuthGrant()
     {
         var handler = new RecordingHandler("""

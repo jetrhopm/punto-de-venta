@@ -10,6 +10,7 @@ public sealed record MercadoPagoSettingsResult(bool Enabled, string Environment,
 public sealed record MercadoPagoTerminalResult(string Id, string Label, string OperatingMode, bool Selected);
 public sealed record ConfigureMercadoPagoTestCommand(string AccessToken);
 public sealed record SelectMercadoPagoTerminalCommand(string TerminalId, string Label);
+public sealed record ActivateMercadoPagoTerminalCommand(string TerminalId);
 public sealed record SetMercadoPagoEnabledCommand(bool Enabled);
 public sealed record CreateMercadoPagoOrderCommand(Guid OperationId, decimal Amount, string Description);
 public sealed record MercadoPagoOrderResult(Guid OperationId, string OrderId, string Status, string StatusDetail, decimal Amount, bool Approved, bool Finished);
@@ -64,6 +65,15 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         register.MercadoPagoTerminalLabel = BuildTerminalLabel(terminal);
         store.MercadoPagoEnabled = true;
         await database.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool?> ActivateTerminalAsync(string token, ActivateMercadoPagoTerminalCommand command, CancellationToken cancellationToken)
+    {
+        if (!await AuthorizedAsync(token, true, cancellationToken)) return null;
+        if (string.IsNullOrWhiteSpace(command.TerminalId)) throw new ArgumentException("Selecciona una terminal antes de activar el modo PDV.");
+        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        await client.ActivatePdvAsync(await GetAccessTokenAsync(store, cancellationToken), command.TerminalId.Trim(), cancellationToken);
         return true;
     }
 

@@ -34,6 +34,18 @@ public sealed class MercadoPagoPointClient(HttpClient client)
             string.IsNullOrWhiteSpace(JsonValue(item.OperatingMode)) ? "UNDEFINED" : JsonValue(item.OperatingMode))).ToArray() ?? [];
     }
 
+    public async Task ActivatePdvAsync(string accessToken, string terminalId, CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Patch, "terminals/v1/setup", accessToken);
+        request.Content = JsonContent.Create(new
+        {
+            terminals = new[] { new { id = terminalId, operating_mode = "PDV" } }
+        }, options: JsonOptions);
+        using var response = await client.SendAsync(request, cancellationToken);
+        var body = await ReadBodyAsync(response, cancellationToken);
+        EnsureSuccess(response, body);
+    }
+
     public async Task<MercadoPagoOrder> CreateOrderAsync(string accessToken, string terminalId, Guid operationId, decimal amount, string description, CancellationToken cancellationToken)
     {
         using var request = CreateRequest(HttpMethod.Post, "v1/orders", accessToken);

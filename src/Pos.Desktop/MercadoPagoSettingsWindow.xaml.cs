@@ -89,6 +89,21 @@ public partial class MercadoPagoSettingsWindow : Window
         catch (Exception exception) { StatusText.Text = exception.Message; }
     }
 
+    private async void OnActivatePdvClick(object sender, RoutedEventArgs e)
+    {
+        if (TerminalBox.SelectedItem is not TerminalResult terminal) { StatusText.Text = "Selecciona una terminal."; return; }
+        if (string.Equals(terminal.OperatingMode, "PDV", StringComparison.OrdinalIgnoreCase)) { StatusText.Text = "La terminal ya está configurada en modo PDV."; return; }
+        var confirmation = MessageBox.Show("JetVenta solicitará a Mercado Pago activar esta terminal en modo Punto de Venta (PDV). La terminal dejará de operar como terminal independiente.", "Activar modo PDV", MessageBoxButton.OKCancel, MessageBoxImage.Information);
+        if (confirmation != MessageBoxResult.OK) return;
+        try
+        {
+            using var response = await ApiClient.Client.PostAsJsonAsync("api/integrations/mercado-pago/terminal/pdv", new { terminalId = terminal.Id });
+            StatusText.Text = response.IsSuccessStatusCode ? "Modo PDV solicitado. Reinicia la terminal y actualiza la lista." : await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode) await RefreshTerminalsAsync();
+        }
+        catch (Exception exception) { StatusText.Text = "No se pudo activar el modo PDV: " + exception.Message; }
+    }
+
     private sealed record SettingsResult(bool Enabled, string Environment, bool AccountConnected, long? AccountUserId, string TerminalId, string TerminalLabel, bool OAuthAvailable, string Message);
     private sealed record TerminalResult(string Id, string Label, string OperatingMode, bool Selected);
     private sealed record OAuthStartResult(string Url);
