@@ -1,6 +1,9 @@
 using System.IO;
 using System.Text;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace Pos.Desktop;
@@ -17,10 +20,87 @@ public partial class App : System.Windows.Application
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         Exit += (_, _) => BarcodeScannerService.Stop();
+        EventManager.RegisterClassHandler(typeof(Window), Keyboard.PreviewKeyDownEvent, new KeyEventHandler(OnWindowPreviewKeyDown));
 
         var startup = new StartupWindow();
         MainWindow = startup;
         startup.Show();
+    }
+
+    private static void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not Window window || !IsDialogWindow(window) || e.Handled) return;
+
+        if (e.Key == Key.Escape && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            CloseDialog(window);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key != Key.Enter || Keyboard.Modifiers != ModifierKeys.None) return;
+        if (Keyboard.FocusedElement is TextBox { AcceptsReturn: true } ||
+            Keyboard.FocusedElement is ComboBox { IsDropDownOpen: true }) return;
+        if (Keyboard.FocusedElement is Button) return;
+
+        var primaryButton = FindPrimaryButton(window);
+        if (primaryButton is null) return;
+        primaryButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent, primaryButton));
+        e.Handled = true;
+    }
+
+    private static bool IsDialogWindow(Window window) =>
+        window.Owner is not null || (window is not Pos.Desktop.MainWindow and not LoginWindow and not StartupWindow);
+
+    private static void CloseDialog(Window window)
+    {
+        try { window.DialogResult = false; }
+        catch (InvalidOperationException) { window.Close(); }
+    }
+
+    private static Button? FindPrimaryButton(DependencyObject root)
+    {
+        var buttons = FindVisualChildren<Button>(root)
+            .Where(button => button.IsEnabled && button.Visibility == Visibility.Visible)
+            .ToList();
+        if (buttons.Count == 0) return null;
+
+        return buttons
+            .Select((button, index) => (button, score: PrimaryButtonScore(GetButtonText(button)), index))
+            .OrderByDescending(item => item.score)
+            .ThenBy(item => item.index)
+            .First().button;
+    }
+
+    private static int PrimaryButtonScore(string text)
+    {
+        var normalized = text.Trim().ToLowerInvariant();
+        if (normalized.Contains("cancelar") || normalized.Contains("eliminar") || normalized.Contains("desactivar")) return -100;
+        if (normalized.Contains("guardar")) return 100;
+        if (normalized.Contains("confirmar") || normalized.Contains("cobrar") || normalized.Contains("registrar")) return 95;
+        if (normalized.Contains("importar") || normalized.Contains("recibir") || normalized.Contains("crear")) return 90;
+        if (normalized.Contains("aplicar") || normalized.Contains("actualizar")) return 85;
+        if (normalized.Contains("abrir") || normalized.Contains("continuar") || normalized.Contains("aceptar")) return 80;
+        if (normalized.Contains("reintentar") || normalized.Contains("reparar") || normalized.Contains("probar")) return 70;
+        if (normalized.Contains("cerrar") || normalized.Contains("salir")) return 10;
+        return 0;
+    }
+
+    private static string GetButtonText(Button button)
+    {
+        if (button.Content is string text) return text;
+        return FindVisualChildren<TextBlock>(button).Select(textBlock => textBlock.Text).FirstOrDefault() ?? string.Empty;
+    }
+
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
+    {
+        if (root is null) yield break;
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            if (child is T match) yield return match;
+            foreach (var descendant in FindVisualChildren<T>(child)) yield return descendant;
+        }
     }
 
     private static void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

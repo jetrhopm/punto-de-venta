@@ -1,6 +1,8 @@
 # Changelog
 
 ## 2026-08-20
+- Se ajustan las ventanas de símbolo de moneda y folios para evitar contenido recortado, con desplazamiento cuando sea necesario.
+- Se agrega navegación de teclado común para diálogos: `Enter` confirma la acción principal y `Esc` cancela o cierra sin afectar campos multilínea.
 - Se corrige la restauración desde otra computadora: el instalador incluye `restore-production-backup.ps1` y JetVenta lo localiza desde la carpeta raíz instalada.
 
 ## 2026-08-16
