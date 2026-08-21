@@ -123,6 +123,7 @@ public partial class LoginWindow : Window
             SessionContext.IsAdministrator = result.IsAdministrator;
             SessionContext.Permissions.Clear();
             SessionContext.Permissions.UnionWith(result.Permissions);
+            if (!await EnsureLicenseActiveAsync()) return;
             var mainWindow = new MainWindow();
             System.Windows.Application.Current.MainWindow = mainWindow;
             mainWindow.Show();
@@ -143,6 +144,28 @@ public partial class LoginWindow : Window
         finally
         {
             SetBusy(false);
+        }
+    }
+
+    private async Task<bool> EnsureLicenseActiveAsync()
+    {
+        try
+        {
+            var status = await Client.GetFromJsonAsync<LicenseStatus>("api/license/status");
+            if (status?.IsActive == true) return true;
+
+            var license = new LicenseWindow { Owner = this };
+            license.ShowDialog();
+            status = await Client.GetFromJsonAsync<LicenseStatus>("api/license/status");
+            if (status?.IsActive == true) return true;
+
+            SetStatus("JetVenta requiere una licencia válida. Un administrador debe cargar el archivo licencia.jv para este equipo.", StatusKind.Error);
+            return false;
+        }
+        catch (HttpRequestException)
+        {
+            SetStatus("No se pudo consultar la licencia de JetVenta. Revisa la conexión e intenta de nuevo.", StatusKind.Error);
+            return false;
         }
     }
 
@@ -254,5 +277,6 @@ public partial class LoginWindow : Window
     }
 
     private sealed record SetupStatus(bool Configured, string? StoreName);
+    private sealed record LicenseStatus(bool IsActive);
     private sealed record LoginResponse(Guid SessionId, string AccessToken, Guid UserId, string DisplayName, bool IsAdministrator, DateTimeOffset ExpiresAtUtc, List<string> Permissions);
 }

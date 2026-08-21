@@ -8,6 +8,8 @@
 - Validar permisos en la API, aunque la interfaz oculte botones.
 - Usar consultas parametrizadas y restricciones de base de datos.
 - Mantener auditoria append-only para operaciones sensibles.
+- La llave privada que emite archivos `licencia.jv` nunca se incluye en Git, `Setup.exe`, respaldos ni computadoras de clientes. Solo la llave pública se distribuye con JetVenta.
+- La validación de licencia se realiza en la API local; modificar la interfaz no debe habilitar operaciones de negocio.
 
 ## Reporte de vulnerabilidades
 

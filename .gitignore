@@ -28,6 +28,7 @@ publish/
 .env
 *.secret.json
 appsettings.*.Local.json
+*.jv
 
 # Logs
 logs/

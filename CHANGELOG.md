@@ -11,6 +11,10 @@
 - Se separan Taecel y La Red+ como proveedores independientes de recargas y pagos de servicios, con contratos comunes y documentación de los requisitos oficiales pendientes.
 
 ## Sin liberar
+- Se agrega activación local mediante archivos `licencia.jv` firmados con ECDSA P-256, validados por la API y ligados a la huella del equipo.
+- Se agrega el emisor interno de licencias, publicado por separado y sin incluir la llave privada en el repositorio ni en el instalador.
+- La desinstalación elimina únicamente la activación local y conserva la base de datos y respaldos como antes.
+- JetVenta restaura automáticamente un diálogo modal cuando Windows + D minimiza la aplicación para evitar que la ventana principal quede bloqueada por un cuadro oculto.
 - Se integra Mercado Pago Point con Orders API, autorización OAuth con PKCE, tokens cifrados y renovación automática.
 - Se permite asociar una terminal PDV por caja y se exige aprobación autoritativa e idempotente antes de confirmar pagos con tarjeta o pagos mixtos.
 - Los estados rechazado, cancelado, vencido o desconocido conservan el ticket abierto sin afectar inventario ni caja.

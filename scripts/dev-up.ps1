@@ -16,6 +16,7 @@ Write-Host 'Iniciando API y cliente WPF en modo desarrollo...'
 $env:POS_CONNECTION_FILE = $null
 $env:POS_CONNECTION_STRING = $null
 $env:POS_API_URLS = 'http://127.0.0.1:5000'
+$env:POS_LICENSE_BYPASS = 'true'
 Start-Process -FilePath $dotnet -ArgumentList @('run', '--project', (Join-Path $root 'src\Pos.Api\Pos.Api.csproj'), '--no-launch-profile') -WorkingDirectory $root
 Start-Process -FilePath $dotnet -ArgumentList @('run', '--project', (Join-Path $root 'src\Pos.Desktop\Pos.Desktop.csproj')) -WorkingDirectory $root
 Write-Host 'Procesos de desarrollo iniciados con el SDK local.'

@@ -25,6 +25,7 @@ public partial class ConfigurationWindow : UserControl
         DiagnosticButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
         BackupButton.IsEnabled = SessionContext.HasPermission("ImportOrExportData");
         ImportButton.IsEnabled = SessionContext.HasPermission("ImportOrExportData");
+        LicenseButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
         StatusText.Text = "Las opciones deshabilitadas requieren un permiso del administrador.";
     }
 
@@ -46,6 +47,7 @@ public partial class ConfigurationWindow : UserControl
     private void OnDiagnosticClick(object sender, RoutedEventArgs e) => new DiagnosticWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnBackupClick(object sender, RoutedEventArgs e) => new BackupWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void OnImportClick(object sender, RoutedEventArgs e) => new ProductImportWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+    private void OnLicenseClick(object sender, RoutedEventArgs e) => new LicenseWindow { Owner = Window.GetWindow(this) }.ShowDialog();
 
     private void OnPendingClick(object sender, RoutedEventArgs e)
     {

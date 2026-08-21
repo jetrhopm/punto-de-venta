@@ -64,6 +64,7 @@ builder.Services.AddHttpClient<Pos.Integrations.MercadoPago.MercadoPagoPointClie
 });
 builder.Services.AddScoped<ProductImportService>();
 builder.Services.AddScoped<DatabaseMaintenanceService>();
+builder.Services.AddScoped<LicenseService>();
 builder.Services.AddHostedService<DailyBackupHostedService>();
 
 var app = builder.Build();
@@ -93,6 +94,29 @@ catch (Exception exception)
     throw;
 }
 WriteStartupLog("Migraciones aplicadas. API lista para recibir solicitudes.");
+
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path;
+    var mayContinueWithoutLicense = path.StartsWithSegments("/health") ||
+        path.StartsWithSegments("/api/setup") ||
+        path.StartsWithSegments("/api/auth") ||
+        path.StartsWithSegments("/api/license") ||
+        path.StartsWithSegments("/api/lan/info");
+
+    if (!mayContinueWithoutLicense)
+    {
+        var license = context.RequestServices.GetRequiredService<LicenseService>().GetRuntimeStatus();
+        if (!license.IsActive)
+        {
+            context.Response.StatusCode = StatusCodes.Status402PaymentRequired;
+            await context.Response.WriteAsJsonAsync(new { code = "license_required", message = "Esta instalación requiere una licencia válida. Abre Configuración > Licencia para activarla." });
+            return;
+        }
+    }
+
+    await next();
+});
 
 app.MapGet("/health", () =>
 {
@@ -132,6 +156,23 @@ app.MapGet("/api/setup/status", async (PosDbContext database, CancellationToken 
             statusCode: StatusCodes.Status503ServiceUnavailable,
             extensions: new Dictionary<string, object?> { ["code"] = "database_unavailable" });
     }
+});
+
+app.MapGet("/api/license/status", async (HttpRequest request, LicenseService licenses, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    var result = await licenses.GetAsync(token, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapPost("/api/license/import", async (HttpRequest request, ImportLicenseCommand command, LicenseService licenses, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+        var result = await licenses.ImportAsync(token, command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["license"] = [exception.Message] }); }
 });
 
 app.MapGet("/api/diagnostics", async (HttpRequest request, SystemDiagnosticsService diagnostics, CancellationToken cancellationToken) =>

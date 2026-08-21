@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Collections.Generic;
 
 namespace Pos.Desktop;
 
@@ -21,10 +22,44 @@ public partial class App : System.Windows.Application
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         Exit += (_, _) => BarcodeScannerService.Stop();
         EventManager.RegisterClassHandler(typeof(Window), Keyboard.PreviewKeyDownEvent, new KeyEventHandler(OnWindowPreviewKeyDown));
+        EventManager.RegisterClassHandler(typeof(Window), FrameworkElement.LoadedEvent, new RoutedEventHandler(OnWindowLoaded));
 
         var startup = new StartupWindow();
         MainWindow = startup;
         startup.Show();
+    }
+
+    private static readonly HashSet<Window> WatchedDialogs = [];
+
+    private static void OnWindowLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Window dialog || !IsDialogWindow(dialog) || dialog.Owner is not Window owner) return;
+        lock (WatchedDialogs)
+        {
+            if (!WatchedDialogs.Add(dialog)) return;
+        }
+
+        EventHandler restoreDialog = (_, _) => RestoreDialogAfterDesktopMinimize(dialog, owner);
+        owner.StateChanged += restoreDialog;
+        owner.Activated += restoreDialog;
+        dialog.Closed += (_, _) =>
+        {
+            owner.StateChanged -= restoreDialog;
+            owner.Activated -= restoreDialog;
+            lock (WatchedDialogs) WatchedDialogs.Remove(dialog);
+        };
+    }
+
+    // Windows+D minimizes both owner and modal window. Restoring only the owner must also restore its modal child.
+    private static void RestoreDialogAfterDesktopMinimize(Window dialog, Window owner)
+    {
+        if (!dialog.IsVisible || owner.WindowState == WindowState.Minimized || dialog.WindowState != WindowState.Minimized) return;
+        dialog.Dispatcher.BeginInvoke(() =>
+        {
+            if (!dialog.IsVisible || owner.WindowState == WindowState.Minimized) return;
+            dialog.WindowState = WindowState.Normal;
+            dialog.Activate();
+        }, DispatcherPriority.ApplicationIdle);
     }
 
     private static void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)

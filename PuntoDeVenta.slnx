@@ -17,4 +17,7 @@
     <Project Path="tests/Pos.IntegrationTests/Pos.IntegrationTests.csproj" />
     <Project Path="tests/Pos.UnitTests/Pos.UnitTests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/JetVenta.LicenseIssuer/JetVenta.LicenseIssuer.csproj" />
+  </Folder>
 </Solution>

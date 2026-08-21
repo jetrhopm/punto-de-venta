@@ -97,6 +97,7 @@ $postgresBin = Join-Path $InstallRoot 'postgresql\pgsql\bin'
 $pgData = Join-Path $DataRoot 'postgresql\data'
 $secretPath = Join-Path $DataRoot 'config\connection.bin'
 $adminSecretPath = Join-Path $DataRoot 'config\postgres-admin.bin'
+$licenseDirectory = Join-Path $DataRoot 'license'
 $logPath = Join-Path $DataRoot 'logs\postgresql.log'
 $pgCtl = Join-Path $postgresBin 'pg_ctl.exe'
 $initDb = Join-Path $postgresBin 'initdb.exe'
@@ -104,13 +105,21 @@ $psql = Join-Path $postgresBin 'psql.exe'
 $api = Join-Path $InstallRoot 'api\Pos.Api.exe'
 $apiBinaryPath = "`"$api`" --Pos:ConnectionFile=`"$secretPath`" --Pos:Urls=http://0.0.0.0:5000"
 
+# Nunca permitir que una variable de desarrollo conserve el bypass de licencia en una instalación real.
+[Environment]::SetEnvironmentVariable('POS_LICENSE_BYPASS', $null, 'Machine')
+
 if ($Uninstall) {
-    Write-InstallLog 'Modo desinstalacion: deteniendo y eliminando servicios. Los datos se conservan.'
+    Write-InstallLog 'Modo desinstalacion: deteniendo y eliminando servicios. Los datos se conservan y la activacion local se elimina.'
     Stop-Service $apiService -ErrorAction SilentlyContinue
     Stop-Service $postgresService -ErrorAction SilentlyContinue
     sc.exe delete $apiService | Out-Null
     sc.exe delete $postgresService | Out-Null
     [Environment]::SetEnvironmentVariable('POS_CONNECTION_FILE', $null, 'Machine')
+    [Environment]::SetEnvironmentVariable('POS_LICENSE_BYPASS', $null, 'Machine')
+    if (Test-Path $licenseDirectory) {
+        Remove-Item -LiteralPath $licenseDirectory -Recurse -Force
+        Write-InstallLog 'Activacion local eliminada: se borro la carpeta protegida de licencia.'
+    }
     Write-InstallLog 'Desinstalacion de servicios finalizada.'
     exit 0
 }
