@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-08-21
+- Se corrige la consulta de licencia después del inicio de sesión y se publica como versión 2.1.1 para que Windows la detecte como actualización.
+
 ## 2026-08-20
 - Se agrega una ventana de progreso verde durante la restauración y se muestra la ruta del diagnóstico cuando el proceso falla.
 - La restauración espera el cierre real de la API y limpia objetos existentes antes de cargar el respaldo.
