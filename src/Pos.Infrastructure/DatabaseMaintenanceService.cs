@@ -125,10 +125,15 @@ public sealed class DatabaseMaintenanceService(PosDbContext database)
     {
         foreach (var obsolete in Directory.GetFiles(directory, "*.dump").Select(path => new FileInfo(path)).OrderByDescending(file => file.CreationTimeUtc).Skip(keep))
         {
-            File.Delete(obsolete.FullName);
-            File.Delete(obsolete.FullName + ".sha256");
-            File.Delete(obsolete.FullName + ".json");
+            DeleteIfExists(obsolete.FullName);
+            DeleteIfExists(obsolete.FullName + ".sha256");
+            DeleteIfExists(obsolete.FullName + ".json");
         }
+    }
+
+    private static void DeleteIfExists(string path)
+    {
+        if (File.Exists(path)) File.Delete(path);
     }
 
     private async Task<Guid?> AuthorizedAsync(string token, CancellationToken cancellationToken)
