@@ -1,6 +1,10 @@
 # Changelog
 
 ## 2026-08-21
+- Se corrige la pantalla de activación de licencia: usaba un recurso visual inexistente y bloqueaba el inicio de sesión en instalaciones sin licencia.
+- Se publica la versión 2.1.2 para que la corrección se detecte como actualización.
+
+## 2026-08-21
 - Se corrige la consulta de licencia después del inicio de sesión y se publica como versión 2.1.1 para que Windows la detecte como actualización.
 
 ## 2026-08-20

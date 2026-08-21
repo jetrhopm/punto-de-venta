@@ -37,6 +37,6 @@
                 </Border>
             </StackPanel>
         </ScrollViewer>
-        <Border Grid.Row="2" Padding="16" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0"><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="Actualizar estado" Click="OnRefreshClick" Margin="0,0,10,0" Padding="16,8"/><Button Content="Cerrar" IsCancel="True" Padding="24,8"/></StackPanel></Border>
+        <Border Grid.Row="2" Padding="16" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0"><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="Actualizar estado" Click="OnRefreshClick" Margin="0,0,10,0" Padding="16,8"/><Button Content="Cerrar" IsCancel="True" Padding="24,8"/></StackPanel></Border>
     </Grid>
 </Window>
