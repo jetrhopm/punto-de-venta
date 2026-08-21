@@ -19,13 +19,10 @@
             <Setter Property="Foreground" Value="#17324D"/>
             <Setter Property="Background" Value="#EAF4FB"/>
             <Setter Property="Padding" Value="9,6"/>
-            <Setter Property="BorderBrush" Value="#C7DFEF"/>
-            <Setter Property="BorderThickness" Value="0,0,0,1"/>
             <Setter Property="Margin" Value="0,16,0,6"/>
         </Style>
         <Style x:Key="SectionTitleAlt" TargetType="TextBlock" BasedOn="{StaticResource SectionTitle}">
             <Setter Property="Background" Value="#FFFFFF"/>
-            <Setter Property="BorderBrush" Value="#D7E2EA"/>
         </Style>
     </UserControl.Resources>
     <Grid Margin="28">
