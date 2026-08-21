@@ -166,10 +166,8 @@ public partial class StartupWindow : Window
 
         if (forceRepair)
         {
-            Log("El usuario solicito reparar servicios locales. Deteniendo servicios de JetVenta antes de iniciarlos.");
-            await TryRunAsync("sc.exe", $"stop {ApiServiceName}");
-            await TryRunAsync("sc.exe", $"stop {PostgreSqlServiceName}");
-            await Task.Delay(TimeSpan.FromSeconds(1));
+            await RunProductionRepairAsync();
+            return;
         }
 
         await TryRunAsync("sc.exe", $"start {PostgreSqlServiceName}");
@@ -214,6 +212,51 @@ public partial class StartupWindow : Window
         catch (Exception exception)
         {
             Log($"No se pudo iniciar directamente la API: {exception}");
+        }
+    }
+
+    private async Task RunProductionRepairAsync()
+    {
+        var installRoot = Directory.GetParent(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar))?.FullName;
+        var script = installRoot is null ? null : Path.Combine(installRoot, "install-production.ps1");
+        if (script is null || !File.Exists(script))
+        {
+            Log($"No se encontró el reparador de producción. Ruta revisada: {script ?? "desconocida"}");
+            return;
+        }
+
+        var powershell = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.System),
+            @"WindowsPowerShell\v1.0\powershell.exe");
+        try
+        {
+            Log($"Solicitando reparación elevada de servicios: {script}");
+            SetStatus("Solicitando permisos para reparar los servicios de JetVenta...", 35, "Revisando", "Reparando", "Pendiente");
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = powershell,
+                Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" -InstallRoot \"{installRoot}\"",
+                WorkingDirectory = installRoot,
+                UseShellExecute = true,
+                Verb = "runas",
+                WindowStyle = ProcessWindowStyle.Normal
+            });
+            if (process is null)
+            {
+                Log("Windows no pudo iniciar el reparador elevado.");
+                return;
+            }
+
+            await process.WaitForExitAsync();
+            Log($"Reparador de servicios finalizado con código {process.ExitCode}.");
+        }
+        catch (System.ComponentModel.Win32Exception exception) when (exception.NativeErrorCode == 1223)
+        {
+            Log("El usuario canceló la solicitud de permisos para reparar servicios.");
+        }
+        catch (Exception exception)
+        {
+            Log($"No se pudo ejecutar la reparación de servicios: {exception}");
         }
     }
 

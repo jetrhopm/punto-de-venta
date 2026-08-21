@@ -37,6 +37,8 @@ Si existe una conexión protegida válida, la reparación recupera su contraseñ
 
 El servicio `PuntoDeVentaApi` se actualiza mediante la API de administración de servicios de Windows. Esto conserva el servicio y evita errores de interpretación de comillas en rutas con espacios.
 
+Si la API no responde por una migración pendiente o permisos heredados al restaurar una base, la ventana inicial de JetVenta ofrece **Reparar servicios**. Esa acción solicita permisos de Windows y ejecuta el reparador incluido; detiene y vuelve a registrar los servicios, corrige los permisos del esquema `pos` y conserva la base, ventas, usuarios y respaldos.
+
 La API depende del servicio `PuntoDeVentaPostgreSQL`, reintenta la conexión mientras PostgreSQL termina de arrancar y tiene recuperación automática configurada en Windows. Después de reiniciar el equipo, el cliente también espera al servidor local antes de habilitar el inicio de sesión.
 
 La pantalla de inicio de sesión mantiene el diagnóstico visible y diferencia credenciales incorrectas, demora, falta de conexión y errores del servidor. Cuando el servicio no puede arrancar indica la ubicación de `api-startup.log`.
