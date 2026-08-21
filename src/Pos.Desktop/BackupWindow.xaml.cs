@@ -133,7 +133,10 @@ public partial class BackupWindow : Window
     {
         var candidates = new List<string> { Path.Combine(AppContext.BaseDirectory, "restore-production-backup.ps1") };
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            candidates.Add(Path.Combine(directory.FullName, "restore-production-backup.ps1"));
             candidates.Add(Path.Combine(directory.FullName, "scripts", "restore-production-backup.ps1"));
+        }
         return candidates.FirstOrDefault(File.Exists);
     }
 

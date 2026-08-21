@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-08-20
+- Se corrige la restauración desde otra computadora: el instalador incluye `restore-production-backup.ps1` y JetVenta lo localiza desde la carpeta raíz instalada.
+
 ## 2026-08-16
 - Se separan Taecel y La Red+ como proveedores independientes de recargas y pagos de servicios, con contratos comunes y documentación de los requisitos oficiales pendientes.
 
