@@ -38,4 +38,29 @@ public sealed class JetVentaLicensingTests
         Assert.False(valid);
         Assert.False(string.IsNullOrWhiteSpace(error));
     }
+
+    [Fact]
+    public void Issuer_enrollment_request_round_trips_without_machine_data_loss()
+    {
+        var encryptionPublicKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(512));
+        var code = JetVentaIssuerAuthorization.CreateEnrollmentRequestCode("ISSUER-DEVICE-0123456789", encryptionPublicKey);
+
+        var valid = JetVentaIssuerAuthorization.TryReadEnrollmentRequest(code, out var request, out var error);
+
+        Assert.True(valid, error);
+        Assert.NotNull(request);
+        Assert.Equal("ISSUER-DEVICE-0123456789", request!.MachineFingerprint);
+        Assert.Equal(encryptionPublicKey, request.EncryptionPublicKey);
+    }
+
+    [Fact]
+    public void Issuer_authorization_rejects_unsigned_document()
+    {
+        const string content = "{\"version\":1,\"product\":\"JetVenta\",\"requestId\":\"00000000-0000-0000-0000-000000000001\",\"machineFingerprint\":\"ISSUER-DEVICE\",\"encryptedIssuerKey\":\"AQIDBA==\",\"signature\":\"AQIDBA==\"}";
+
+        var valid = JetVentaIssuerAuthorization.TryReadAndVerifyAuthorization(content, out _, out var error);
+
+        Assert.False(valid);
+        Assert.False(string.IsNullOrWhiteSpace(error));
+    }
 }

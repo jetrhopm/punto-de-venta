@@ -1,5 +1,8 @@
 # Changelog
 
+## Sin liberar
+- Se agregan autorización offline de emisores adicionales y respaldo cifrado de recuperación para no depender de una sola computadora emisora de licencias.
+
 ## 2026-08-21
 - Se corrige la pantalla de activación de licencia: usaba un recurso visual inexistente y bloqueaba el inicio de sesión en instalaciones sin licencia.
 - Se publica la versión 2.1.2 para que la corrección se detecte como actualización.

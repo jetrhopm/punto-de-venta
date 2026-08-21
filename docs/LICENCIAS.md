@@ -21,3 +21,19 @@ Genera el emisor con:
 ```
 
 El resultado queda en `artifacts\license-issuer\JetVenta.LicenseIssuer.exe`. Esta herramienta solo funciona en la computadora autorizada que contiene la llave emisora protegida por Windows. No se incluye en `Setup.exe`.
+
+## Continuidad del emisor
+
+El emisor incluye dos mecanismos para no depender de una única computadora:
+
+1. **Autorizar otro emisor.** En la computadora nueva se crea una solicitud. Un emisor existente crea un archivo `.jvissuer` firmado y cifrado para esa computadora. Al importarlo, la llave queda protegida con DPAPI para el usuario local y se elimina la llave temporal de solicitud.
+2. **Recuperación de emergencia.** Un emisor autorizado crea un archivo `.jvrecovery`, cifrado con una contraseña de al menos 16 caracteres mediante AES-GCM y PBKDF2-SHA512. Ese archivo debe guardarse en un medio externo cifrado y separado de su contraseña.
+
+No copies manualmente `issuer-private-key.bin`. El archivo está protegido por el perfil de Windows del emisor y no funciona en otro usuario o equipo. Tampoco guardes archivos `.jvissuer`, `.jvrecovery` ni sus contraseñas junto con los respaldos normales de una tienda.
+
+Flujo recomendado:
+
+1. Autoriza una segunda computadora emisora y pruébala creando una licencia de prueba.
+2. Crea un respaldo `.jvrecovery` y comprueba su importación en una computadora de contingencia controlada.
+3. Conserva el respaldo y la contraseña en custodias separadas.
+4. Si se pierde un emisor, recupera o autoriza otro antes de emitir nuevas licencias.
