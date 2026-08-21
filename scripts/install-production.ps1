@@ -247,26 +247,47 @@ try {
     # Una restauración puede conservar propietarios y ACL de otra instalación.
     # La API debe poder consultar __EFMigrationsHistory y aplicar migraciones
     # sin convertir la base en una base nueva ni perder información.
-    Write-InstallLog 'Etapa 4/8: reparando propietario y permisos del esquema de la tienda.'
+    Write-InstallLog 'Etapa 4/8: reparando propietario y permisos de los esquemas de la tienda.'
     $permissionsSql = @'
 CREATE SCHEMA IF NOT EXISTS pos AUTHORIZATION pos_app;
 ALTER SCHEMA pos OWNER TO pos_app;
 GRANT USAGE, CREATE ON SCHEMA pos TO pos_app;
+GRANT USAGE, CREATE ON SCHEMA public TO pos_app;
 GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA pos TO pos_app;
+GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA public TO pos_app;
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA pos TO pos_app;
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO pos_app;
 DO $$
 DECLARE item record;
 BEGIN
-    FOR item IN SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'pos' LOOP
-        EXECUTE format('ALTER TABLE pos.%I OWNER TO pos_app', item.tablename);
+    FOR item IN SELECT schemaname, tablename FROM pg_catalog.pg_tables WHERE schemaname IN ('pos', 'public') LOOP
+        EXECUTE format('ALTER TABLE %I.%I OWNER TO pos_app', item.schemaname, item.tablename);
     END LOOP;
-    FOR item IN SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'pos' LOOP
-        EXECUTE format('ALTER SEQUENCE pos.%I OWNER TO pos_app', item.sequence_name);
+    FOR item IN SELECT sequence_schema, sequence_name FROM information_schema.sequences WHERE sequence_schema IN ('pos', 'public') LOOP
+        EXECUTE format('ALTER SEQUENCE %I.%I OWNER TO pos_app', item.sequence_schema, item.sequence_name);
     END LOOP;
 END $$;
 '@
     Invoke-Native $psql @('-h','127.0.0.1','-p',$port,'-U','pos_admin','-d','punto_venta','-v','ON_ERROR_STOP=1','-c',$permissionsSql)
-    Write-InstallLog 'Propietario y permisos del esquema reparados; los datos existentes se conservaron.'
+    $historyCheckSql = @'
+DO $$
+DECLARE history_table regclass;
+BEGIN
+    history_table := COALESCE(
+        to_regclass('pos."__EFMigrationsHistory"'),
+        to_regclass('public."__EFMigrationsHistory"'));
+    IF history_table IS NOT NULL THEN
+        EXECUTE format('SELECT 1 FROM %s LIMIT 1', history_table);
+    END IF;
+END $$;
+'@
+    $env:PGPASSWORD = $password
+    try {
+        Invoke-Native $psql @('-h','127.0.0.1','-p',$port,'-U','pos_app','-d','punto_venta','-v','ON_ERROR_STOP=1','-c',$historyCheckSql)
+    } finally {
+        $env:PGPASSWORD = $adminPassword
+    }
+    Write-InstallLog 'Permisos reparados y acceso de la aplicación al historial de migraciones comprobado; los datos existentes se conservaron.'
 } finally { Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue }
 
 if ($preserveApplicationConnection) {
