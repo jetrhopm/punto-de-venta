@@ -90,6 +90,7 @@ if ($isDevelopment) {
     $port = Read-ConnectionValue $connection 'Port'
     $database = Read-ConnectionValue $connection 'Database'
     $applicationUser = Read-ConnectionValue $connection 'Username'
+    $applicationPassword = Read-ConnectionValue $connection 'Password'
     if ($database -ne 'punto_venta' -or $applicationUser -notmatch '^[A-Za-z_][A-Za-z0-9_]{0,62}$') { throw 'La instalación local tiene una configuración de base de datos no admitida.' }
     $databasePassword = $adminPassword
 }
@@ -120,6 +121,47 @@ try {
         Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "CREATE DATABASE $database OWNER $applicationUser;")
         Write-RestoreLog 'Restaurando estructura y datos de JetVenta.'
         Invoke-Native $pgRestore @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', "--dbname=$database", '--clean', '--if-exists', '--no-owner', '--exit-on-error', $backup)
+        Write-RestoreLog 'Reparando propietarios y permisos de la base restaurada.'
+        $permissionsSql = @'
+CREATE SCHEMA IF NOT EXISTS pos AUTHORIZATION pos_app;
+ALTER SCHEMA pos OWNER TO pos_app;
+GRANT USAGE, CREATE ON SCHEMA pos TO pos_app;
+GRANT USAGE, CREATE ON SCHEMA public TO pos_app;
+GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA pos TO pos_app;
+GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA public TO pos_app;
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA pos TO pos_app;
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO pos_app;
+DO $$
+DECLARE item record;
+BEGIN
+    FOR item IN SELECT schemaname, tablename FROM pg_catalog.pg_tables WHERE schemaname IN ('pos', 'public') LOOP
+        EXECUTE format('ALTER TABLE %I.%I OWNER TO pos_app', item.schemaname, item.tablename);
+    END LOOP;
+    FOR item IN SELECT sequence_schema, sequence_name FROM information_schema.sequences WHERE sequence_schema IN ('pos', 'public') LOOP
+        EXECUTE format('ALTER SEQUENCE %I.%I OWNER TO pos_app', item.sequence_schema, item.sequence_name);
+    END LOOP;
+END $$;
+'@
+        Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', "--dbname=$database", '-v', 'ON_ERROR_STOP=1', '-c', $permissionsSql)
+        $historyCheckSql = @'
+DO $$
+DECLARE history_table regclass;
+BEGIN
+    history_table := COALESCE(
+        to_regclass('pos."__EFMigrationsHistory"'),
+        to_regclass('public."__EFMigrationsHistory"'));
+    IF history_table IS NOT NULL THEN
+        EXECUTE format('SELECT 1 FROM %s LIMIT 1', history_table);
+    END IF;
+END $$;
+'@
+        $env:PGPASSWORD = $applicationPassword
+        try {
+            Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_app', "--dbname=$database", '-v', 'ON_ERROR_STOP=1', '-c', $historyCheckSql)
+        } finally {
+            $env:PGPASSWORD = $databasePassword
+        }
+        Write-RestoreLog 'Permisos de la base restaurada comprobados con la cuenta de JetVenta.'
         Start-Service -Name $apiService
         Write-RestoreLog 'Restauración terminada. JetVenta aplicará migraciones pendientes al iniciar la API.'
     }

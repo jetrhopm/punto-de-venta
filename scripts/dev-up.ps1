@@ -12,6 +12,10 @@ if (-not (Test-Path $dotnet)) {
 if (-not (Test-Path -LiteralPath $settings)) { & (Join-Path $PSScriptRoot 'dev-setup.ps1') }
 
 Write-Host 'Iniciando API y cliente WPF en modo desarrollo...'
+# El modo desarrollo nunca debe heredar la conexión protegida ni la URL de producción.
+$env:POS_CONNECTION_FILE = $null
+$env:POS_CONNECTION_STRING = $null
+$env:POS_API_URLS = 'http://127.0.0.1:5000'
 Start-Process -FilePath $dotnet -ArgumentList @('run', '--project', (Join-Path $root 'src\Pos.Api\Pos.Api.csproj'), '--no-launch-profile') -WorkingDirectory $root
 Start-Process -FilePath $dotnet -ArgumentList @('run', '--project', (Join-Path $root 'src\Pos.Desktop\Pos.Desktop.csproj')) -WorkingDirectory $root
 Write-Host 'Procesos de desarrollo iniciados con el SDK local.'
