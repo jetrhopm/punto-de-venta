@@ -14,6 +14,8 @@ public sealed class InstallerForm : Form
     private readonly string _installRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), ProductTitle);
     private readonly string _dataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta");
     private readonly bool _uninstall;
+    private readonly bool _existingInstallation;
+    private readonly string? _installedVersion;
     private readonly CheckBox _terms = new() { Text = "Acepto los términos y condiciones", AutoSize = true };
     private readonly CheckBox _desktopShortcut = new() { Text = "Crear acceso directo en el escritorio", AutoSize = true, Checked = true };
     private readonly CheckBox _startShortcut = new() { Text = "Crear acceso directo en el menú Inicio", AutoSize = true, Checked = true };
@@ -27,6 +29,8 @@ public sealed class InstallerForm : Form
     public InstallerForm(bool uninstall)
     {
         _uninstall = uninstall;
+        _existingInstallation = !uninstall && HasExistingInstallation();
+        _installedVersion = GetInstalledVersion();
         Text = uninstall ? "Desinstalar JetVenta" : "Instalación de JetVenta";
         ClientSize = new Size(760, 650);
         StartPosition = FormStartPosition.CenterScreen;
@@ -59,11 +63,15 @@ public sealed class InstallerForm : Form
         _status.SetBounds(30, 325, 700, 28);
         _progress.SetBounds(30, 360, 700, 24);
         _details.SetBounds(30, 400, 700, 175);
-        _action.Text = uninstall ? "Desinstalar" : "Instalar";
+        _action.Text = uninstall ? "Desinstalar" : _existingInstallation ? "Actualizar" : "Instalar";
         _action.SetBounds(540, 595, 190, 38);
         _action.Click += OnActionClick;
         Controls.AddRange([_status, _progress, _details, _action]);
-        SetProgress(0, uninstall ? "Listo para desinstalar." : "Listo para comprobar e instalar los componentes.");
+        SetProgress(0, uninstall
+            ? "Listo para desinstalar. Los datos se conservarán."
+            : _existingInstallation
+                ? $"Instalación existente detectada{(_installedVersion is null ? string.Empty : $" (versión {_installedVersion})")}. Se actualizarán solo los archivos que cambien."
+                : "Instalación nueva: se comprobarán e instalarán los componentes.");
     }
 
     private async void OnActionClick(object? sender, EventArgs e)
@@ -104,19 +112,56 @@ public sealed class InstallerForm : Form
     private async Task InstallAsync()
     {
         EnsureDesktopClosedForUpdate();
-        var temporaryPayload = Path.Combine(Path.GetTempPath(), "PuntoDeVenta-Setup", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(temporaryPayload);
+        var temporaryPayload = (string?)null;
         try
         {
-            SetProgress(2, "Extrayendo el paquete interno...");
-            await ExtractPayloadAsync(temporaryPayload);
-            await InstallVisualCppIfNeededAsync(temporaryPayload);
-            if (HasExistingInstallation()) Log("Instalación existente detectada: se conservarán datos y configuración.");
+            if (!_existingInstallation || !IsVisualCppInstalled())
+            {
+                temporaryPayload = Path.Combine(Path.GetTempPath(), "PuntoDeVenta-Setup", Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(temporaryPayload);
+                if (_existingInstallation)
+                {
+                    SetProgress(2, "Visual C++ no está instalado; preparando únicamente esa dependencia...");
+                    await ExtractPayloadFileAsync(temporaryPayload, "vc_redist.x64.exe");
+                }
+                else
+                {
+                    SetProgress(2, "Extrayendo los componentes de la instalación nueva...");
+                    await ExtractPayloadAsync(temporaryPayload);
+                }
+                await InstallVisualCppIfNeededAsync(temporaryPayload);
+            }
+            else
+            {
+                SetProgress(52, "Microsoft Visual C++ ya está instalado; se conserva.");
+            }
+
             await StopServicesForUpdateAsync();
-            await CopyPayloadAsync(temporaryPayload);
-            File.Copy(Environment.ProcessPath!, Path.Combine(_installRoot, "Setup.exe"), true);
+            if (_existingInstallation)
+            {
+                await UpdatePayloadAsync();
+            }
+            else
+            {
+                await CopyPayloadAsync(temporaryPayload!);
+            }
+            var installedSetup = Path.GetFullPath(Path.Combine(_installRoot, "Setup.exe"));
+            if (!string.Equals(Path.GetFullPath(Environment.ProcessPath!), installedSetup, StringComparison.OrdinalIgnoreCase))
+            {
+                File.Copy(Environment.ProcessPath!, installedSetup, true);
+            }
+            else
+            {
+                Log("Setup.exe ya se está ejecutando desde la instalación; se conserva el ejecutable actual.");
+            }
         }
-        finally { try { Directory.Delete(temporaryPayload, true); } catch { } }
+        finally
+        {
+            if (temporaryPayload is not null)
+            {
+                try { Directory.Delete(temporaryPayload, true); } catch { }
+            }
+        }
 
         SetProgress(84, "Verificando PostgreSQL, base de datos y API...");
         await RunPowerShellAsync(Path.Combine(_installRoot, "install-production.ps1"), string.Empty);
@@ -178,6 +223,17 @@ public sealed class InstallerForm : Form
         }
     }
 
+    private async Task ExtractPayloadFileAsync(string destination, string fileName)
+    {
+        await using var resource = typeof(InstallerForm).Assembly.GetManifestResourceStream("PuntoDeVenta.Payload.zip") ?? throw new InvalidOperationException("No se encontró el paquete interno.");
+        using var archive = new ZipArchive(resource, ZipArchiveMode.Read);
+        var entry = archive.GetEntry(fileName) ?? throw new InvalidOperationException($"No se encontró {fileName} dentro del paquete interno.");
+        var target = Path.Combine(destination, fileName);
+        await using var input = entry.Open();
+        await using var output = File.Create(target);
+        await input.CopyToAsync(output);
+    }
+
     private async Task InstallVisualCppIfNeededAsync(string payloadRoot)
     {
         if (IsVisualCppInstalled())
@@ -208,6 +264,51 @@ public sealed class InstallerForm : Form
             await CopyWithRetryAsync(files[index], target, relative);
             SetProgress(58 + index * 24 / Math.Max(1, files.Length), $"Instalando: {relative}");
         }
+    }
+
+    private async Task UpdatePayloadAsync()
+    {
+        await using var resource = typeof(InstallerForm).Assembly.GetManifestResourceStream("PuntoDeVenta.Payload.zip") ?? throw new InvalidOperationException("No se encontró el paquete interno.");
+        using var archive = new ZipArchive(resource, ZipArchiveMode.Read);
+        var entries = archive.Entries.Where(entry => !string.IsNullOrEmpty(entry.Name)).ToArray();
+        var changed = 0;
+
+        for (var index = 0; index < entries.Length; index++)
+        {
+            var entry = entries[index];
+            var relative = entry.FullName.Replace('/', Path.DirectorySeparatorChar);
+            var target = Path.GetFullPath(Path.Combine(_installRoot, relative));
+            var installRoot = Path.GetFullPath(_installRoot) + Path.DirectorySeparatorChar;
+            if (!target.StartsWith(installRoot, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("El paquete interno contiene una ruta inválida.");
+
+            if (await PayloadEntryMatchesAsync(entry, target))
+            {
+                SetProgress(58 + index * 24 / Math.Max(1, entries.Length), $"Sin cambios: {relative}");
+                continue;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            await using var input = entry.Open();
+            await using var output = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None, 64 * 1024, useAsync: true);
+            await input.CopyToAsync(output);
+            changed++;
+            SetProgress(58 + index * 24 / Math.Max(1, entries.Length), $"Actualizando: {relative}");
+        }
+
+        Log(changed == 0
+            ? "Actualización verificada: todos los archivos instalados ya estaban actualizados."
+            : $"Actualización aplicada: se reemplazaron o agregaron {changed} archivo(s); los demás se conservaron.");
+    }
+
+    private static async Task<bool> PayloadEntryMatchesAsync(ZipArchiveEntry entry, string target)
+    {
+        if (!File.Exists(target) || new FileInfo(target).Length != entry.Length) return false;
+
+        await using var payloadStream = entry.Open();
+        await using var installedStream = new FileStream(target, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, useAsync: true);
+        var payloadHash = await System.Security.Cryptography.SHA256.HashDataAsync(payloadStream);
+        var installedHash = await System.Security.Cryptography.SHA256.HashDataAsync(installedStream);
+        return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(payloadHash, installedHash);
     }
 
     private async Task CopyWithRetryAsync(string source, string target, string relative)
@@ -375,6 +476,12 @@ public sealed class InstallerForm : Form
     }
 
     private bool HasExistingInstallation() => File.Exists(Path.Combine(_installRoot, "client", "Pos.Desktop.exe")) || File.Exists(Path.Combine(_dataRoot, "postgresql", "data", "PG_VERSION"));
+
+    private static string? GetInstalledVersion()
+    {
+        using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PuntoDeVenta");
+        return key?.GetValue("DisplayVersion")?.ToString();
+    }
 
     private static bool IsVisualCppInstalled()
     {
