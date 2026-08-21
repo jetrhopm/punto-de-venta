@@ -103,6 +103,7 @@ public sealed class InstallerForm : Form
 
     private async Task InstallAsync()
     {
+        EnsureDesktopClosedForUpdate();
         var temporaryPayload = Path.Combine(Path.GetTempPath(), "PuntoDeVenta-Setup", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temporaryPayload);
         try
@@ -126,11 +127,30 @@ public sealed class InstallerForm : Form
 
     private async Task UninstallAsync()
     {
+        EnsureDesktopClosedForUpdate();
         var script = Path.Combine(_installRoot, "install-production.ps1");
         if (File.Exists(script)) await RunPowerShellAsync(script, "-Uninstall");
         Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PuntoDeVenta", false);
         DeleteShortcuts();
         SetProgress(100, "Desinstalación terminada. Los datos y respaldos se conservaron.");
+    }
+
+    private static void EnsureDesktopClosedForUpdate()
+    {
+        var running = Process.GetProcessesByName("Pos.Desktop");
+        try
+        {
+            if (running.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    "JetVenta está abierto. Cierra primero la ventana del punto de venta y vuelve a iniciar la actualización. " +
+                    "Esto protege los tickets en atención y evita copiar archivos mientras el programa está usándolos.");
+            }
+        }
+        finally
+        {
+            foreach (var process in running) process.Dispose();
+        }
     }
 
     private async Task ExtractPayloadAsync(string destination)
