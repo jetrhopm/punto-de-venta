@@ -13,7 +13,20 @@
         <Style x:Key="IconTileButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Margin" Value="4"/><Setter Property="Padding" Value="6"/><Setter Property="Width" Value="155"/><Setter Property="Height" Value="90"/><Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="HorizontalContentAlignment" Value="Center"/><Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
-        <Style x:Key="SectionTitle" TargetType="TextBlock"><Setter Property="FontSize" Value="17"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="#17324D"/><Setter Property="Margin" Value="5,16,5,3"/></Style>
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="17"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#17324D"/>
+            <Setter Property="Background" Value="#EAF4FB"/>
+            <Setter Property="Padding" Value="9,6"/>
+            <Setter Property="BorderBrush" Value="#C7DFEF"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="Margin" Value="0,16,0,6"/>
+        </Style>
+        <Style x:Key="SectionTitleAlt" TargetType="TextBlock" BasedOn="{StaticResource SectionTitle}">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#D7E2EA"/>
+        </Style>
     </UserControl.Resources>
     <Grid Margin="28">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -32,7 +45,7 @@
                     <Button x:Name="FoliosButton" Style="{StaticResource IconTileButton}" Click="OnFoliosClick" ToolTip="Consulta y cambia el siguiente folio de venta"><StackPanel><icons:PackIconMaterial Kind="ReceiptTextEditOutline" Width="30" Height="30" Foreground="#9A6A37" HorizontalAlignment="Center"/><TextBlock Text="Modificar folios" FontWeight="SemiBold" TextAlignment="Center" Margin="0,6,0,0"/><TextBlock Text="Consecutivo de ventas" FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextAlignment="Center"/></StackPanel></Button>
                     <Button Style="{StaticResource IconTileButton}" Tag="Facturación" Click="OnPendingClick"><StackPanel><icons:PackIconMaterial Kind="FileDocumentOutline" Width="30" Height="30" Foreground="#9A6A37" HorizontalAlignment="Center"/><TextBlock Text="Facturación" FontWeight="SemiBold" TextAlignment="Center" Margin="0,6,0,0"/><TextBlock Text="Módulo futuro" FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextAlignment="Center"/></StackPanel></Button>
                 </UniformGrid>
-                <TextBlock Text="Personalización" Style="{StaticResource SectionTitle}"/>
+                <TextBlock Text="Personalización" Style="{StaticResource SectionTitleAlt}"/>
                 <UniformGrid Columns="4">
                     <Button x:Name="TicketButton" Style="{StaticResource IconTileButton}" Click="OnTicketClick" ToolTip="Diseño y vista previa del ticket"><StackPanel><icons:PackIconMaterial Kind="ReceiptTextEditOutline" Width="30" Height="30" Foreground="{StaticResource WarningBrush}" HorizontalAlignment="Center"/><TextBlock Text="Ticket" FontWeight="SemiBold" TextAlignment="Center" Margin="0,6,0,0"/><TextBlock Text="Diseño e impresión" FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextAlignment="Center"/></StackPanel></Button>
                     <Button x:Name="PaymentMethodsButton" Style="{StaticResource IconTileButton}" Click="OnPaymentMethodsClick" ToolTip="Activa las formas de pago de la tienda"><StackPanel><icons:PackIconMaterial Kind="CreditCardOutline" Width="30" Height="30" Foreground="#2C8A5C" HorizontalAlignment="Center"/><TextBlock Text="Formas de pago" FontWeight="SemiBold" TextAlignment="Center" Margin="0,6,0,0"/><TextBlock Text="Cobros disponibles" FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextAlignment="Center"/></StackPanel></Button>
@@ -49,7 +62,7 @@
                     <Button x:Name="ScaleButton" Style="{StaticResource IconTileButton}" Click="OnScaleClick" ToolTip="Configura y prueba una báscula serial o USB con puerto COM"><StackPanel><icons:PackIconMaterial Kind="ScaleBalance" Width="30" Height="30" Foreground="#76538D" HorizontalAlignment="Center"/><TextBlock Text="Báscula" FontWeight="SemiBold" TextAlignment="Center" Margin="0,6,0,0"/><TextBlock Text="Puerto COM y lectura" FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextAlignment="Center"/></StackPanel></Button>
                     <Button Style="{StaticResource IconTileButton}" Click="OnMercadoPagoClick" ToolTip="Autoriza la cuenta y asigna una terminal Mercado Pago Point"><StackPanel><icons:PackIconMaterial Kind="CreditCardWirelessOutline" Width="30" Height="30" Foreground="#009EE3" HorizontalAlignment="Center"/><TextBlock Text="Mercado Pago Point" FontWeight="SemiBold" TextAlignment="Center" Margin="0,6,0,0"/><TextBlock Text="Cuenta y terminal" FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextAlignment="Center"/></StackPanel></Button>
                 </UniformGrid>
-                <TextBlock Text="Servicios y mantenimiento" Style="{StaticResource SectionTitle}"/>
+                <TextBlock Text="Servicios y mantenimiento" Style="{StaticResource SectionTitleAlt}"/>
                 <UniformGrid Columns="4">
                     <Button Style="{StaticResource IconTileButton}" Tag="Recargas electrónicas" Click="OnPendingClick"><StackPanel><icons:PackIconMaterial Kind="Cellphone" Width="30" Height="30" Foreground="#376A9A" HorizontalAlignment="Center"/><TextBlock Text="Recargas electrónicas" FontWeight="SemiBold" TextAlignment="Center" Margin="0,6,0,0"/><TextBlock Text="Requiere proveedor" FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextAlignment="Center"/></StackPanel></Button>
                     <Button Style="{StaticResource IconTileButton}" Tag="Pago de servicios" Click="OnPendingClick"><StackPanel><icons:PackIconMaterial Kind="ReceiptTextOutline" Width="30" Height="30" Foreground="#2C8A5C" HorizontalAlignment="Center"/><TextBlock Text="Pago de servicios" FontWeight="SemiBold" TextAlignment="Center" Margin="0,6,0,0"/><TextBlock Text="Requiere proveedor" FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextAlignment="Center"/></StackPanel></Button>
