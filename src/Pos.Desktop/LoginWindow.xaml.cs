@@ -123,6 +123,8 @@ public partial class LoginWindow : Window
             SessionContext.IsAdministrator = result.IsAdministrator;
             SessionContext.Permissions.Clear();
             SessionContext.Permissions.UnionWith(result.Permissions);
+            // La consulta de licencia requiere la sesión recién creada.
+            ApiClient.ApplySession(result.AccessToken);
             if (!await EnsureLicenseActiveAsync()) return;
             var mainWindow = new MainWindow();
             System.Windows.Application.Current.MainWindow = mainWindow;
