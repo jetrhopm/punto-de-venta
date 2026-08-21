@@ -862,8 +862,11 @@ public partial class MainWindow : Window
             return;
         }
 
+        var lockHeld = false;
         try
         {
+            await _draftSaveLock.WaitAsync();
+            lockHeld = true;
             using var response = await Client.DeleteAsync($"/api/sale-drafts/{ticket.Id}");
             if (!response.IsSuccessStatusCode)
             {
@@ -883,6 +886,10 @@ public partial class MainWindow : Window
         catch (HttpRequestException)
         {
             StatusText.Text = "No se pudo descartar el ticket.";
+        }
+        finally
+        {
+            if (lockHeld) _draftSaveLock.Release();
         }
     }
 

@@ -257,6 +257,15 @@ app.MapGet("/api/maintenance/backups/{fileName}", async (string fileName, HttpRe
     catch (ArgumentException exception) { return Results.BadRequest(new { message = exception.Message }); }
     catch (FileNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
+app.MapDelete("/api/maintenance/backups/{fileName}", async (string fileName, HttpRequest request, DatabaseMaintenanceService maintenance, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var deleted = await maintenance.DeleteAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), fileName, cancellationToken);
+        return deleted is null ? Results.Unauthorized() : deleted.Value ? Results.NoContent() : Results.NotFound(new { message = "Respaldo no encontrado." });
+    }
+    catch (ArgumentException exception) { return Results.BadRequest(new { message = exception.Message }); }
+});
 
 app.MapGet("/api/users", async (HttpRequest request, UserAdministrationService users, CancellationToken cancellationToken) =>
 {

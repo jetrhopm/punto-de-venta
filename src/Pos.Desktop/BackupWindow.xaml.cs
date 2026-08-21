@@ -45,6 +45,37 @@ public partial class BackupWindow : Window
         catch (Exception exception) { StatusText.Text = $"No se pudo guardar la copia: {exception.Message}"; }
     }
 
+    private async void OnDeleteClick(object sender, RoutedEventArgs e)
+    {
+        if (BackupsGrid.SelectedItem is not BackupRow backup)
+        {
+            StatusText.Text = "Selecciona la copia que deseas eliminar.";
+            return;
+        }
+
+        var confirm = MessageBox.Show(
+            $"Se eliminará únicamente la copia local seleccionada:\n\n{backup.FileName}\n\nLas copias externas no se tocarán. ¿Deseas continuar?",
+            "Eliminar copia de seguridad",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        try
+        {
+            using var response = await ApiClient.Client.DeleteAsync($"api/maintenance/backups/{Uri.EscapeDataString(backup.FileName)}");
+            if (response.IsSuccessStatusCode)
+            {
+                StatusText.Text = "Copia local eliminada. Las ventas y la base activa no fueron modificadas.";
+                await LoadAsync();
+            }
+            else
+            {
+                StatusText.Text = $"No se pudo eliminar la copia: {await response.Content.ReadAsStringAsync()}";
+            }
+        }
+        catch (Exception exception) { StatusText.Text = $"No se pudo eliminar la copia: {exception.Message}"; }
+    }
+
     private async void OnRestoreClick(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog

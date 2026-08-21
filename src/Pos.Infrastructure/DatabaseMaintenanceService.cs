@@ -88,6 +88,24 @@ public sealed class DatabaseMaintenanceService(PosDbContext database)
         return File.Exists(path) ? path : throw new FileNotFoundException("Respaldo no encontrado.");
     }
 
+    public async Task<bool?> DeleteAsync(string token, string fileName, CancellationToken cancellationToken)
+    {
+        if (await AuthorizedAsync(token, cancellationToken) is null) return null;
+        var safeName = Path.GetFileName(fileName);
+        if (!safeName.Equals(fileName, StringComparison.Ordinal) || !safeName.EndsWith(".dump", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("Nombre de respaldo inválido.");
+
+        var path = Path.Combine(BackupDirectory(), safeName);
+        if (!File.Exists(path)) return false;
+
+        File.Delete(path);
+        foreach (var companion in new[] { path + ".sha256", path + ".json" })
+        {
+            if (File.Exists(companion)) File.Delete(companion);
+        }
+
+        return true;
+    }
+
     private static string FindPgDump()
     {
         var configured = Environment.GetEnvironmentVariable("POS_PG_BIN");

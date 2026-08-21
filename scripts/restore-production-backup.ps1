@@ -53,6 +53,19 @@ function Invoke-Native([string]$File, [string[]]$Arguments) {
     if ($LASTEXITCODE -ne 0) { throw "Falló $([IO.Path]::GetFileName($File)) con código $LASTEXITCODE." }
 }
 
+function Trim-LocalBackups([string]$Directory, [int]$Keep = 5) {
+    $backups = Get-ChildItem -LiteralPath $Directory -Filter '*.dump' -File -ErrorAction SilentlyContinue |
+        Sort-Object CreationTimeUtc -Descending |
+        Select-Object -Skip $Keep
+    foreach ($obsolete in $backups) {
+        Remove-Item -LiteralPath $obsolete.FullName -Force
+        foreach ($companion in @("$($obsolete.FullName).sha256", "$($obsolete.FullName).json")) {
+            Remove-Item -LiteralPath $companion -Force -ErrorAction SilentlyContinue
+        }
+        Write-RestoreLog "Copia preventiva antigua eliminada: $($obsolete.Name)"
+    }
+}
+
 function Read-ConnectionValue([string]$Connection, [string]$Name) {
     $match = [Text.RegularExpressions.Regex]::Match($Connection, "(?i)(?:^|;)\s*$Name\s*=\s*([^;]+)")
     if (-not $match.Success) { throw "La conexión protegida no contiene $Name." }
@@ -163,6 +176,7 @@ END $$;
         }
         Write-RestoreLog 'Permisos de la base restaurada comprobados con la cuenta de JetVenta.'
         Start-Service -Name $apiService
+        Trim-LocalBackups $backupDirectory
         Write-RestoreLog 'Restauración terminada. JetVenta aplicará migraciones pendientes al iniciar la API.'
     }
 } finally {
