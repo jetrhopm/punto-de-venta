@@ -5,11 +5,15 @@
         >
     <UserControl.Resources>
         <Style TargetType="{x:Type icons:PackIconMaterial}">
-            <Setter Property="LayoutTransform">
-                <Setter.Value>
-                    <ScaleTransform ScaleX="0.8" ScaleY="0.8"/>
-                </Setter.Value>
-            </Setter>
+            <Style.Triggers>
+                <Trigger Property="Width" Value="30">
+                    <Setter Property="LayoutTransform">
+                        <Setter.Value>
+                            <ScaleTransform ScaleX="0.6" ScaleY="0.6"/>
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
         </Style>
         <Style x:Key="ToolButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Margin" Value="7"/><Setter Property="Padding" Value="16"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="VerticalContentAlignment" Value="Stretch"/>
