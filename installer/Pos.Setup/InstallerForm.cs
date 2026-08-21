@@ -3,6 +3,7 @@ using System.Drawing;
 using System.IO.Compression;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
 namespace Pos.Setup;
@@ -211,7 +212,10 @@ public sealed class InstallerForm : Form
 
     private async Task RunProcessAsync(string file, string arguments, string workingDirectory)
     {
-        Log($"Ejecutando {Path.GetFileName(file)}");
+        var processName = Path.GetFileName(file);
+        var standardOutput = new StringBuilder();
+        var standardError = new StringBuilder();
+        Log($"Ejecutando {processName}");
         using var process = Process.Start(new ProcessStartInfo(file, arguments)
         {
             WorkingDirectory = workingDirectory,
@@ -220,13 +224,73 @@ public sealed class InstallerForm : Form
             RedirectStandardError = true,
             CreateNoWindow = true
         }) ?? throw new InvalidOperationException($"No se pudo iniciar {Path.GetFileName(file)}.");
-        process.OutputDataReceived += (_, eventArgs) => { if (!string.IsNullOrWhiteSpace(eventArgs.Data)) BeginInvoke(() => { Log(eventArgs.Data); _status.Text = eventArgs.Data; }); };
-        process.ErrorDataReceived += (_, eventArgs) => { if (!string.IsNullOrWhiteSpace(eventArgs.Data)) BeginInvoke(() => Log(eventArgs.Data)); };
+        process.OutputDataReceived += (_, eventArgs) =>
+        {
+            if (string.IsNullOrWhiteSpace(eventArgs.Data)) return;
+            standardOutput.AppendLine(eventArgs.Data);
+            TryBeginInvoke(() => { Log(eventArgs.Data); _status.Text = eventArgs.Data; });
+        };
+        process.ErrorDataReceived += (_, eventArgs) =>
+        {
+            if (string.IsNullOrWhiteSpace(eventArgs.Data)) return;
+            standardError.AppendLine(eventArgs.Data);
+            TryBeginInvoke(() => Log(eventArgs.Data));
+        };
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
         await process.WaitForExitAsync();
-        if (process.ExitCode is not (0 or 3010)) throw new InvalidOperationException($"{Path.GetFileName(file)} terminó con código {process.ExitCode}.");
+        // WaitForExitAsync completes when the process exits, but redirected stream
+        // callbacks can still be pending. Flush them before evaluating the result.
+        process.WaitForExit();
+        if (process.ExitCode is not (0 or 3010))
+        {
+            var details = BuildFailureDetails(processName, process.ExitCode, standardOutput, standardError);
+            throw new InvalidOperationException(details);
+        }
         if (process.ExitCode == 3010) Log("El componente solicita reiniciar Windows para completar su actualización.");
+    }
+
+    private string BuildFailureDetails(string processName, int exitCode, StringBuilder standardOutput, StringBuilder standardError)
+    {
+        var lines = new List<string>
+        {
+            $"{processName} terminó con código {exitCode}.",
+            "La operación fue detenida para evitar una instalación incompleta.",
+            $"Registro del instalador: {Path.Combine(_dataRoot, "logs", "setup.log")}",
+            $"Registro de configuración: {Path.Combine(_dataRoot, "logs", "instalacion.log")}"
+        };
+
+        var output = LastLines(standardOutput.ToString(), 12);
+        var error = LastLines(standardError.ToString(), 12);
+        if (!string.IsNullOrWhiteSpace(output)) lines.Add($"Salida reciente: {SanitizeDiagnostic(output)}");
+        if (!string.IsNullOrWhiteSpace(error)) lines.Add($"Error reciente: {SanitizeDiagnostic(error)}");
+
+        var installationLog = Path.Combine(_dataRoot, "logs", "instalacion.log");
+        if (File.Exists(installationLog))
+        {
+            var logTail = LastLines(File.ReadAllText(installationLog), 18);
+            if (!string.IsNullOrWhiteSpace(logTail)) lines.Add($"Última etapa registrada: {SanitizeDiagnostic(logTail)}");
+        }
+
+        return string.Join(Environment.NewLine + Environment.NewLine, lines);
+    }
+
+    private static string LastLines(string text, int count) =>
+        string.Join(Environment.NewLine, text.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries).TakeLast(count));
+
+    private static string SanitizeDiagnostic(string text)
+    {
+        var sanitized = Regex.Replace(text, "(?i)(password|token|secret|access[_ -]?token)\\s*([:=])\\s*[^;\\r\\n]+", "$1$2<oculto>");
+        return sanitized.Length <= 3200 ? sanitized : sanitized[^3200..];
+    }
+
+    private void TryBeginInvoke(Action action)
+    {
+        try
+        {
+            if (!IsDisposed && IsHandleCreated) BeginInvoke(action);
+        }
+        catch (InvalidOperationException) { }
     }
 
     private void RegisterInstallation()

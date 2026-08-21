@@ -8,8 +8,14 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Windows PowerShell 5.1 does not load DPAPI's assembly by default.
-Add-Type -AssemblyName System.Security
+# Windows PowerShell 5.1 does not load DPAPI's assembly by default. The
+# dedicated assembly exists on newer runtimes; the framework assembly is the
+# fallback used by the Windows PowerShell shipped with Windows 10/11.
+try {
+    Add-Type -AssemblyName System.Security.Cryptography.ProtectedData -ErrorAction Stop
+} catch {
+    Add-Type -AssemblyName System.Security -ErrorAction Stop
+}
 
 $installLogPath = Join-Path $DataRoot 'logs\instalacion.log'
 
@@ -24,6 +30,12 @@ function Write-InstallLog([string]$Message) {
 
 trap {
     Write-InstallLog "ERROR: $($_.Exception.Message)"
+    if ($_.InvocationInfo -and $_.InvocationInfo.PositionMessage) {
+        Write-InstallLog "Ubicacion: $($_.InvocationInfo.PositionMessage -replace '[\r\n]+', ' ')"
+    }
+    if ($_.ScriptStackTrace) {
+        Write-InstallLog "Traza: $($_.ScriptStackTrace -replace '[\r\n]+', ' ')"
+    }
     Write-InstallLog 'La instalacion se detuvo. Revisa este archivo y el log de PostgreSQL para diagnostico.'
     throw
 }
@@ -108,7 +120,11 @@ foreach ($directory in @($DataRoot, (Join-Path $DataRoot 'config'), (Join-Path $
     New-Item -ItemType Directory -Force -Path $directory | Out-Null
     Write-InstallLog "Carpeta lista: $directory"
 }
-if (-not (Test-Path $pgCtl)) { throw "No se encontraron los binarios PostgreSQL en $postgresBin." }
+foreach ($requiredBinary in @($pgCtl, $initDb, $psql)) {
+    if (-not (Test-Path $requiredBinary)) {
+        throw "Falta el componente de PostgreSQL: $requiredBinary"
+    }
+}
 Write-InstallLog "Binarios PostgreSQL encontrados en $postgresBin"
 
 $passwordBytes = New-Object byte[] 32
