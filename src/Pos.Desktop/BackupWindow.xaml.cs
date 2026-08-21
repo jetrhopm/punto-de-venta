@@ -64,6 +64,7 @@ public partial class BackupWindow : Window
             return;
         }
 
+        RestoreProgressWindow? progress = null;
         try
         {
             StatusText.Text = "Verificando el respaldo antes de cargarlo...";
@@ -108,26 +109,41 @@ public partial class BackupWindow : Window
             start.ArgumentList.Add(backup);
             start.ArgumentList.Add("-Approve");
 
-            StatusText.Text = "Restaurando la tienda. No cierres Windows...";
+            progress = new RestoreProgressWindow { Owner = this };
+            progress.Show();
+            progress.SetStatus("Restaurando la tienda. No cierres Windows ni apagues el equipo...");
+            StatusText.Text = "Restauración en curso. La ventana verde muestra que el proceso sigue activo.";
             using var process = Process.Start(start) ?? throw new InvalidOperationException("No se pudo iniciar la restauración.");
             await process.WaitForExitAsync();
             if (process.ExitCode == 0)
             {
+                progress.Close();
+                progress = null;
                 MessageBox.Show("La tienda se restauró correctamente. JetVenta se cerrará para iniciar sesión con la información restaurada.", "Restauración terminada", MessageBoxButton.OK, MessageBoxImage.Information);
                 System.Windows.Application.Current.Shutdown();
             }
             else
             {
-                StatusText.Text = "La restauración no terminó. No se eliminó el respaldo seleccionado.";
-                MessageBox.Show("No se pudo completar la restauración. Revisa el diagnóstico de JetVenta o solicita ayuda al administrador.", "Restauración no completada", MessageBoxButton.OK, MessageBoxImage.Error);
+                var logPath = RestoreLogPath();
+                StatusText.Text = $"La restauración falló. El respaldo original no se eliminó. Revisa: {logPath}";
+                progress.SetStatus("No se pudo completar la restauración. Consulta el diagnóstico para conocer el paso que falló.");
+                MessageBox.Show($"No se pudo completar la restauración. El respaldo seleccionado no se eliminó.\n\nDiagnóstico guardado en:\n{logPath}", "Restauración no completada", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
         catch (Exception exception)
         {
+            progress?.Close();
+            progress = null;
             StatusText.Text = "No se pudo iniciar la restauración.";
             MessageBox.Show($"No se pudo cargar el respaldo. Detalle: {exception.Message}", "Error de restauración", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+        finally
+        {
+            progress?.Close();
+        }
     }
+
+    private static string RestoreLogPath() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "logs", "restauracion.log");
 
     private static string? FindRestoreScript()
     {

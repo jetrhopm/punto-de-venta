@@ -1,6 +1,8 @@
 # Changelog
 
 ## 2026-08-20
+- Se agrega una ventana de progreso verde durante la restauración y se muestra la ruta del diagnóstico cuando el proceso falla.
+- La restauración espera el cierre real de la API y limpia objetos existentes antes de cargar el respaldo.
 - Se ajustan las ventanas de símbolo de moneda y folios para evitar contenido recortado, con desplazamiento cuando sea necesario.
 - Se agrega navegación de teclado común para diálogos: `Enter` confirma la acción principal y `Esc` cancela o cierra sin afectar campos multilínea.
 - Se corrige la restauración desde otra computadora: el instalador incluye `restore-production-backup.ps1` y JetVenta lo localiza desde la carpeta raíz instalada.

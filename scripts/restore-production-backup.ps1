@@ -25,6 +25,12 @@ $pgRestore = Join-Path $postgresBin 'pg_restore.exe'
 $pgDump = Join-Path $postgresBin 'pg_dump.exe'
 $apiService = 'PuntoDeVentaApi'
 
+function Wait-ServiceStopped([string]$Name) {
+    $service = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    if ($null -eq $service) { return }
+    $service.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Stopped, [TimeSpan]::FromSeconds(30))
+}
+
 function Write-RestoreLog([string]$Message) {
     $line = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss.fff'))] $Message"
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $logPath) | Out-Null
@@ -108,11 +114,12 @@ try {
     } else {
         Write-RestoreLog 'Deteniendo temporalmente la API de JetVenta.'
         Stop-Service -Name $apiService -Force -ErrorAction SilentlyContinue
+        Wait-ServiceStopped $apiService
         Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$database' AND pid <> pg_backend_pid();")
         Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "DROP DATABASE $database;")
         Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "CREATE DATABASE $database OWNER $applicationUser;")
         Write-RestoreLog 'Restaurando estructura y datos de JetVenta.'
-        Invoke-Native $pgRestore @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', "--dbname=$database", '--no-owner', '--exit-on-error', $backup)
+        Invoke-Native $pgRestore @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', "--dbname=$database", '--clean', '--if-exists', '--no-owner', '--exit-on-error', $backup)
         Start-Service -Name $apiService
         Write-RestoreLog 'Restauración terminada. JetVenta aplicará migraciones pendientes al iniciar la API.'
     }
