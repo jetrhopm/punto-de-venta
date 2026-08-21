@@ -2,6 +2,14 @@
 
 JetVenta usa activación local firmada. El programa muestra un código de solicitud en `Configuración > Licencia`; el emisor autorizado lo pega en `JetVenta.LicenseIssuer.exe` y genera el archivo `licencia.jv`. La tienda carga ese archivo desde la misma pantalla.
 
+## Periodo de prueba
+
+Las instalaciones sin `licencia.jv` comienzan automáticamente en modo de prueba y pueden operar con normalidad durante el periodo configurado. En esta etapa de pruebas el periodo dura **30 minutos** para poder validar rápidamente el vencimiento. El código está preparado para la liberación comercial y se cambiará a `TimeSpan.FromDays(30)` antes de distribuir el producto.
+
+JetVenta muestra el tiempo restante al iniciar sesión y en `Configuración > Licencia`. Cuando termina la prueba, la API bloquea las operaciones de la tienda y solo permite consultar la activación para que un administrador cargue una licencia válida. El respaldo y la recuperación deben mantenerse disponibles como funciones de continuidad.
+
+El estado de la prueba se guarda cifrado con DPAPI en `C:\ProgramData\PuntoDeVenta\license\demo.jv.dpapi`, ligado al equipo. También se conserva la última hora observada para detectar retrocesos del reloj. Esto evita reinicios accidentales del contador, aunque un usuario con control administrativo total de Windows puede alterar archivos locales; la protección remota se reservará para una fase posterior.
+
 ## Seguridad y operación
 
 - El archivo contiene la huella del equipo, nombre de tienda, identificador, fecha de emisión y, si se seleccionó, fecha de vencimiento.

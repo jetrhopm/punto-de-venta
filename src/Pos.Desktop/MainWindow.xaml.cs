@@ -36,6 +36,11 @@ public partial class MainWindow : Window
         BarcodeScannerService.BarcodeScanned += OnSerialBarcodeScanned;
     }
 
+    public void ShowLicenseReminder(string message)
+    {
+        StatusText.Text = message;
+    }
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         ApiClient.ApplySession(SessionContext.AccessToken);

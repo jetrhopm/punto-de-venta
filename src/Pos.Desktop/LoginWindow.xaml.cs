@@ -20,6 +20,7 @@ public partial class LoginWindow : Window
     private static readonly Brush ErrorStatusBorder = new SolidColorBrush(Color.FromRgb(232, 187, 183));
     private static HttpClient Client => ApiClient.Client;
     private bool _isBusy;
+    private string? _licenseReminder;
 
     public LoginWindow()
     {
@@ -129,6 +130,7 @@ public partial class LoginWindow : Window
             var mainWindow = new MainWindow();
             System.Windows.Application.Current.MainWindow = mainWindow;
             mainWindow.Show();
+            if (!string.IsNullOrWhiteSpace(_licenseReminder)) mainWindow.ShowLicenseReminder(_licenseReminder);
             Close();
         }
         catch (HttpRequestException)
@@ -154,12 +156,20 @@ public partial class LoginWindow : Window
         try
         {
             var status = await Client.GetFromJsonAsync<LicenseStatus>("api/license/status");
-            if (status?.IsActive == true) return true;
+            if (status?.IsActive == true)
+            {
+                _licenseReminder = string.Equals(status.State, "trial", StringComparison.OrdinalIgnoreCase) ? status.Message : null;
+                return true;
+            }
 
             var license = new LicenseWindow { Owner = this };
             license.ShowDialog();
             status = await Client.GetFromJsonAsync<LicenseStatus>("api/license/status");
-            if (status?.IsActive == true) return true;
+            if (status?.IsActive == true)
+            {
+                _licenseReminder = string.Equals(status.State, "trial", StringComparison.OrdinalIgnoreCase) ? status.Message : null;
+                return true;
+            }
 
             SetStatus("JetVenta requiere una licencia válida. Un administrador debe cargar el archivo licencia.jv para este equipo.", StatusKind.Error);
             return false;
@@ -279,6 +289,6 @@ public partial class LoginWindow : Window
     }
 
     private sealed record SetupStatus(bool Configured, string? StoreName);
-    private sealed record LicenseStatus(bool IsActive);
+    private sealed record LicenseStatus(bool IsActive, string State, string Message, string MachineFingerprint, string RequestCode, string? LicenseId, DateTimeOffset? ExpiresAtUtc, string? StoreName);
     private sealed record LoginResponse(Guid SessionId, string AccessToken, Guid UserId, string DisplayName, bool IsAdministrator, DateTimeOffset ExpiresAtUtc, List<string> Permissions);
 }

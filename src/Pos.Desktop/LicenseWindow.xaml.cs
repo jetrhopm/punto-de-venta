@@ -73,12 +73,15 @@ public partial class LicenseWindow : Window
     private void ApplyStatus(LicenseStatus status)
     {
         var active = status.IsActive;
-        StatusBorder.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#EAF7EE" : "#FFF7E2"));
-        StatusBorder.BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#9DD6B1" : "#E9C770"));
-        StatusTitleText.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#17663A" : "#744F00"));
-        StatusTitleText.Text = active ? "Licencia activa" : "Licencia pendiente";
+        var trial = string.Equals(status.State, "trial", StringComparison.OrdinalIgnoreCase);
+        StatusBorder.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active && !trial ? "#EAF7EE" : "#FFF7E2"));
+        StatusBorder.BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active && !trial ? "#9DD6B1" : "#E9C770"));
+        StatusTitleText.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active && !trial ? "#17663A" : "#744F00"));
+        StatusTitleText.Text = trial ? "Modo de prueba activo" : active ? "Licencia activa" : "Licencia pendiente";
         StatusMessageText.Text = status.Message;
-        ExpirationText.Text = status.ExpiresAtUtc is null ? (active ? "Vigencia: sin vencimiento." : string.Empty) : $"Vigencia hasta: {status.ExpiresAtUtc.Value.LocalDateTime:dd/MM/yyyy}.";
+        ExpirationText.Text = status.ExpiresAtUtc is null ? (active ? "Vigencia: sin vencimiento." : string.Empty) : trial
+            ? $"La prueba termina el {status.ExpiresAtUtc.Value.LocalDateTime:dd/MM/yyyy HH:mm}."
+            : $"Vigencia hasta: {status.ExpiresAtUtc.Value.LocalDateTime:dd/MM/yyyy}.";
     }
 
     private void SetError(string message)
