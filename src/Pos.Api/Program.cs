@@ -102,6 +102,7 @@ app.Use(async (context, next) =>
         path.StartsWithSegments("/api/setup") ||
         path.StartsWithSegments("/api/auth") ||
         path.StartsWithSegments("/api/license") ||
+        path.StartsWithSegments("/api/maintenance/backups") ||
         path.StartsWithSegments("/api/lan/info");
 
     if (!mayContinueWithoutLicense)
