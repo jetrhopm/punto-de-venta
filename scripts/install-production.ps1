@@ -243,6 +243,30 @@ try {
         Write-InstallLog 'Base punto_venta no existe; creando base de datos.'
         Invoke-Native $psql @('-h','127.0.0.1','-p',$port,'-U','pos_admin','-d','postgres','-v','ON_ERROR_STOP=1','-c','CREATE DATABASE punto_venta OWNER pos_app;')
     } else { Write-InstallLog 'Base punto_venta existente detectada; se conserva sin reinicializar.' }
+
+    # Una restauración puede conservar propietarios y ACL de otra instalación.
+    # La API debe poder consultar __EFMigrationsHistory y aplicar migraciones
+    # sin convertir la base en una base nueva ni perder información.
+    Write-InstallLog 'Etapa 4/8: reparando propietario y permisos del esquema de la tienda.'
+    $permissionsSql = @'
+CREATE SCHEMA IF NOT EXISTS pos AUTHORIZATION pos_app;
+ALTER SCHEMA pos OWNER TO pos_app;
+GRANT USAGE, CREATE ON SCHEMA pos TO pos_app;
+GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA pos TO pos_app;
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA pos TO pos_app;
+DO $$
+DECLARE item record;
+BEGIN
+    FOR item IN SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'pos' LOOP
+        EXECUTE format('ALTER TABLE pos.%I OWNER TO pos_app', item.tablename);
+    END LOOP;
+    FOR item IN SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'pos' LOOP
+        EXECUTE format('ALTER SEQUENCE pos.%I OWNER TO pos_app', item.sequence_name);
+    END LOOP;
+END $$;
+'@
+    Invoke-Native $psql @('-h','127.0.0.1','-p',$port,'-U','pos_admin','-d','punto_venta','-v','ON_ERROR_STOP=1','-c',$permissionsSql)
+    Write-InstallLog 'Propietario y permisos del esquema reparados; los datos existentes se conservaron.'
 } finally { Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue }
 
 if ($preserveApplicationConnection) {
