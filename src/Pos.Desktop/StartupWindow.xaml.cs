@@ -72,7 +72,7 @@ public partial class StartupWindow : Window
 
             if (!available)
             {
-                SetStatus(IsLocalApi() ? "No se pudo iniciar JetVenta. Ve a Configuración > Diagnóstico y pulsa Levantar API." : "No se pudo conectar con el servidor. Ve a Configuración > Diagnóstico o configura otra conexión.", 100, "Sin conexión", "Revisar", "Pendiente");
+                SetStatus(IsLocalApi() ? "No se pudo iniciar JetVenta. Pulsa Reparar servicios aquí; si vuelve a fallar, ve a Configuración > Diagnóstico y pulsa Levantar API." : "No se pudo conectar con el servidor. Ve a Configuración > Diagnóstico o configura otra conexión.", 100, "Sin conexión", "Revisar", "Pendiente");
                 ErrorPanel.Visibility = Visibility.Visible;
                 return;
             }
@@ -87,7 +87,7 @@ public partial class StartupWindow : Window
                 setup = available ? await ReadSetupStatusAsync() : null;
                 if (setup is null)
                 {
-                    SetStatus(IsLocalApi() ? "Los servicios locales no respondieron. Ve a Configuración > Diagnóstico y pulsa Levantar API." : "El servidor configurado no respondió. Ve a Configuración > Diagnóstico o configura otra conexión.", 100, "Sin respuesta", "Revisar", "Pendiente");
+                    SetStatus(IsLocalApi() ? "Los servicios locales no respondieron. Pulsa Reparar servicios aquí o ve a Configuración > Diagnóstico y pulsa Levantar API." : "El servidor configurado no respondió. Ve a Configuración > Diagnóstico o configura otra conexión.", 100, "Sin respuesta", "Revisar", "Pendiente");
                     ErrorPanel.Visibility = Visibility.Visible;
                     return;
                 }
@@ -106,7 +106,7 @@ public partial class StartupWindow : Window
         catch (Exception exception)
         {
             Log(exception.ToString());
-            SetStatus("No se pudo preparar JetVenta. Puedes configurar la conexión o intentar de nuevo.", 100, "Revisar", "Revisar", "Pendiente");
+            SetStatus("No se pudo preparar JetVenta. Pulsa Reparar servicios aquí o ve a Configuración > Diagnóstico y pulsa Levantar API.", 100, "Revisar", "Revisar", "Pendiente");
             ErrorPanel.Visibility = Visibility.Visible;
         }
         finally

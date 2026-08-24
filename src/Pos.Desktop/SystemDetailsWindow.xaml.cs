@@ -37,7 +37,7 @@ public partial class SystemDetailsWindow : Window
             "Báscula serial: Configuración disponible en Dispositivos > Báscula",
             $"Hora local: {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}",
             "",
-            apiOk ? "Resultado: los servicios principales responden." : "Resultado: el servicio local no responde. Revisa la API y PostgreSQL desde JetVenta o el instalador."
+            apiOk ? "Resultado: los servicios principales responden." : "Resultado: JetVenta no responde. Ve a Configuración > Diagnóstico y pulsa Levantar API."
         };
         DetailsText.Text = string.Join(Environment.NewLine, lines);
     }
