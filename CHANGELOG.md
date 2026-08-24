@@ -2,6 +2,9 @@
 
 ## Sin liberar
 - Se agregan autorización offline de emisores adicionales y respaldo cifrado de recuperación para no depender de una sola computadora emisora de licencias.
+- Se corrige Producto común desde la venta: ahora se conserva como artículo temporal ligado al ticket, sin aparecer en el catálogo ni modificar inventario, existencias o movimientos. Su partida permanece disponible para historial, reimpresión, cancelación y devolución.
+- Registrar producto mantiene el flujo permanente y agrega el artículo al catálogo e inventario.
+- Se ajusta el selector de unidad del diálogo de producto no encontrado para mostrar correctamente pieza, peso a granel, volumen y servicio.
 
 ## 2026-08-21
 - Se corrige la pantalla de activación de licencia: usaba un recurso visual inexistente y bloqueaba el inicio de sesión en instalaciones sin licencia.

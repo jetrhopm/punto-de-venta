@@ -75,7 +75,8 @@ public partial class MissingProductWindow : Window
 
         ProductDescription = DescriptionBox.Text.Trim();
         Price = decimal.Round(price, 2);
-        UnitOfMeasure = (UnitBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Pieza";
+        var selectedUnit = UnitBox.SelectedItem as ComboBoxItem;
+        UnitOfMeasure = selectedUnit?.Tag?.ToString() ?? selectedUnit?.Content?.ToString() ?? "Pieza";
         return true;
     }
 }

@@ -57,7 +57,7 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
             var promotionCalculation = await promotions.CalculateAsync(product.Id, unitPrice, DateTimeOffset.UtcNow, cancellationToken, requestedQuantity);
             unitPrice = promotionCalculation.UnitPrice;
             var total = originalLine is null ? 0m : promotionCalculation.Total;
-            if (store.InventoryEnabled && !product.IsKit) product.Stock -= requested;
+            if (store.InventoryEnabled && !product.IsKit && !product.IsTemporary) product.Stock -= requested;
             if (originalLine is not null) lines.Add(new SaleLineRecord { Id = Guid.NewGuid(), ProductId = product.Id, Quantity = requestedQuantity, UnitPrice = unitPrice, LineTotal = total, StockBefore = stockBefore, StockAfter = product.Stock });
         }
         var totalSale = RoundSaleAmount(lines.Sum(line => line.LineTotal), store);
@@ -91,8 +91,8 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         var folio = store.NextSaleFolio;
         store.NextSaleFolio++;
         var sale = new SaleRecord { Id = Guid.NewGuid(), OperationId = command.OperationId, ShiftId = shift.Id, CustomerId = command.CustomerId, Folio = folio, Total = totalSale, CreatedAtUtc = DateTimeOffset.UtcNow };
-        foreach (var line in lines) { line.SaleId = sale.Id; if (store.InventoryEnabled && !products[line.ProductId].IsKit) database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = line.ProductId, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -line.Quantity, StockBefore = line.StockBefore, StockAfter = line.StockAfter, CreatedAtUtc = sale.CreatedAtUtc }); }
-        foreach (var component in expanded.Where(item => !command.Lines.Any(line => line.ProductId == item.Key))) { var product = products[component.Key]; var before = product.Stock; if (store.InventoryEnabled) { product.Stock -= component.Value; database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -component.Value, StockBefore = before, StockAfter = product.Stock, Reason = "KitSale", CreatedAtUtc = sale.CreatedAtUtc }); } }
+        foreach (var line in lines) { line.SaleId = sale.Id; if (store.InventoryEnabled && !products[line.ProductId].IsKit && !products[line.ProductId].IsTemporary) database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = line.ProductId, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -line.Quantity, StockBefore = line.StockBefore, StockAfter = line.StockAfter, CreatedAtUtc = sale.CreatedAtUtc }); }
+        foreach (var component in expanded.Where(item => !command.Lines.Any(line => line.ProductId == item.Key))) { var product = products[component.Key]; var before = product.Stock; if (store.InventoryEnabled && !product.IsTemporary) { product.Stock -= component.Value; database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = -component.Value, StockBefore = before, StockAfter = product.Stock, Reason = "KitSale", CreatedAtUtc = sale.CreatedAtUtc }); } }
         var cashAmountToRecord = command.PaymentMethod switch { "Card" or "Transfer" or "Credit" => 0m, _ => decimal.Round(totalSale - (command.PaymentMethod == "Mixed" ? command.CardAmount + command.TransferAmount : 0m), 2, MidpointRounding.AwayFromZero) };
         var cardAmountToRecord = command.PaymentMethod == "Card" ? totalSale : decimal.Round(command.CardAmount, 2, MidpointRounding.AwayFromZero);
         var transferAmountToRecord = command.PaymentMethod == "Transfer" ? totalSale : decimal.Round(command.TransferAmount, 2, MidpointRounding.AwayFromZero);

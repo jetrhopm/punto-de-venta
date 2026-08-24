@@ -57,7 +57,7 @@ public sealed class SystemDiagnosticsService(PosDbContext database)
                 ? new("Tienda", "Pendiente", "La base responde, pero todavía no hay una tienda configurada.", "Completa la configuración inicial.")
                 : new("Tienda", "Correcto", $"Tienda configurada: {store.Name}.", ""));
 
-            productCount = await database.Products.CountAsync(item => item.IsActive, cancellationToken);
+            productCount = await database.Products.CountAsync(item => item.IsActive && !item.IsTemporary, cancellationToken);
             userCount = await database.Users.CountAsync(item => item.IsActive, cancellationToken);
             customerCount = await database.Customers.CountAsync(item => item.IsActive, cancellationToken);
             supplierCount = await database.Suppliers.CountAsync(cancellationToken);

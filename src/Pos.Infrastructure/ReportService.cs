@@ -32,7 +32,7 @@ public sealed class ReportService(PosDbContext database)
     public async Task<IReadOnlyList<InventoryReportRow>?> InventoryAsync(string token, CancellationToken cancellationToken)
     {
         if (await AuthorizedAsync(token, "ViewInventory", cancellationToken) is null) return null;
-        return await database.Products.AsNoTracking().OrderBy(item => item.Description).Select(item => new InventoryReportRow(item.Id, item.Code, item.Description, item.Stock, item.Cost, decimal.Round(item.Stock * item.Cost, 2))).ToListAsync(cancellationToken);
+        return await database.Products.AsNoTracking().Where(item => !item.IsTemporary).OrderBy(item => item.Description).Select(item => new InventoryReportRow(item.Id, item.Code, item.Description, item.Stock, item.Cost, decimal.Round(item.Stock * item.Cost, 2))).ToListAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<CreditReportRow>?> CreditAsync(string token, CancellationToken cancellationToken)
@@ -70,7 +70,7 @@ public sealed class ReportService(PosDbContext database)
 
         var soldByProduct = soldRows.ToDictionary(item => item.ProductId);
         var products = await database.Products.AsNoTracking()
-            .Where(item => item.IsActive)
+            .Where(item => item.IsActive && !item.IsTemporary)
             .OrderBy(item => item.Description)
             .Select(item => new { item.Id, item.Code, item.Description, item.Category, item.UnitOfMeasure, item.Stock, item.MinimumStock, item.MaximumStock })
             .ToListAsync(cancellationToken);

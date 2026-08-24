@@ -561,6 +561,7 @@ public partial class MainWindow : Window
             }
 
             await AddProductToCartAsync(product);
+            if (isCommonProduct) StatusText.Text = "Producto común agregado solo a este ticket. No se modificará el inventario.";
         }
         catch (HttpRequestException)
         {

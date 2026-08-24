@@ -394,7 +394,7 @@ app.MapGet("/api/products/search", async (string? q, PosDbContext database, Canc
     if (search.Length == 0) return Results.Ok(Array.Empty<object>());
     var normalized = search.ToUpperInvariant();
     var products = await database.Products.AsNoTracking()
-        .Where(product => product.IsActive && (product.NormalizedCode.Contains(normalized) || product.Description.ToUpper().Contains(normalized)))
+        .Where(product => product.IsActive && !product.IsTemporary && (product.NormalizedCode.Contains(normalized) || product.Description.ToUpper().Contains(normalized)))
         .OrderBy(product => product.Description).Take(30)
         .Select(product => new { product.Id, product.Code, product.Description, product.Category, product.Price, product.Cost, product.WholesalePrice, product.WholesaleMinimumQuantity, product.Stock, product.MinimumStock, product.MaximumStock, product.IsKit, product.UnitOfMeasure, product.IsActive })
         .ToListAsync(cancellationToken);
@@ -462,6 +462,7 @@ app.MapPost("/api/products/quick-sale", async (HttpRequest request, ProductComma
         UnitOfMeasure = string.IsNullOrWhiteSpace(command.UnitOfMeasure) ? "Pieza" : command.UnitOfMeasure.Trim(),
         Stock = 0m,
         IsCommonProduct = command.IsCommonProduct,
+        IsTemporary = command.IsCommonProduct,
         IsActive = true
     };
     database.Products.Add(product);

@@ -22,7 +22,7 @@ public sealed class InventoryService(PosDbContext database)
         if (await GetAuthorizedUserAsync(token, "ViewInventory", cancellationToken) is null) return null;
         page = Math.Max(1, page);
         const int pageSize = 500;
-        var products = database.Products.AsNoTracking().Where(item => item.IsActive);
+        var products = database.Products.AsNoTracking().Where(item => item.IsActive && !item.IsTemporary);
         var text = query?.Trim().ToUpperInvariant();
         if (!string.IsNullOrWhiteSpace(text)) products = products.Where(item => item.NormalizedCode.Contains(text) || item.Description.ToUpper().Contains(text));
         status = status?.Trim().ToLowerInvariant();
@@ -31,7 +31,7 @@ public sealed class InventoryService(PosDbContext database)
         else if (status == "sobre") products = products.Where(item => item.MaximumStock > 0m && item.Stock > item.MaximumStock);
         else if (status == "normal") products = products.Where(item => item.Stock > 0m && (item.MinimumStock <= 0m || item.Stock > item.MinimumStock) && (item.MaximumStock <= 0m || item.Stock <= item.MaximumStock));
 
-        var allProducts = database.Products.AsNoTracking().Where(item => item.IsActive);
+        var allProducts = database.Products.AsNoTracking().Where(item => item.IsActive && !item.IsTemporary);
         var summary = await allProducts.GroupBy(_ => 1).Select(group => new
         {
             TotalUnits = group.Sum(item => item.Stock),
@@ -65,7 +65,7 @@ public sealed class InventoryService(PosDbContext database)
     public async Task<byte[]?> ExportCsvAsync(string token, CancellationToken cancellationToken)
     {
         if (await GetAuthorizedUserAsync(token, "ViewInventory", cancellationToken) is null) return null;
-        var rows = await database.Products.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.Description).Select(item => new { item.Code, item.Description, item.Category, item.UnitOfMeasure, item.Cost, item.Price, item.Stock, item.MinimumStock, item.MaximumStock }).ToListAsync(cancellationToken);
+        var rows = await database.Products.AsNoTracking().Where(item => item.IsActive && !item.IsTemporary).OrderBy(item => item.Description).Select(item => new { item.Code, item.Description, item.Category, item.UnitOfMeasure, item.Cost, item.Price, item.Stock, item.MinimumStock, item.MaximumStock }).ToListAsync(cancellationToken);
         var builder = new StringBuilder("Codigo,Descripcion,Departamento,TipoVenta,Costo,PrecioVenta,Existencia,InventarioMinimo,InventarioMaximo\r\n");
         foreach (var row in rows) builder.Append(string.Join(',', Csv(row.Code), Csv(row.Description), Csv(row.Category), Csv(row.UnitOfMeasure), row.Cost.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), row.Price.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture), row.Stock.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), row.MinimumStock.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), row.MaximumStock.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))).Append("\r\n");
         return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(builder.ToString())).ToArray();
@@ -77,7 +77,7 @@ public sealed class InventoryService(PosDbContext database)
         page = Math.Max(1, page);
         const int pageSize = 500;
         var movements = from movement in database.InventoryMovements.AsNoTracking()
-                        join product in database.Products.AsNoTracking() on movement.ProductId equals product.Id
+                        join product in database.Products.AsNoTracking().Where(item => !item.IsTemporary) on movement.ProductId equals product.Id
                         join user in database.Users.AsNoTracking() on movement.UserId equals user.Id
                         select new { movement, product, user };
         var text = query?.Trim().ToUpperInvariant();
@@ -96,7 +96,7 @@ public sealed class InventoryService(PosDbContext database)
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var existing = await database.InventoryLimitChanges.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new InventoryLimitChangeResult(existing.ProductId, existing.PreviousMinimumStock, existing.PreviousMaximumStock, existing.MinimumStock, existing.MaximumStock);
-        var product = await database.Products.SingleOrDefaultAsync(item => item.Id == command.ProductId && item.IsActive, cancellationToken) ?? throw new KeyNotFoundException("Producto no encontrado o inactivo.");
+        var product = await database.Products.SingleOrDefaultAsync(item => item.Id == command.ProductId && item.IsActive && !item.IsTemporary, cancellationToken) ?? throw new KeyNotFoundException("Producto no encontrado o inactivo.");
         var result = new InventoryLimitChangeResult(product.Id, product.MinimumStock, product.MaximumStock, decimal.Round(command.MinimumStock, 3), decimal.Round(command.MaximumStock, 3));
         product.MinimumStock = result.MinimumStock; product.MaximumStock = result.MaximumStock;
         database.InventoryLimitChanges.Add(new InventoryLimitChangeRecord { Id = Guid.NewGuid(), ProductId = product.Id, UserId = userId.Value, OperationId = command.OperationId, PreviousMinimumStock = result.PreviousMinimumStock, PreviousMaximumStock = result.PreviousMaximumStock, MinimumStock = result.MinimumStock, MaximumStock = result.MaximumStock, CreatedAtUtc = DateTimeOffset.UtcNow });
@@ -112,7 +112,7 @@ public sealed class InventoryService(PosDbContext database)
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var existing = await database.InventoryMovements.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new InventoryAdjustmentResult(existing.Id, existing.ProductId, existing.Quantity, existing.StockBefore, existing.StockAfter, existing.Reason);
-        var product = await database.Products.SingleOrDefaultAsync(item => item.Id == command.ProductId && item.IsActive, cancellationToken) ?? throw new KeyNotFoundException("Producto no encontrado o inactivo.");
+        var product = await database.Products.SingleOrDefaultAsync(item => item.Id == command.ProductId && item.IsActive && !item.IsTemporary, cancellationToken) ?? throw new KeyNotFoundException("Producto no encontrado o inactivo.");
         var before = product.Stock;
         var after = decimal.Round(before + command.Quantity, 3, MidpointRounding.AwayFromZero);
         if (after < 0m) throw new InvalidOperationException("El ajuste no puede dejar existencia negativa.");
