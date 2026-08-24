@@ -14,7 +14,7 @@ public partial class BackupWindow : Window
     private async Task LoadAsync()
     {
         try { BackupsGrid.ItemsSource = (await ApiClient.Client.GetFromJsonAsync<List<BackupRow>>("api/maintenance/backups") ?? []).Select(item => item with { SizeDisplay = FormatSize(item.SizeBytes) }).ToList(); }
-        catch (Exception exception) { StatusText.Text = $"No se pudieron consultar los respaldos: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron consultar los respaldos"); }
     }
 
     private async void OnCreateClick(object sender, RoutedEventArgs e)
@@ -26,7 +26,7 @@ public partial class BackupWindow : Window
             StatusText.Text = response.IsSuccessStatusCode ? "Respaldo creado y verificado correctamente." : await response.Content.ReadAsStringAsync();
             if (response.IsSuccessStatusCode) await LoadAsync();
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo crear el respaldo: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo crear el respaldo"); }
     }
 
     private async void OnExportClick(object sender, RoutedEventArgs e)
@@ -42,7 +42,7 @@ public partial class BackupWindow : Window
             await File.WriteAllTextAsync(dialog.FileName + ".sha256", backup.Sha256 + Environment.NewLine);
             StatusText.Text = "Copia externa y comprobante SHA-256 guardados correctamente.";
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo guardar la copia: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar la copia"); }
     }
 
     private async void OnDeleteClick(object sender, RoutedEventArgs e)
@@ -73,7 +73,7 @@ public partial class BackupWindow : Window
                 StatusText.Text = $"No se pudo eliminar la copia: {await response.Content.ReadAsStringAsync()}";
             }
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo eliminar la copia: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo eliminar la copia"); }
     }
 
     private async void OnRestoreClick(object sender, RoutedEventArgs e)

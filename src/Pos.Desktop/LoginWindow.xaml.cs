@@ -11,7 +11,7 @@ namespace Pos.Desktop;
 
 public partial class LoginWindow : Window
 {
-    private const string UnavailableMessage = "JetVenta no está listo para iniciar sesión. Espera unos segundos y vuelve a intentar. Si continúa, reinicia la computadora principal.";
+    private const string UnavailableMessage = "JetVenta no está listo para iniciar sesión. Ve a Configuración > Diagnóstico y pulsa Levantar API.";
     private static readonly Brush DefaultStatusBackground = new SolidColorBrush(Color.FromRgb(234, 243, 248));
     private static readonly Brush DefaultStatusBorder = new SolidColorBrush(Color.FromRgb(203, 216, 225));
     private static readonly Brush SuccessStatusBackground = new SolidColorBrush(Color.FromRgb(232, 247, 238));
@@ -139,7 +139,7 @@ public partial class LoginWindow : Window
         }
         catch (TaskCanceledException)
         {
-            SetStatus("La conexión tardó demasiado en responder. Espera unos segundos y vuelve a intentar.", StatusKind.Error);
+            SetStatus(ConnectionHelp.ApiUnavailableRetry, StatusKind.Error);
         }
         catch (Exception exception)
         {
@@ -176,7 +176,7 @@ public partial class LoginWindow : Window
         }
         catch (HttpRequestException)
         {
-            SetStatus("No se pudo consultar la licencia de JetVenta. Revisa la conexión e intenta de nuevo.", StatusKind.Error);
+            SetStatus(ConnectionHelp.ApiUnavailableRetry, StatusKind.Error);
             return false;
         }
     }
@@ -224,7 +224,7 @@ public partial class LoginWindow : Window
         }
         catch (TaskCanceledException)
         {
-            SetStatus("La conexión tardó demasiado en responder. Espera unos segundos y vuelve a intentar.", StatusKind.Error);
+            SetStatus(ConnectionHelp.ApiUnavailableRetry, StatusKind.Error);
             return false;
         }
     }

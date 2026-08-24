@@ -16,7 +16,7 @@ public partial class MeasureSettingsWindow : Window
             WeightUnitBox.SelectedItem = WeightUnitBox.Items.OfType<ComboBoxItem>().FirstOrDefault(item => string.Equals(item.Content?.ToString(), settings?.DefaultWeightUnit, StringComparison.OrdinalIgnoreCase)) ?? WeightUnitBox.Items[0];
             StatusText.Text = "La unidad predeterminada se aplica al guardar nuevos productos de granel.";
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo cargar la configuración: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo cargar la configuración"); }
     }
 
     private async void OnSaveClick(object sender, RoutedEventArgs e)
@@ -28,7 +28,7 @@ public partial class MeasureSettingsWindow : Window
             using var response = await ApiClient.Client.PutAsJsonAsync("api/measure-settings", new { defaultWeightUnit = unit });
             StatusText.Text = response.IsSuccessStatusCode ? "Unidad de peso guardada correctamente." : await response.Content.ReadAsStringAsync();
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo guardar la unidad: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar la unidad"); }
     }
 
     private sealed record MeasureSettings(string DefaultWeightUnit);

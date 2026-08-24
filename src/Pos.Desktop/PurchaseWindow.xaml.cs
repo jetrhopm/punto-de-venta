@@ -20,18 +20,18 @@ public partial class PurchaseWindow : UserControl
     private async Task LoadSuppliersAsync()
     {
         try { SupplierComboBox.ItemsSource = await Client.GetFromJsonAsync<List<SupplierResult>>("/api/suppliers") ?? []; SupplierComboBox.SelectedIndex = 0; }
-        catch (HttpRequestException) { MessageText.Text = "No se pudieron cargar proveedores."; }
+        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailable; }
     }
     private async void OnCreateSupplierClick(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(NewSupplierTextBox.Text)) { MessageText.Text = "Escribe el nombre del proveedor."; return; }
         try { using var response = await Client.PostAsJsonAsync("/api/suppliers", new { name = NewSupplierTextBox.Text.Trim() }); if (!response.IsSuccessStatusCode) { MessageText.Text = await response.Content.ReadAsStringAsync(); return; } NewSupplierTextBox.Clear(); await LoadSuppliersAsync(); MessageText.Text = "Proveedor creado."; }
-        catch (HttpRequestException) { MessageText.Text = "No se pudo crear el proveedor."; }
+        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableNotConfirmed; }
     }
     private async void OnSearchChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
     {
         _searchCancellation?.Cancel(); _searchCancellation = new CancellationTokenSource(); var token = _searchCancellation.Token; var query = SearchTextBox.Text.Trim(); if (query.Length == 0) { ResultsList.Visibility = Visibility.Collapsed; return; }
-        try { await Task.Delay(180, token); var data = await Client.GetFromJsonAsync<List<ProductResult>>($"/api/products/search?q={Uri.EscapeDataString(query)}", token) ?? []; ResultsList.ItemsSource = data.Select(item => new ProductRow(item)).ToList(); ResultsList.Visibility = data.Count == 0 ? Visibility.Collapsed : Visibility.Visible; } catch (OperationCanceledException) { } catch (HttpRequestException) { MessageText.Text = "No se pudo consultar productos."; }
+        try { await Task.Delay(180, token); var data = await Client.GetFromJsonAsync<List<ProductResult>>($"/api/products/search?q={Uri.EscapeDataString(query)}", token) ?? []; ResultsList.ItemsSource = data.Select(item => new ProductRow(item)).ToList(); ResultsList.Visibility = data.Count == 0 ? Visibility.Collapsed : Visibility.Visible; } catch (OperationCanceledException) { } catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableRetry; }
     }
     private void OnProductSelected(object sender, MouseButtonEventArgs e)
     {
@@ -60,7 +60,7 @@ public partial class PurchaseWindow : UserControl
             MessageText.Foreground = System.Windows.Media.Brushes.DarkGreen;
             MessageText.Text = $"Compra recibida. Existencia actualizada a {updatedStock:0.###} unidades.";
         }
-        catch (HttpRequestException) { MessageText.Text = "No se pudo recibir la compra."; }
+        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableNotConfirmed; }
     }
     private void ShowSelectedProduct(ProductResult product)
     {

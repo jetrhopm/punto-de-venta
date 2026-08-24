@@ -45,7 +45,7 @@ public partial class CutWindow : UserControl
             CashierPicker.ItemsSource = new[] { new CashierOption(null, "Todos los cajeros") }.Concat(options).ToList();
             CashierPicker.SelectedIndex = 0;
         }
-        catch (HttpRequestException) { StatusText.Text = "No se pudo consultar la lista de cajeros."; }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; }
     }
 
     private async Task LoadDayAsync(bool cashierMode)
@@ -77,8 +77,8 @@ public partial class CutWindow : UserControl
             ProfitDetailText.Text = result.Profit.ToString("C2", culture);
             StatusText.Text = cashierMode ? $"Corte de cajero actualizado para {date:dd/MM/yyyy}." : $"Corte consolidado actualizado para {date:dd/MM/yyyy}.";
         }
-        catch (HttpRequestException) { StatusText.Text = "No se pudo consultar el corte. Revisa la conexión con JetVenta."; }
-        catch (Exception exception) { StatusText.Text = $"No se pudo consultar el corte: {exception.Message}"; }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableRetry; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo consultar el corte"); }
     }
 
     private sealed record CashierOption(Guid? Id, string Name);

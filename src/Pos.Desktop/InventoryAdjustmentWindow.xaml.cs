@@ -38,7 +38,7 @@ public partial class InventoryAdjustmentWindow : Window
             ResultsList.Visibility = results.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         }
         catch (OperationCanceledException) { }
-        catch (HttpRequestException) { MessageText.Text = "No hay conexión con los servicios de JetVenta. Puedes cerrar esta ventana e intentar de nuevo."; }
+        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableRetry; }
     }
 
     private void OnProductSelected(object sender, MouseButtonEventArgs e)
@@ -67,7 +67,7 @@ public partial class InventoryAdjustmentWindow : Window
             QuantityTextBox.Clear(); ReasonTextBox.Clear();
         }
         catch (OperationCanceledException) { MessageText.Text = "La conexión tardó demasiado. No se confirmó el ajuste."; }
-        catch (HttpRequestException) { MessageText.Text = "No se pudo conectar con los servicios de JetVenta. No se confirmó el ajuste."; }
+        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableNotConfirmed; }
     }
 
     private static bool TryParseDecimal(string value, out decimal result) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.CurrentCulture, out result) || decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);

@@ -11,7 +11,7 @@ public partial class DepartmentManagerWindow : Window
     private async Task LoadAsync()
     {
         try { DepartmentsGrid.ItemsSource = await ApiClient.Client.GetFromJsonAsync<List<DepartmentRow>>("/api/departments") ?? []; StatusText.Text = "Los departamentos se pueden cambiar sin afectar el historial."; }
-        catch (Exception exception) { StatusText.Text = $"No se pudieron cargar: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron cargar los departamentos"); }
     }
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e) { if (DepartmentsGrid.SelectedItem is DepartmentRow row) { _selected = row; NameBox.Text = row.Name; } }
     private void OnNewClick(object sender, RoutedEventArgs e) { _selected = null; DepartmentsGrid.SelectedItem = null; NameBox.Clear(); NameBox.Focus(); }
@@ -24,7 +24,7 @@ public partial class DepartmentManagerWindow : Window
             if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
             StatusText.Text = "Departamento guardado."; await LoadAsync(); OnNewClick(sender, e);
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo guardar: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar"); }
     }
     private async void OnDeactivateClick(object sender, RoutedEventArgs e)
     {

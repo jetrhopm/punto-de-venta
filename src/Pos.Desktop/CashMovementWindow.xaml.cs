@@ -44,7 +44,7 @@ public partial class CashMovementWindow : Window
             SupplierList.Visibility = suppliers.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         }
         catch (OperationCanceledException) { }
-        catch (HttpRequestException) { MessageText.Text = "No se pudo consultar proveedores."; }
+        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailable; }
     }
 
     private void OnSupplierSelected(object sender, MouseButtonEventArgs e)

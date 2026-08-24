@@ -53,7 +53,7 @@ public partial class LicenseWindow : Window
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or HttpRequestException or InvalidOperationException)
         {
-            SetError($"No se pudo cargar la licencia: {exception.Message}");
+            SetError(ConnectionHelp.FromException(exception, "No se pudo cargar la licencia"));
         }
         finally { SetBusy(false); }
     }
@@ -70,7 +70,7 @@ public partial class LicenseWindow : Window
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidOperationException)
         {
-            SetError("No se pudo consultar la licencia. Revisa que JetVenta esté conectado y vuelve a intentar.");
+            SetError(ConnectionHelp.ApiUnavailableRetry);
         }
         finally { SetBusy(false); }
     }

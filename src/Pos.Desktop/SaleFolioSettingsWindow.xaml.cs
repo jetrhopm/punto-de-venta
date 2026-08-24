@@ -25,7 +25,7 @@ public partial class SaleFolioSettingsWindow : Window
             NextFolioBox.Text = settings.NextFolio.ToString();
             StatusText.Text = "Los cambios se aplican a las próximas ventas confirmadas.";
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudieron cargar los folios: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron cargar los folios"); }
     }
 
     private async void OnSaveClick(object sender, RoutedEventArgs e)
@@ -56,7 +56,7 @@ public partial class SaleFolioSettingsWindow : Window
             NextFolioBox.Text = settings.NextFolio.ToString();
             StatusText.Text = "El siguiente folio fue actualizado correctamente.";
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo guardar el consecutivo: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar el consecutivo"); }
     }
 
     private sealed record SaleFolioSettings(long NextFolio, long LastIssuedFolio);

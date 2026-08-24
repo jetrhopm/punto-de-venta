@@ -34,7 +34,7 @@ public partial class DiagnosticWindow : Window
         }
         catch (Exception exception)
         {
-            StatusText.Text = $"No se pudo levantar la API: {exception.Message}";
+            StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo levantar la API. Ve a Configuración > Diagnóstico y pulsa Levantar API");
         }
         finally { RepairApiButton.IsEnabled = true; }
     }
@@ -61,14 +61,14 @@ public partial class DiagnosticWindow : Window
         }
         catch (Exception exception)
         {
-            _checks = [new("Conexión con JetVenta", "Problema", "No se pudo obtener el diagnóstico del servidor.", "Usa Reparar servicios desde la ventana de conexión.")];
+            _checks = [new("Conexión con JetVenta", "Problema", ConnectionHelp.ApiUnavailableRetry, "Pulsa Levantar API en esta ventana.")];
             ChecksGrid.ItemsSource = _checks;
             ProductsText.Text = "-";
             SalesText.Text = "-";
             BackupText.Text = "-";
             CheckedText.Text = DateTime.Now.ToString("dd/MM/yyyy HH:mm");
             _reportText = $"JETVENTA - DIAGNÓSTICO{Environment.NewLine}{exception.Message}";
-            StatusText.Text = "No se pudo completar el diagnóstico. Revisa la conexión y vuelve a intentarlo.";
+            StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
         }
     }
 

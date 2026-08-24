@@ -25,7 +25,7 @@ public partial class JoinServerWindow : Window
             MessageText.Text = $"Caja emparejada correctamente como {result.RegisterName}.";
             DialogResult = true;
         }
-        catch (HttpRequestException) { MessageText.Text = "No se pudo conectar con el servidor."; }
+        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailable; }
     }
 
     private sealed record PairResult(Guid DeviceId, Guid StoreId, Guid RegisterId, string DeviceToken, string RegisterName);

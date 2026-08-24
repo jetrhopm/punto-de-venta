@@ -44,7 +44,7 @@ public partial class ProductLookupWindow : Window
         catch (OperationCanceledException) { }
         catch (HttpRequestException)
         {
-            StatusText.Text = "No se pudo consultar el catálogo.";
+            StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
         }
     }
 

@@ -69,7 +69,7 @@ public partial class MainWindow : Window
         catch (HttpRequestException)
         {
             StoreNameText.Text = "API local no disponible";
-            StatusText.Text = "Inicia scripts/dev-up.ps1 para conectar la aplicacion a PostgreSQL.";
+            StatusText.Text = ConnectionHelp.ApiUnavailable;
         }
     }
 
@@ -221,7 +221,7 @@ public partial class MainWindow : Window
             if (saleId is null) { StatusText.Text = "No hay una compra confirmada para imprimir."; return; }
             StatusText.Text = await OutputTicketAsync(saleId.Value);
         }
-        catch (HttpRequestException) { StatusText.Text = "No se pudo consultar la última compra confirmada."; }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableRetry; }
         catch (Exception exception) { StatusText.Text = $"No se pudo imprimir el último ticket: {exception.Message}"; }
     }
 
@@ -314,7 +314,7 @@ public partial class MainWindow : Window
             };
             return response.IsSuccessStatusCode;
         }
-        catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API."; return false; }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; return false; }
         catch (Exception exception) { StatusText.Text = $"No se pudo abrir caja: {exception.Message}"; return false; }
     }
 
@@ -368,7 +368,7 @@ public partial class MainWindow : Window
             }
             await NotifyCashLimitAsync();
         }
-        catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API."; }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; }
     }
 
     private async void OnCloseShiftClick(object sender, RoutedEventArgs e)
@@ -381,7 +381,7 @@ public partial class MainWindow : Window
         if (!SessionContext.HasPermission("CloseShift")) { StatusText.Text = "No tienes permiso para cerrar turnos."; return false; }
         HttpResponseMessage summaryResponse;
         try { summaryResponse = await Client.GetAsync("/api/shifts/summary"); }
-        catch (HttpRequestException) { StatusText.Text = "No se pudo consultar la caja. La API sigue sin responder y el turno no se cerró."; return false; }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableShiftProtected; return false; }
         if (!summaryResponse.IsSuccessStatusCode)
         {
             StatusText.Text = await ReadApiMessageAsync(summaryResponse);
@@ -394,7 +394,7 @@ public partial class MainWindow : Window
         if (summary is null) { StatusText.Text = "No se pudo calcular el efectivo esperado."; return false; }
         CutSettingsResponse? cutSettings = null;
         try { cutSettings = await Client.GetFromJsonAsync<CutSettingsResponse>("/api/cut-settings"); }
-        catch (HttpRequestException) { StatusText.Text = "No se pudo consultar la configuración de corte."; return false; }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableRetry; return false; }
         decimal? countedCash;
         if (cutSettings?.RequireCashCountOnClose != false)
         {
@@ -427,7 +427,7 @@ public partial class MainWindow : Window
             }
             return true;
         }
-        catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API."; return false; }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; return false; }
     }
 
     private async void OnProductSearchTextChanged(object sender, TextChangedEventArgs e)
@@ -446,7 +446,7 @@ public partial class MainWindow : Window
             StatusText.Text = results.Count == 0 ? "No se encontraron productos." : $"{results.Count} producto(s) encontrado(s).";
         }
         catch (OperationCanceledException) { }
-        catch (HttpRequestException) { StatusText.Text = "No se pudo consultar el catalogo."; }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableRetry; }
         catch (Exception exception) { StatusText.Text = $"No se pudo procesar la busqueda: {exception.Message}"; }
     }
 
@@ -516,7 +516,7 @@ public partial class MainWindow : Window
         }
         catch (HttpRequestException)
         {
-            StatusText.Text = "No se pudo consultar el catalogo.";
+            StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
             FocusProductInput();
         }
     }
@@ -564,7 +564,7 @@ public partial class MainWindow : Window
         }
         catch (HttpRequestException)
         {
-            StatusText.Text = "No se pudo registrar el producto rapido.";
+            StatusText.Text = ConnectionHelp.ApiUnavailableNotConfirmed;
             FocusProductInput();
         }
     }
@@ -704,7 +704,7 @@ public partial class MainWindow : Window
             if (summary is null || summary.ExpectedCash < settings.CashLimit) return;
             MessageBox.Show(settings.CashLimitMessage, "Límite de efectivo en caja", MessageBoxButton.OK, MessageBoxImage.Information);
         }
-        catch (HttpRequestException) { }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableRetry; }
     }
 
     private sealed record ProductSearchResult(Guid Id, string Code, string Description, decimal Price, decimal Stock = 0m);
@@ -768,7 +768,7 @@ public partial class MainWindow : Window
         }
         catch (HttpRequestException)
         {
-            StatusText.Text = "No se pudieron recuperar los tickets pendientes.";
+            StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
         }
     }
 
@@ -798,7 +798,7 @@ public partial class MainWindow : Window
         }
         catch (HttpRequestException)
         {
-            StatusText.Text = "No se pudo crear el ticket. Comprueba la conexión local.";
+            StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
         }
     }
 
@@ -849,7 +849,7 @@ public partial class MainWindow : Window
         }
         catch (HttpRequestException)
         {
-            if (showError) StatusText.Text = "No se pudo guardar el ticket. Revisa la conexión antes de continuar.";
+            if (showError) StatusText.Text = ConnectionHelp.ApiUnavailableNotConfirmed;
             return false;
         }
         finally
@@ -890,7 +890,7 @@ public partial class MainWindow : Window
         }
         catch (HttpRequestException)
         {
-            StatusText.Text = "No se pudo descartar el ticket.";
+            StatusText.Text = ConnectionHelp.ApiUnavailableNotConfirmed;
         }
         finally
         {
@@ -936,7 +936,7 @@ public partial class MainWindow : Window
             }
             FocusProductInput();
         }
-        catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API para confirmar la venta."; }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableNotConfirmed; }
     }
 
     private static async Task<bool> IsMercadoPagoEnabledAsync()
@@ -957,7 +957,7 @@ public partial class MainWindow : Window
             StatusText.Text = response.IsSuccessStatusCode ? "Venta cancelada e inventario revertido." : await response.Content.ReadAsStringAsync();
             if (response.IsSuccessStatusCode) _lastSaleId = null;
         }
-        catch (HttpRequestException) { StatusText.Text = "No se pudo conectar con la API."; }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; }
     }
 
     private void OnReturnLastSaleClick(object sender, RoutedEventArgs e)
@@ -1016,9 +1016,11 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            StatusText.Text += explainIfDisabled
-                ? $" No se pudo abrir el cajón: {exception.Message}"
-                : $" La operación quedó registrada, pero no se pudo abrir el cajón: {exception.Message}";
+            StatusText.Text += exception is HttpRequestException
+                ? $" {ConnectionHelp.ApiUnavailableRetry}"
+                : explainIfDisabled
+                    ? $" No se pudo abrir el cajón: {exception.Message}"
+                    : $" La operación quedó registrada, pero no se pudo abrir el cajón: {exception.Message}";
             return false;
         }
     }
@@ -1066,7 +1068,7 @@ public partial class MainWindow : Window
         }
         catch (HttpRequestException)
         {
-            StatusText.Text = "No se pudo consultar el turno abierto.";
+            StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
             return null;
         }
     }
@@ -1080,7 +1082,7 @@ public partial class MainWindow : Window
         }
         catch (HttpRequestException)
         {
-            StatusText.Text = "No se pudo consultar el turno abierto.";
+            StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
             return null;
         }
     }
@@ -1100,7 +1102,7 @@ public partial class MainWindow : Window
             var hasOpenShift = await HasOpenShiftAsync();
             if (hasOpenShift is null)
             {
-                MessageBox.Show("No se pudo comprobar el estado de la caja. JetVenta permanece abierto para evitar un cierre incierto.", "No se puede salir", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show($"No se pudo comprobar el estado de la caja.{Environment.NewLine}{Environment.NewLine}{ConnectionHelp.ApiUnavailableShiftProtected}", "No se puede salir", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -1135,7 +1137,7 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            StatusText.Text = $"No se pudo cerrar JetVenta: {exception.Message}";
+            StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo cerrar JetVenta");
             MessageBox.Show(StatusText.Text, "No se puede salir", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally { _exitDialogOpen = false; }

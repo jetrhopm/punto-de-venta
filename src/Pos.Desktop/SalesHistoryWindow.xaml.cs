@@ -39,7 +39,7 @@ public partial class SalesHistoryWindow : UserControl
             CashierCombo.SelectedIndex = 0;
             await SearchAsync();
         }
-        catch (Exception exception) { MessageBox.Show($"No se pudo cargar el historial: {exception.Message}", "Historial", MessageBoxButton.OK, MessageBoxImage.Error); }
+        catch (Exception exception) { MessageBox.Show(ConnectionHelp.FromException(exception, "No se pudo cargar el historial"), "Historial", MessageBoxButton.OK, MessageBoxImage.Error); }
     }
 
     private async void OnSearchClick(object sender, RoutedEventArgs e) => await SearchAsync();
@@ -59,7 +59,7 @@ public partial class SalesHistoryWindow : UserControl
             ResultText.Text = $"{rows.Count:N0} venta(s)";
             _selected = null; _detail = null; LinesList.ItemsSource = null; DetailText.Text = "Selecciona una venta para consultar sus partidas."; PaymentText.Text = string.Empty;
         }
-        catch (Exception exception) { MessageBox.Show($"No se pudo consultar el historial: {exception.Message}", "Historial", MessageBoxButton.OK, MessageBoxImage.Error); }
+        catch (Exception exception) { MessageBox.Show(ConnectionHelp.FromException(exception, "No se pudo consultar el historial"), "Historial", MessageBoxButton.OK, MessageBoxImage.Error); }
     }
 
     private async void OnSaleSelected(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -74,7 +74,7 @@ public partial class SalesHistoryWindow : UserControl
             DetailText.Text = $"Folio: {row.ShortId}\nCajero: {_detail.Cashier}\nFecha: {_detail.CreatedAtUtc.ToLocalTime():dd/MM/yyyy HH:mm}\nTotal: {_detail.Total:C2}\nEstado: {_detail.Status}";
             PaymentText.Text = "Pago: " + string.Join(" | ", _detail.Payments.Select(item => $"{item.Method} {item.Amount:C2}"));
         }
-        catch (Exception exception) { DetailText.Text = $"No se pudo cargar el detalle: {exception.Message}"; }
+        catch (Exception exception) { DetailText.Text = ConnectionHelp.FromException(exception, "No se pudo cargar el detalle"); }
     }
 
     private async void OnCancelClick(object sender, RoutedEventArgs e)

@@ -71,7 +71,7 @@ public partial class InventoryWindow : UserControl
             StatusText.Text = "Actualizando inventario...";
             using var response = await ApiClient.Client.GetAsync($"api/inventory/catalog?q={query}&status={Uri.EscapeDataString(status)}&sort={_sort}&descending={_descending.ToString().ToLowerInvariant()}&page={_page}", cancellation.Token);
             if (!ReferenceEquals(_loadCancellation, cancellation)) return;
-            if (!response.IsSuccessStatusCode) { StatusText.Text = "No se pudo consultar el inventario."; return; }
+            if (!response.IsSuccessStatusCode) { StatusText.Text = ConnectionHelp.ApiUnavailableRetry; return; }
             var result = await response.Content.ReadFromJsonAsync<InventoryPage>(cancellation.Token);
             if (!ReferenceEquals(_loadCancellation, cancellation)) return;
             if (result is null) return;
@@ -83,8 +83,8 @@ public partial class InventoryWindow : UserControl
         }
         catch (OperationCanceledException) when (!ReferenceEquals(_loadCancellation, cancellation)) { }
         catch (OperationCanceledException) { StatusText.Text = "La conexión tardó demasiado. Puedes seguir usando JetVenta e intentar actualizar después."; }
-        catch (HttpRequestException) { StatusText.Text = "No hay conexión con los servicios de JetVenta. Puedes cerrar esta ventana o intentar actualizar."; }
-        catch (Exception exception) { StatusText.Text = $"No se pudo consultar el inventario: {exception.Message}"; }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableRetry; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo consultar el inventario"); }
         finally
         {
             if (ReferenceEquals(_loadCancellation, cancellation)) _loadCancellation = null;
@@ -105,13 +105,13 @@ public partial class InventoryWindow : UserControl
         try
         {
             using var response = await ApiClient.Client.PostAsJsonAsync("api/inventory/limits", new { operationId = Guid.NewGuid(), productId = row.ProductId, minimumStock = minimum, maximumStock = maximum });
-            if (!response.IsSuccessStatusCode) { StatusText.Text = "No se pudieron guardar los límites. Se restaurarán los valores confirmados."; await LoadAsync(); return; }
+            if (!response.IsSuccessStatusCode) { StatusText.Text = ConnectionHelp.ApiUnavailableNotConfirmed; await LoadAsync(); return; }
             row.MinimumStock = minimum; row.MaximumStock = maximum;
             StatusText.Text = $"Límites actualizados para {row.Description}.";
         }
         catch (OperationCanceledException) { StatusText.Text = "La conexión tardó demasiado al guardar los límites. Se recargará el inventario para confirmar el resultado."; await LoadAsync(); }
-        catch (HttpRequestException) { StatusText.Text = "No hay conexión con los servicios de JetVenta. No se modificó el inventario."; await LoadAsync(); }
-        catch (Exception exception) { StatusText.Text = $"No se pudieron guardar los límites: {exception.Message}"; await LoadAsync(); }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableNotConfirmed; await LoadAsync(); }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron guardar los límites"); await LoadAsync(); }
         finally { _saving = false; }
     }
 
@@ -158,8 +158,8 @@ public partial class InventoryWindow : UserControl
             await LoadAsync();
         }
         catch (OperationCanceledException) { StatusText.Text = "La conexión tardó demasiado. Se recargará el inventario para confirmar si el ajuste se registró."; await LoadAsync(); }
-        catch (HttpRequestException) { StatusText.Text = "No hay conexión con los servicios de JetVenta. No se confirmó el ajuste; el inventario se recargará al reconectar."; await LoadAsync(); }
-        catch (Exception exception) { StatusText.Text = $"No se pudo guardar el ajuste: {exception.Message}"; await LoadAsync(); }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableNotConfirmed; await LoadAsync(); }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar el ajuste"); await LoadAsync(); }
         finally { _saving = false; }
     }
 

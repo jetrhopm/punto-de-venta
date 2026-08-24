@@ -68,7 +68,7 @@ public partial class UserAdministrationWindow : Window
     private async Task LoadUsersAsync()
     {
         try { UsersGrid.ItemsSource = await ApiClient.Client.GetFromJsonAsync<List<UserRow>>("api/users") ?? []; }
-        catch (Exception exception) { StatusText.Text = $"No se pudieron cargar los usuarios: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron cargar los usuarios"); }
     }
 
     private void OnUserSelected(object sender, SelectionChangedEventArgs e)
@@ -89,7 +89,7 @@ public partial class UserAdministrationWindow : Window
             StatusText.Text = response.IsSuccessStatusCode ? "Usuario creado correctamente." : await response.Content.ReadAsStringAsync();
             if (response.IsSuccessStatusCode) { NewUserBox.Clear(); NewNameBox.Clear(); NewPasswordBox.Clear(); NewAdminBox.IsChecked = false; await LoadUsersAsync(); }
         }
-        catch (Exception exception) { StatusText.Text = exception.Message; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar el usuario"); }
     }
 
     private async void OnToggleStatusClick(object sender, RoutedEventArgs e)

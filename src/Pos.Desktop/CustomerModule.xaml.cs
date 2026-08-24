@@ -43,7 +43,7 @@ public partial class CustomerModule : UserControl
             var data = await Client.GetFromJsonAsync<List<CustomerResult>>($"/api/customers?q={Uri.EscapeDataString(SearchTextBox.Text.Trim())}", cancellationToken) ?? [];
             CustomersList.ItemsSource = data.Select(item => new CustomerRow(item)).ToList();
         }
-        catch (HttpRequestException) { SelectedSummaryText.Text = "No se pudieron consultar los clientes."; }
+        catch (HttpRequestException) { SelectedSummaryText.Text = ConnectionHelp.ApiUnavailable; }
     }
 
     private void OnCustomerSelected(object sender, MouseButtonEventArgs e)
@@ -65,7 +65,7 @@ public partial class CustomerModule : UserControl
             SelectedSummaryText.Text = response.IsSuccessStatusCode ? "Cliente creado correctamente." : await response.Content.ReadAsStringAsync();
             if (response.IsSuccessStatusCode) { NameTextBox.Clear(); LimitTextBox.Text = "0.00"; await LoadCustomersAsync(); }
         }
-        catch (HttpRequestException) { SelectedSummaryText.Text = "No se pudo conectar con la API."; }
+        catch (HttpRequestException) { SelectedSummaryText.Text = ConnectionHelp.ApiUnavailable; }
     }
 
     private async void OnPaymentClick(object sender, RoutedEventArgs e)
@@ -78,7 +78,7 @@ public partial class CustomerModule : UserControl
             SelectedSummaryText.Text = response.IsSuccessStatusCode ? "Abono registrado correctamente." : await response.Content.ReadAsStringAsync();
             if (response.IsSuccessStatusCode) { AmountTextBox.Clear(); await LoadCustomersAsync(); }
         }
-        catch (HttpRequestException) { SelectedSummaryText.Text = "No se pudo conectar con la API."; }
+        catch (HttpRequestException) { SelectedSummaryText.Text = ConnectionHelp.ApiUnavailable; }
     }
 
     private static bool TryParse(string value, out decimal result) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.CurrentCulture, out result) || decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);

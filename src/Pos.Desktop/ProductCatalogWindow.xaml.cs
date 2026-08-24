@@ -34,7 +34,7 @@ public partial class ProductCatalogWindow : UserControl
                 _defaultProfitPercent = options.DefaultProfitPercent;
             }
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudieron cargar las opciones de precios: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron cargar las opciones de precios"); }
     }
 
     private async Task LoadMeasureSettingsAsync()
@@ -45,7 +45,7 @@ public partial class ProductCatalogWindow : UserControl
             if (!string.IsNullOrWhiteSpace(settings?.DefaultWeightUnit)) _configuredWeightUnit = settings.DefaultWeightUnit;
             WeightUnitHintText.Text = $"Granel usará {_configuredWeightUnit.ToLowerInvariant()} según Configuración.";
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo cargar la unidad de peso: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo cargar la unidad de peso"); }
     }
 
     private async Task LoadDepartmentsAsync()
@@ -59,7 +59,7 @@ public partial class ProductCatalogWindow : UserControl
             DepartmentFilterBox.SelectedIndex = 0;
             DepartmentBox.ItemsSource = _departments;
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudieron cargar los departamentos: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron cargar los departamentos"); }
     }
 
     public async Task ReloadDepartmentsAsync() => await LoadDepartmentsAsync();
@@ -86,7 +86,7 @@ public partial class ProductCatalogWindow : UserControl
             StatusText.Text = total == 0 ? "No hay productos que coincidan con los filtros." : "Selecciona un producto para editarlo. La página muestra hasta 500 productos.";
         }
         catch (OperationCanceledException) { }
-        catch (Exception exception) { StatusText.Text = $"No se pudo cargar el catálogo: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo cargar el catálogo"); }
     }
 
     private string CurrentSort() => (SortBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "description";
@@ -153,7 +153,7 @@ public partial class ProductCatalogWindow : UserControl
             if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
             var code = CodeBox.Text.Trim(); ClearForm(); SearchBox.Text = code; _page = 1; await LoadCatalogAsync(); StatusText.Text = "Producto guardado correctamente.";
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo guardar el producto: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar el producto"); }
     }
 
     private async void OnDeactivateClick(object sender, RoutedEventArgs e)
@@ -166,7 +166,7 @@ public partial class ProductCatalogWindow : UserControl
             if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
             ClearForm(); await LoadCatalogAsync(); StatusText.Text = "Producto desactivado. El historial se conserva.";
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo desactivar el producto: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo desactivar el producto"); }
     }
 
     private bool TryReadForm(out object command)

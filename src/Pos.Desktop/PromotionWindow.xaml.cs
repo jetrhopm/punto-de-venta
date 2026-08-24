@@ -31,7 +31,7 @@ public partial class PromotionWindow : Window
     private async Task LoadPromotionsAsync()
     {
         try { PromotionsGrid.ItemsSource = await ApiClient.Client.GetFromJsonAsync<List<PromotionRow>>("/api/promotions") ?? []; StatusText.Text = "Las promociones se aplican durante el cobro y quedan auditadas."; }
-        catch (Exception exception) { StatusText.Text = $"No se pudieron cargar las promociones: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron cargar las promociones"); }
     }
     private void OnPromotionSelected(object sender, SelectionChangedEventArgs e) { _selectedPromotion = PromotionsGrid.SelectedItem as PromotionRow; }
     private async void OnSaveClick(object sender, RoutedEventArgs e)
@@ -43,14 +43,14 @@ public partial class PromotionWindow : Window
         if (type == "percent" && (percent <= 0 || percent >= 100) || type == "amount" && amount <= 0 || type == "buyPay" && (buy <= 0 || pay <= 0 || pay >= buy)) { StatusText.Text = "Revisa los valores de la promoción."; return; }
         var body = new { productId = _selectedProduct.Id, name = NameBox.Text.Trim(), percent, discountAmount = amount, buyQuantity = buy, payQuantity = pay, startsAtUtc = ToUtc(StartDate.SelectedDate, false), endsAtUtc = ToUtc(EndDate.SelectedDate, true) };
         try { using var response = await ApiClient.Client.PostAsJsonAsync("/api/promotions", body); if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; } StatusText.Text = "Promoción guardada."; ClearForm(); await LoadPromotionsAsync(); }
-        catch (Exception exception) { StatusText.Text = $"No se pudo guardar: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar"); }
     }
     private async void OnDeactivateClick(object sender, RoutedEventArgs e)
     {
         if (_selectedPromotion is null) { StatusText.Text = "Selecciona una promoción."; return; }
         if (MessageBox.Show($"¿Desactivar {_selectedPromotion.Name}?", "Desactivar promoción", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         try { using var response = await ApiClient.Client.DeleteAsync($"/api/promotions/{_selectedPromotion.Id}"); if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; } await LoadPromotionsAsync(); StatusText.Text = "Promoción desactivada."; }
-        catch (Exception exception) { StatusText.Text = $"No se pudo desactivar: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo desactivar"); }
     }
     private void ClearForm() { _selectedProduct = null; ProductBox.Clear(); NameBox.Clear(); StartDate.SelectedDate = null; EndDate.SelectedDate = null; TypeBox.SelectedIndex = 0; ValueOneBox.Text = "10"; ValueTwoBox.Text = "0"; }
     private static DateTimeOffset? ToUtc(DateTime? date, bool end) { if (date is null) return null; var local = DateTime.SpecifyKind(date.Value.Date.AddDays(end ? 1 : 0), DateTimeKind.Local); return new DateTimeOffset(local).ToUniversalTime(); }

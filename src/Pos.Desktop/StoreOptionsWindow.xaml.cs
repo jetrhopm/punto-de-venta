@@ -27,7 +27,7 @@ public partial class StoreOptionsWindow : Window
             NoticeEveryBox.Text = settings.OccasionalNoticeEverySales.ToString(CultureInfo.InvariantCulture);
             RefreshEnabledState();
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudieron cargar las opciones: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron cargar las opciones"); }
     }
 
     private void OnRoundChanged(object sender, RoutedEventArgs e) => RefreshEnabledState();
@@ -56,7 +56,7 @@ public partial class StoreOptionsWindow : Window
             if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
             StatusText.Text = "Opciones guardadas correctamente.";
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudieron guardar las opciones: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron guardar las opciones"); }
     }
 
     private sealed record StoreOptions(bool InventoryEnabled, string InventoryCostMethod, bool CreditSalesEnabled, bool CommonProductsEnabled, bool AutoPriceWithProfit, decimal DefaultProfitPercent, bool RoundSaleAmounts, string RoundingMode, string OccasionalNotice, int OccasionalNoticeEverySales);

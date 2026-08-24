@@ -73,7 +73,7 @@ public partial class PriceVerifierWindow : Window
         }
         catch (HttpRequestException)
         {
-            StatusText.Text = "No se pudo consultar el catálogo.";
+            StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
         }
     }
 

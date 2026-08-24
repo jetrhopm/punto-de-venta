@@ -28,14 +28,14 @@ public partial class InventoryMovementsWindow : Window
         try
         {
             using var response = await ApiClient.Client.GetAsync($"api/inventory/movements?q={Uri.EscapeDataString(SearchBox.Text.Trim())}&page={_page}");
-            if (!response.IsSuccessStatusCode) { StatusText.Text = "No se pudieron consultar los movimientos."; return; }
+            if (!response.IsSuccessStatusCode) { StatusText.Text = ConnectionHelp.ApiUnavailableRetry; return; }
             var result = await response.Content.ReadFromJsonAsync<MovementPage>();
             if (result is null) return;
             _totalPages = result.TotalPages; MovementsGrid.ItemsSource = result.Items;
             PageInfoText.Text = result.TotalCount == 0 ? "Sin movimientos." : $"Página {result.Page} de {result.TotalPages}. {result.TotalCount:N0} movimiento(s).";
             StatusText.Text = "Consulta actualizada.";
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudieron consultar los movimientos: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron consultar los movimientos"); }
     }
 
     private sealed class MovementPage { public List<MovementRow> Items { get; set; } = []; public int Page { get; set; } public int TotalPages { get; set; } public int TotalCount { get; set; } }

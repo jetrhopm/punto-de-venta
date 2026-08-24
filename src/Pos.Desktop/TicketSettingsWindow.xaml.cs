@@ -36,7 +36,7 @@ public partial class TicketSettingsWindow : Window
             _loaded = true;
             UpdatePreview();
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo cargar la configuración: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo cargar la configuración"); }
     }
 
     private void OnPreviewChanged(object sender, RoutedEventArgs e)
@@ -70,7 +70,7 @@ public partial class TicketSettingsWindow : Window
             ApiClient.SetPrinterTicketWidth(widthMm);
             StatusText.Text = "Diseño del ticket guardado. Las próximas ventas usarán estos datos.";
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo guardar: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar"); }
     }
 
     private void OnPrintSampleClick(object sender, RoutedEventArgs e)

@@ -16,7 +16,7 @@ public partial class PaymentMethodSettingsWindow : Window
             TransferBox.IsChecked = settings?.TransferEnabled ?? true; CreditBox.IsChecked = settings?.CreditEnabled ?? true;
             StatusText.Text = "Los cambios se aplican a las siguientes ventas.";
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo cargar la configuración: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo cargar la configuración"); }
     }
 
     private async void OnSaveClick(object sender, RoutedEventArgs e)
@@ -28,7 +28,7 @@ public partial class PaymentMethodSettingsWindow : Window
             using var response = await ApiClient.Client.PutAsJsonAsync("api/payment-method-settings", command);
             StatusText.Text = response.IsSuccessStatusCode ? "Formas de pago guardadas correctamente." : await response.Content.ReadAsStringAsync();
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo guardar la configuración: {exception.Message}"; }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar la configuración"); }
     }
 
     private sealed record PaymentSettings(bool CashEnabled, bool CardEnabled, bool TransferEnabled, bool CreditEnabled);

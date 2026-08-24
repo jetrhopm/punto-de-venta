@@ -91,7 +91,7 @@ public partial class ReportsWindow : UserControl
         }
         catch (Exception exception)
         {
-            MessageBox.Show($"No se pudo consultar el reporte: {exception.Message}", "Reportes", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(ConnectionHelp.FromException(exception, "No se pudo consultar el reporte"), "Reportes", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

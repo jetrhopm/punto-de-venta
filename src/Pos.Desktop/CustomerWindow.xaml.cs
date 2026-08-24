@@ -29,7 +29,7 @@ public partial class CustomerWindow : Window
     private async Task LoadCustomersAsync(CancellationToken cancellationToken = default)
     {
         try { var data = await Client.GetFromJsonAsync<List<CustomerResult>>($"/api/customers?q={Uri.EscapeDataString(SearchTextBox.Text.Trim())}", cancellationToken) ?? []; CustomersList.ItemsSource = data.Select(item => new CustomerRow(item)).ToList(); }
-        catch (HttpRequestException) { MessageText.Text = "No se pudo consultar clientes."; }
+        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailable; }
     }
     private void OnCustomerSelected(object sender, MouseButtonEventArgs e)
     {
@@ -48,7 +48,7 @@ public partial class CustomerWindow : Window
             MessageText.Text = create.IsSuccessStatusCode ? "Cliente creado correctamente." : await create.Content.ReadAsStringAsync();
             if (create.IsSuccessStatusCode) { NameTextBox.Clear(); LimitTextBox.Text = "0.00"; await LoadCustomersAsync(); }
         }
-        catch (HttpRequestException) { MessageText.Text = "No se pudo conectar con la API."; }
+        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailable; }
     }
     private async void OnPaymentClick(object sender, RoutedEventArgs e)
     {
@@ -60,7 +60,7 @@ public partial class CustomerWindow : Window
             MessageText.Text = payment.IsSuccessStatusCode ? "Abono registrado correctamente." : await payment.Content.ReadAsStringAsync();
             if (payment.IsSuccessStatusCode) { AmountTextBox.Clear(); await LoadCustomersAsync(); }
         }
-        catch (HttpRequestException) { MessageText.Text = "No se pudo conectar con la API."; }
+        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailable; }
     }
     private static bool TryParse(string value, out decimal result) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.CurrentCulture, out result) || decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
     private sealed record CustomerResult(Guid Id, string Name, string? Phone, string? Email, string? TaxId, decimal CreditLimit, bool CreditEnabled, bool IsActive, decimal Balance);
