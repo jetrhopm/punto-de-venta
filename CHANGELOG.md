@@ -1,6 +1,9 @@
 # Changelog
 
 ## Sin liberar
+- Se corrige el pago mixto para respetar las formas de pago activadas por el administrador.
+- Se reorganizan los importes de efectivo, tarjeta y transferencia en filas independientes para evitar texto encimado o recortado.
+- Se publica la versión 2.1.3 para que Windows detecte esta corrección como actualización.
 - Se agregan autorización offline de emisores adicionales y respaldo cifrado de recuperación para no depender de una sola computadora emisora de licencias.
 - Se corrige Producto común desde la venta: ahora se conserva como artículo temporal ligado al ticket, sin aparecer en el catálogo ni modificar inventario, existencias o movimientos. Su partida permanece disponible para historial, reimpresión, cancelación y devolución.
 - Registrar producto mantiene el flujo permanente y agrega el artículo al catálogo e inventario.

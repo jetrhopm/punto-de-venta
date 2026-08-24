@@ -12,6 +12,10 @@ public partial class CashWindow : Window
     private readonly decimal _total;
     private bool _controlsReady;
     private string _paymentMethod = "Cash";
+    private bool _cashEnabled = true;
+    private bool _cardEnabled = true;
+    private bool _transferEnabled = true;
+    private bool _creditEnabled = true;
     public decimal? Received { get; private set; }
     public decimal CardAmount { get; private set; }
     public decimal TransferAmount { get; private set; }
@@ -41,12 +45,17 @@ public partial class CashWindow : Window
         try
         {
             var settings = await ApiClient.Client.GetFromJsonAsync<PaymentSettings>("api/payment-method-settings") ?? new PaymentSettings(true, true, true, true);
-            CashMethodButton.Visibility = settings.CashEnabled ? Visibility.Visible : Visibility.Collapsed;
-            CardMethodButton.Visibility = settings.CardEnabled ? Visibility.Visible : Visibility.Collapsed;
-            TransferMethodButton.Visibility = settings.TransferEnabled ? Visibility.Visible : Visibility.Collapsed;
-            CreditButton.Visibility = settings.CreditEnabled ? Visibility.Visible : Visibility.Collapsed;
-            MixedMethodButton.Visibility = (settings.CashEnabled ? 1 : 0) + (settings.CardEnabled ? 1 : 0) + (settings.TransferEnabled ? 1 : 0) >= 2 ? Visibility.Visible : Visibility.Collapsed;
-            _paymentMethod = settings.CashEnabled ? "Cash" : settings.CardEnabled ? "Card" : settings.TransferEnabled ? "Transfer" : "Credit";
+            _cashEnabled = settings.CashEnabled;
+            _cardEnabled = settings.CardEnabled;
+            _transferEnabled = settings.TransferEnabled;
+            _creditEnabled = settings.CreditEnabled;
+            CashMethodButton.Visibility = _cashEnabled ? Visibility.Visible : Visibility.Collapsed;
+            CardMethodButton.Visibility = _cardEnabled ? Visibility.Visible : Visibility.Collapsed;
+            TransferMethodButton.Visibility = _transferEnabled ? Visibility.Visible : Visibility.Collapsed;
+            CreditButton.Visibility = _creditEnabled ? Visibility.Visible : Visibility.Collapsed;
+            MixedMethodButton.Visibility = new[] { _cashEnabled, _cardEnabled, _transferEnabled }.Count(enabled => enabled) >= 2 ? Visibility.Visible : Visibility.Collapsed;
+            _paymentMethod = _cashEnabled ? "Cash" : _cardEnabled ? "Card" : _transferEnabled ? "Transfer" : "Credit";
+            ApplyMixedPaymentFields();
         }
         catch
         {
@@ -61,13 +70,22 @@ public partial class CashWindow : Window
     private void UpdatePaymentView()
     {
         MethodText.Text = _paymentMethod switch { "Card" => "Pago completo con tarjeta", "Transfer" => "Pago completo por transferencia", "Mixed" => "Distribuye el total entre efectivo, tarjeta y transferencia", "Credit" => "Venta a crédito para el cliente seleccionado", _ => "Pago completo en efectivo" };
-        CashPanel.Visibility = _paymentMethod is "Cash" or "Mixed" ? Visibility.Visible : Visibility.Collapsed;
+        CashPanel.Visibility = _cashEnabled && (_paymentMethod is "Cash" or "Mixed") ? Visibility.Visible : Visibility.Collapsed;
         MixedPanel.Visibility = _paymentMethod == "Mixed" ? Visibility.Visible : Visibility.Collapsed;
         MarkSelectedMethod(CashMethodButton, _paymentMethod == "Cash");
         MarkSelectedMethod(CardMethodButton, _paymentMethod == "Card");
         MarkSelectedMethod(TransferMethodButton, _paymentMethod == "Transfer");
         MarkSelectedMethod(MixedMethodButton, _paymentMethod == "Mixed");
         UpdateAmounts();
+    }
+
+    private void ApplyMixedPaymentFields()
+    {
+        CardAmountLabel.Visibility = _cardEnabled ? Visibility.Visible : Visibility.Collapsed;
+        CardAmountTextBox.Visibility = _cardEnabled ? Visibility.Visible : Visibility.Collapsed;
+        TransferAmountLabel.Visibility = _transferEnabled ? Visibility.Visible : Visibility.Collapsed;
+        TransferAmountTextBox.Visibility = _transferEnabled ? Visibility.Visible : Visibility.Collapsed;
+        MixedCashDueText.Visibility = _cashEnabled ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private static void MarkSelectedMethod(Button button, bool selected)
@@ -82,7 +100,7 @@ public partial class CashWindow : Window
     private void UpdateAmounts()
     {
         if (!_controlsReady) return;
-        var received = ParseAmount(ReceivedTextBox.Text); var card = _paymentMethod == "Card" ? _total : ParseAmount(CardAmountTextBox.Text); var transfer = _paymentMethod == "Transfer" ? _total : ParseAmount(TransferAmountTextBox.Text);
+        var received = ParseAmount(ReceivedTextBox.Text); var card = _paymentMethod == "Card" ? _total : _cardEnabled ? ParseAmount(CardAmountTextBox.Text) : 0m; var transfer = _paymentMethod == "Transfer" ? _total : _transferEnabled ? ParseAmount(TransferAmountTextBox.Text) : 0m;
         var cashDue = _paymentMethod switch { "Card" or "Transfer" => 0m, "Mixed" => _total - card - transfer, _ => _total };
         if (_paymentMethod == "Mixed") MixedCashDueText.Text = cashDue >= 0m ? $"Efectivo requerido: ${cashDue:0.00}" : "Los importes superan el total de la venta.";
         var change = _paymentMethod is "Cash" or "Mixed" ? received - cashDue : 0m;
@@ -96,7 +114,7 @@ public partial class CashWindow : Window
     private void Confirm(bool print)
     {
         if (_paymentMethod == "Credit") { OnCreditClick(this, new RoutedEventArgs()); return; }
-        var received = ParseAmount(ReceivedTextBox.Text); var card = _paymentMethod == "Card" ? _total : ParseAmount(CardAmountTextBox.Text); var transfer = _paymentMethod == "Transfer" ? _total : ParseAmount(TransferAmountTextBox.Text);
+        var received = ParseAmount(ReceivedTextBox.Text); var card = _paymentMethod == "Card" ? _total : _cardEnabled ? ParseAmount(CardAmountTextBox.Text) : 0m; var transfer = _paymentMethod == "Transfer" ? _total : _transferEnabled ? ParseAmount(TransferAmountTextBox.Text) : 0m;
         var cashDue = _paymentMethod switch { "Card" or "Transfer" => 0m, "Mixed" => _total - card - transfer, _ => _total };
         if (cashDue < 0m || card < 0m || transfer < 0m || received < cashDue || decimal.Round(cashDue + card + transfer, 2) != _total) { MessageText.Text = "Verifica que los importes cubran exactamente el total y que el efectivo recibido sea suficiente."; return; }
         Received = decimal.Round(received, 2); CardAmount = decimal.Round(card, 2); TransferAmount = decimal.Round(transfer, 2); PrintRequested = print; DialogResult = true;
@@ -104,6 +122,11 @@ public partial class CashWindow : Window
 
     private void OnCreditClick(object sender, RoutedEventArgs e)
     {
+        if (!_creditEnabled)
+        {
+            MessageText.Text = "El pago a crédito está desactivado en la configuración.";
+            return;
+        }
         if (!SessionContext.IsAdministrator && !SessionContext.HasPermission("SellOnCredit"))
         {
             MessageText.Text = "No tienes permiso para cobrar a crédito.";
