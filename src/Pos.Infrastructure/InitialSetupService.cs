@@ -4,7 +4,7 @@ using System.Data;
 
 namespace Pos.Infrastructure;
 
-public sealed record InitialSetupCommand(string StoreName, string BusinessType, string UserName, string Password, string AdministratorName, string RegisterName);
+public sealed record InitialSetupCommand(string StoreName, string BusinessType, string UserName, string Password, string AdministratorName, string RegisterName, string CurrencySymbol = "$", string DefaultWeightUnit = "Kilogramo");
 public sealed record InitialSetupResult(Guid StoreId, Guid AdministratorId, Guid RegisterId);
 
 public sealed class InitialSetupService(PosDbContext database, PasswordHasher<UserRecord> passwordHasher)
@@ -24,7 +24,7 @@ public sealed class InitialSetupService(PosDbContext database, PasswordHasher<Us
         if (await database.Stores.AnyAsync(cancellationToken)) throw new InvalidOperationException("La tienda ya fue configurada.");
 
         var now = DateTimeOffset.UtcNow;
-        var store = new StoreRecord { Id = Guid.NewGuid(), Name = command.StoreName.Trim(), BusinessType = command.BusinessType, CreatedAtUtc = now };
+        var store = new StoreRecord { Id = Guid.NewGuid(), Name = command.StoreName.Trim(), BusinessType = command.BusinessType, CurrencySymbol = command.CurrencySymbol.Trim(), DefaultWeightUnit = command.DefaultWeightUnit.Trim(), CreatedAtUtc = now };
         var user = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = NormalizeUserName(command.UserName), DisplayName = command.AdministratorName.Trim(), IsAdministrator = true, IsActive = true, CreatedAtUtc = now };
         user.PasswordHash = passwordHasher.HashPassword(user, command.Password);
         var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = command.RegisterName.Trim(), IsActive = true };
@@ -46,5 +46,7 @@ public sealed class InitialSetupService(PosDbContext database, PasswordHasher<Us
         if (string.IsNullOrEmpty(command.Password) || command.Password.Length > 256) throw new ArgumentException("La contrasena es obligatoria y debe tener maximo 256 caracteres.");
         if (string.IsNullOrWhiteSpace(command.AdministratorName) || command.AdministratorName.Trim().Length > 160) throw new ArgumentException("El nombre del administrador es obligatorio y debe tener maximo 160 caracteres.");
         if (string.IsNullOrWhiteSpace(command.RegisterName) || command.RegisterName.Trim().Length > 80) throw new ArgumentException("El nombre de la caja es obligatorio y debe tener maximo 80 caracteres.");
+        if (string.IsNullOrWhiteSpace(command.CurrencySymbol) || command.CurrencySymbol.Trim().Length > 8) throw new ArgumentException("El simbolo de moneda es obligatorio y debe tener maximo 8 caracteres.");
+        if (string.IsNullOrWhiteSpace(command.DefaultWeightUnit) || command.DefaultWeightUnit.Trim().Length > 40) throw new ArgumentException("La unidad de peso es obligatoria y debe tener maximo 40 caracteres.");
     }
 }

@@ -27,7 +27,9 @@ public partial class InitialSetupWindow : Window
                 userName = UserNameBox.Text,
                 password = PasswordBox.Password,
                 administratorName = AdministratorNameBox.Text,
-                registerName = RegisterNameBox.Text
+                registerName = RegisterNameBox.Text,
+                currencySymbol = CurrencySymbolBox.Text,
+                defaultWeightUnit = (WeightUnitBox.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content?.ToString() ?? "Kilogramo"
             });
             if (!response.IsSuccessStatusCode)
             {

@@ -14,11 +14,27 @@ public partial class ProductCatalogWindow : UserControl
     private int _page = 1;
     private bool _loadingForm;
     private string _configuredWeightUnit = "Kilogramo";
+    private bool _autoPriceWithProfit = true;
+    private decimal _defaultProfitPercent = 20m;
 
     public ProductCatalogWindow()
     {
         InitializeComponent();
-        Loaded += async (_, _) => { await LoadMeasureSettingsAsync(); await LoadDepartmentsAsync(); await LoadCatalogAsync(); SearchBox.Focus(); };
+        Loaded += async (_, _) => { await LoadStoreOptionsAsync(); ClearForm(); await LoadMeasureSettingsAsync(); await LoadDepartmentsAsync(); await LoadCatalogAsync(); SearchBox.Focus(); };
+    }
+
+    private async Task LoadStoreOptionsAsync()
+    {
+        try
+        {
+            var options = await ApiClient.Client.GetFromJsonAsync<StoreOptions>("/api/store-options");
+            if (options is not null)
+            {
+                _autoPriceWithProfit = options.AutoPriceWithProfit;
+                _defaultProfitPercent = options.DefaultProfitPercent;
+            }
+        }
+        catch (Exception exception) { StatusText.Text = $"No se pudieron cargar las opciones de precios: {exception.Message}"; }
     }
 
     private async Task LoadMeasureSettingsAsync()
@@ -171,7 +187,7 @@ public partial class ProductCatalogWindow : UserControl
 
     private void OnDepartmentsClick(object sender, RoutedEventArgs e) { var window = new DepartmentManagerWindow { Owner = Window.GetWindow(this) }; window.Closed += async (_, _) => await LoadDepartmentsAsync(); window.ShowDialog(); }
     private void OnPromotionsClick(object sender, RoutedEventArgs e) { new PromotionWindow { Owner = Window.GetWindow(this) }.ShowDialog(); }
-    private void ClearForm() { _selected = null; _loadingForm = true; ProductsGrid.SelectedItem = null; FormTitleText.Text = "Nuevo producto"; CodeBox.Clear(); DescriptionBox.Clear(); DepartmentBox.SelectedIndex = -1; UnitBox.SelectedIndex = 0; CostBox.Text = "0.00"; ProfitPercentBox.Text = "20"; PriceBox.Text = "0.00"; ProfitAmountBox.Text = "0.00"; WholesalePriceBox.Text = "0.00"; WholesaleProfitPercentBox.Text = string.Empty; WholesaleProfitAmountBox.Text = "0.00"; WholesaleMinimumBox.Text = "0"; IsKitBox.IsChecked = false; _loadingForm = false; CodeBox.Focus(); }
+    private void ClearForm() { _selected = null; _loadingForm = true; ProductsGrid.SelectedItem = null; FormTitleText.Text = "Nuevo producto"; CodeBox.Clear(); DescriptionBox.Clear(); DepartmentBox.SelectedIndex = -1; UnitBox.SelectedIndex = 0; CostBox.Text = "0.00"; ProfitPercentBox.Text = _autoPriceWithProfit ? Percent(_defaultProfitPercent) : string.Empty; PriceBox.Text = "0.00"; ProfitAmountBox.Text = "0.00"; WholesalePriceBox.Text = "0.00"; WholesaleProfitPercentBox.Text = string.Empty; WholesaleProfitAmountBox.Text = "0.00"; WholesaleMinimumBox.Text = "0"; IsKitBox.IsChecked = false; _loadingForm = false; CodeBox.Focus(); }
     private static bool TryDecimal(string? value, out decimal result) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out result) || decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
     private static string Money(decimal value) => value.ToString("0.00", CultureInfo.InvariantCulture);
     private static string Percent(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
@@ -180,4 +196,5 @@ public partial class ProductCatalogWindow : UserControl
     private sealed record CatalogProductRow(Guid Id, string Code, string Description, string Department, Guid? DepartmentId, decimal Cost, decimal Price, decimal ProfitPercent, decimal ProfitAmount, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleProfitAmount, decimal WholesaleMinimumQuantity, decimal Stock, decimal MinimumStock, decimal MaximumStock, string UnitOfMeasure, bool IsKit, bool IsActive);
     private sealed record CatalogPage(List<CatalogProductRow> Items, int Page, int PageSize, int TotalCount, int TotalPages);
     private sealed record MeasureSettings(string DefaultWeightUnit);
+    private sealed record StoreOptions(bool InventoryEnabled, string InventoryCostMethod, bool CreditSalesEnabled, bool CommonProductsEnabled, bool AutoPriceWithProfit, decimal DefaultProfitPercent, bool RoundSaleAmounts, string RoundingMode, string OccasionalNotice, int OccasionalNoticeEverySales);
 }

@@ -45,6 +45,13 @@ public partial class StartupWindow : Window
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => System.Windows.Application.Current.Shutdown();
 
+    public async Task<bool> RepairServicesAndWaitAsync()
+    {
+        if (!IsLocalApi()) return false;
+        await TryStartLocalServicesAsync(forceRepair: true);
+        return await WaitForApiAsync();
+    }
+
     private async Task RunStartupCheckAsync(bool forceRepair = false)
     {
         if (_isChecking) return;

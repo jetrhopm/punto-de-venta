@@ -114,7 +114,7 @@ public sealed class LicenseService(PosDbContext database)
             }
         }
 
-        return new(true, "trial", $"Modo de prueba activo. Te quedan {FormatTrialRemaining(expiresAt - now)}. Activa una licencia antes de que termine.", fingerprint, request, null, expiresAt, null);
+        return new(true, "trial", $"No hay una licencia activada. Modo de prueba activo; te quedan {FormatTrialRemaining(expiresAt - now)}. Activa una licencia antes de que termine.", fingerprint, request, null, expiresAt, null);
     }
 
     private static string FormatTrialRemaining(TimeSpan remaining)

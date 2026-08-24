@@ -19,6 +19,26 @@ public partial class DiagnosticWindow : Window
 
     private async void OnRefreshClick(object sender, RoutedEventArgs e) => await RefreshAsync();
 
+    private async void OnRepairApiClick(object sender, RoutedEventArgs e)
+    {
+        RepairApiButton.IsEnabled = false;
+        StatusText.Text = "Levantando y comprobando los servicios de JetVenta...";
+        try
+        {
+            var startup = new StartupWindow();
+            var repaired = await startup.RepairServicesAndWaitAsync();
+            StatusText.Text = repaired
+                ? "La API respondió correctamente. Actualizando diagnóstico..."
+                : "No se pudo levantar la API. Revisa los detalles y vuelve a intentarlo.";
+            await RefreshAsync();
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"No se pudo levantar la API: {exception.Message}";
+        }
+        finally { RepairApiButton.IsEnabled = true; }
+    }
+
     private async Task RefreshAsync()
     {
         StatusText.Text = "Consultando servicios y datos de JetVenta...";
