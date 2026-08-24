@@ -5,8 +5,8 @@ using System.Text;
 namespace Pos.Infrastructure;
 
 public sealed record SalesHistoryFilter(DateTimeOffset From, DateTimeOffset To, Guid? UserId = null, string? Query = null);
-public sealed record SalesHistoryRow(Guid SaleId, DateTimeOffset CreatedAtUtc, string Status, decimal Total, string PaymentMethod, decimal Paid, string Cashier, Guid UserId, int Items);
-public sealed record SaleHistoryDetail(Guid SaleId, DateTimeOffset CreatedAtUtc, string Status, decimal Total, string Cashier, IReadOnlyList<SaleHistoryLine> Lines, IReadOnlyList<SaleHistoryPayment> Payments);
+public sealed record SalesHistoryRow(Guid SaleId, long Folio, DateTimeOffset CreatedAtUtc, string Status, decimal Total, string PaymentMethod, decimal Paid, string Cashier, Guid UserId, int Items);
+public sealed record SaleHistoryDetail(Guid SaleId, long Folio, DateTimeOffset CreatedAtUtc, string Status, decimal Total, string Cashier, IReadOnlyList<SaleHistoryLine> Lines, IReadOnlyList<SaleHistoryPayment> Payments);
 public sealed record SaleHistoryLine(Guid ProductId, string Code, string Description, decimal Quantity, decimal UnitPrice, decimal Total);
 public sealed record SaleHistoryPayment(string Method, decimal Amount, decimal Received, decimal Change);
 
@@ -28,13 +28,13 @@ public sealed class SalesHistoryService(PosDbContext database)
         if (!string.IsNullOrWhiteSpace(filter.Query))
         {
             var queryText = filter.Query.Trim().ToUpperInvariant();
-            query = query.Where(item => item.sale.Id.ToString().ToUpper().Contains(queryText) || item.user.DisplayName.ToUpper().Contains(queryText) || item.user.NormalizedUserName.Contains(queryText));
+            query = query.Where(item => item.sale.Folio.ToString().Contains(queryText) || item.sale.Id.ToString().ToUpper().Contains(queryText) || item.user.DisplayName.ToUpper().Contains(queryText) || item.user.NormalizedUserName.Contains(queryText));
         }
 
         var rows = await query.OrderByDescending(item => item.sale.CreatedAtUtc).Take(5000).ToListAsync(cancellationToken);
         var ids = rows.Select(item => item.sale.Id).ToArray();
         var counts = await database.SaleLines.AsNoTracking().Where(item => ids.Contains(item.SaleId)).GroupBy(item => item.SaleId).Select(group => new { SaleId = group.Key, Items = group.Sum(item => item.Quantity) }).ToDictionaryAsync(item => item.SaleId, item => item.Items, cancellationToken);
-        return rows.Select(item => new SalesHistoryRow(item.sale.Id, item.sale.CreatedAtUtc, item.sale.Status, item.sale.Total, string.Join(" + ", item.payments.Select(payment => payment.Method).Distinct()), item.payments.Sum(payment => payment.Amount), item.user.DisplayName, item.user.Id, (int)counts.GetValueOrDefault(item.sale.Id))).ToArray();
+        return rows.Select(item => new SalesHistoryRow(item.sale.Id, item.sale.Folio, item.sale.CreatedAtUtc, item.sale.Status, item.sale.Total, string.Join(" + ", item.payments.Select(payment => payment.Method).Distinct()), item.payments.Sum(payment => payment.Amount), item.user.DisplayName, item.user.Id, (int)counts.GetValueOrDefault(item.sale.Id))).ToArray();
     }
 
     public async Task<SaleHistoryDetail?> DetailAsync(string token, Guid saleId, CancellationToken cancellationToken)
@@ -51,7 +51,7 @@ public sealed class SalesHistoryService(PosDbContext database)
                            where line.SaleId == saleId
                            select new SaleHistoryLine(line.ProductId, product.Code, product.Description, line.Quantity, line.UnitPrice, line.LineTotal)).ToListAsync(cancellationToken);
         var payments = await database.Payments.AsNoTracking().Where(item => item.SaleId == saleId).Select(item => new SaleHistoryPayment(item.Method, item.Amount, item.Received, item.Change)).ToListAsync(cancellationToken);
-        return new SaleHistoryDetail(result.sale.Id, result.sale.CreatedAtUtc, result.sale.Status, result.sale.Total, result.user.DisplayName, lines, payments);
+        return new SaleHistoryDetail(result.sale.Id, result.sale.Folio, result.sale.CreatedAtUtc, result.sale.Status, result.sale.Total, result.user.DisplayName, lines, payments);
     }
 
     public async Task<IReadOnlyList<UserResult>?> CashiersAsync(string token, CancellationToken cancellationToken)

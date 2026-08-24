@@ -1,4 +1,5 @@
 using Pos.Printing;
+using System.Globalization;
 using System.Text;
 
 namespace Pos.UnitTests;
@@ -17,6 +18,20 @@ public sealed class TicketPdfTests
         Assert.Contains("COMPROBANTE DE VENTA", text);
         Assert.Contains("TOTAL:", text);
         Assert.EndsWith("%%EOF\n", text);
+    }
+
+    [Fact]
+    public void PrintsConfiguredNumericFolioInsteadOfInternalSaleId()
+    {
+        var saleId = Guid.NewGuid();
+        var pdf = TicketPdfWriter.Create(new TicketPdfData("Tienda de prueba", saleId, DateTimeOffset.UtcNow, [new TicketPdfLine("Producto", 1m, 10m, 10m)], 10m, 10m, 0m)
+        {
+            Folio = 1234
+        });
+        var text = Encoding.Latin1.GetString(pdf);
+
+        Assert.Contains($"VENTA: {1234.ToString("N0", CultureInfo.CurrentCulture)}", text);
+        Assert.DoesNotContain($"VENTA: {saleId.ToString("N")[..8].ToUpperInvariant()}", text);
     }
 
     [Fact]

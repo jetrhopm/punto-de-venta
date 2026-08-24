@@ -71,7 +71,7 @@ public partial class SalesHistoryWindow : UserControl
             _detail = await Client.GetFromJsonAsync<Detail>($"/api/sales/history/{row.SaleId}");
             if (_detail is null) return;
             LinesList.ItemsSource = _detail.Lines.Select(item => new LineView(item)).ToList();
-            DetailText.Text = $"Folio: {row.ShortId}\nCajero: {_detail.Cashier}\nFecha: {_detail.CreatedAtUtc.ToLocalTime():dd/MM/yyyy HH:mm}\nTotal: {_detail.Total:C2}\nEstado: {_detail.Status}";
+            DetailText.Text = $"Folio: {row.FolioText}\nCajero: {_detail.Cashier}\nFecha: {_detail.CreatedAtUtc.ToLocalTime():dd/MM/yyyy HH:mm}\nTotal: {_detail.Total:C2}\nEstado: {_detail.Status}";
             PaymentText.Text = "Pago: " + string.Join(" | ", _detail.Payments.Select(item => $"{item.Method} {item.Amount:C2}"));
         }
         catch (Exception exception) { DetailText.Text = ConnectionHelp.FromException(exception, "No se pudo cargar el detalle"); }
@@ -105,7 +105,7 @@ public partial class SalesHistoryWindow : UserControl
         {
             using var response = await Client.GetAsync($"/api/sales/{_selected.SaleId}/ticket.pdf");
             if (!response.IsSuccessStatusCode) { MessageBox.Show("No se pudo generar la copia del ticket.", "Historial", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-            var dialog = new SaveFileDialog { Title = "Guardar copia del ticket", Filter = "Documento PDF (*.pdf)|*.pdf", FileName = $"Copia-{_selected.ShortId}.pdf" };
+            var dialog = new SaveFileDialog { Title = "Guardar copia del ticket", Filter = "Documento PDF (*.pdf)|*.pdf", FileName = $"Copia-{_selected.FolioText}.pdf" };
             if (dialog.ShowDialog(Window.GetWindow(this)) == true) await File.WriteAllBytesAsync(dialog.FileName, await response.Content.ReadAsByteArrayAsync());
         }
         catch (Exception exception) { MessageBox.Show(exception.Message, "No se pudo imprimir", MessageBoxButton.OK, MessageBoxImage.Error); }
@@ -113,9 +113,9 @@ public partial class SalesHistoryWindow : UserControl
 
     private static async Task<string> ReadMessage(HttpResponseMessage response) => (await response.Content.ReadAsStringAsync()).Replace("{\"message\":\"", string.Empty).TrimEnd('}', '"');
     private sealed record Cashier(Guid? Id, string DisplayName);
-    private sealed record HistoryRow(Guid SaleId, DateTimeOffset CreatedAtUtc, string Status, decimal Total, string PaymentMethod, decimal Paid, string Cashier, Guid UserId, int Items)
-    { public string ShortId => SaleId.ToString("N")[..8].ToUpperInvariant(); public string DateText => CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm"); public string TotalText => Total.ToString("C2", CultureInfo.CurrentCulture); }
-    private sealed record Detail(Guid SaleId, DateTimeOffset CreatedAtUtc, string Status, decimal Total, string Cashier, List<HistoryLine> Lines, List<Payment> Payments);
+    private sealed record HistoryRow(Guid SaleId, long Folio, DateTimeOffset CreatedAtUtc, string Status, decimal Total, string PaymentMethod, decimal Paid, string Cashier, Guid UserId, int Items)
+    { public string ShortId => SaleId.ToString("N")[..8].ToUpperInvariant(); public string FolioText => Folio > 0 ? Folio.ToString("N0", CultureInfo.CurrentCulture) : ShortId; public string DateText => CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm"); public string TotalText => Total.ToString("C2", CultureInfo.CurrentCulture); }
+    private sealed record Detail(Guid SaleId, long Folio, DateTimeOffset CreatedAtUtc, string Status, decimal Total, string Cashier, List<HistoryLine> Lines, List<Payment> Payments);
     private sealed record HistoryLine(Guid ProductId, string Code, string Description, decimal Quantity, decimal UnitPrice, decimal Total);
     private sealed record Payment(string Method, decimal Amount, decimal Received, decimal Change);
     private sealed class LineView(HistoryLine line) { public decimal Quantity => line.Quantity; public string Description => line.Description; public string TotalText => line.Total.ToString("C2", CultureInfo.CurrentCulture); }

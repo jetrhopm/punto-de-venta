@@ -23,7 +23,8 @@ public sealed record TicketPdfData(
     IReadOnlyList<TicketPdfLine> Lines,
     IReadOnlyList<TicketPdfPayment> Payments,
     decimal Total,
-    string CurrencySymbol = "$")
+    string CurrencySymbol = "$",
+    long Folio = 0)
 {
     public TicketPdfData(string storeName, Guid saleId, DateTimeOffset createdAtUtc, IReadOnlyList<TicketPdfLine> lines, decimal total, decimal received, decimal change)
         : this(storeName, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, "Gracias por su compra", 80, saleId, Guid.Empty, "Caja principal", "Administrador", createdAtUtc, lines, [new TicketPdfPayment("Cash", total, received, change)], total) { }
@@ -68,7 +69,7 @@ public static class TicketPdfWriter
         rows.Add(new LayoutRow($"CAJA: {ValueOrDefault(ticket.RegisterName, "CAJA PRINCIPAL")}", normalSize, false, TextAlignment.Left, 2m));
         rows.Add(new LayoutRow($"CAJERO: {ValueOrDefault(ticket.CashierName, "ADMINISTRADOR")}", normalSize, false, TextAlignment.Left, 2m));
         rows.Add(new LayoutRow($"TURNO: {ShortId(ticket.ShiftId)}", normalSize, false, TextAlignment.Left, 2m));
-        rows.Add(new LayoutRow($"VENTA: {ShortId(ticket.SaleId)}", normalSize, false, TextAlignment.Left, 3m));
+        rows.Add(new LayoutRow($"VENTA: {FormatFolio(ticket.Folio, ticket.SaleId)}", normalSize, false, TextAlignment.Left, 3m));
         AddRule(rows);
 
         var quantityWidth = widthMm == 58 ? 5 : 6;
@@ -214,6 +215,7 @@ public static class TicketPdfWriter
     private static void AddRule(List<LayoutRow> rows) => rows.Add(new LayoutRow(null, 0m, false, TextAlignment.Left, 6m, true));
     private static string ValueOrDefault(string value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim().ToUpperInvariant();
     private static string ShortId(Guid value) => value == Guid.Empty ? "N/D" : value.ToString("N")[..8].ToUpperInvariant();
+    private static string FormatFolio(long folio, Guid saleId) => folio > 0 ? folio.ToString("N0", CultureInfo.CurrentCulture) : ShortId(saleId);
     private static string Money(TicketPdfData ticket, decimal value) => (string.IsNullOrWhiteSpace(ticket.CurrencySymbol) ? "$" : ticket.CurrencySymbol.Trim()) + value.ToString("#,##0.00", CultureInfo.InvariantCulture);
     private static string PaymentLabel(string method) => method.ToUpperInvariant() switch { "CASH" => "EFECTIVO", "CARD" => "TARJETA", "TRANSFER" => "TRANSFERENCIA", "CREDIT" => "CREDITO", _ => method.ToUpperInvariant() };
     private static string FitLeft(string value, int width) => value.Length > width ? value[..width] : value.PadRight(width);

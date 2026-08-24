@@ -102,7 +102,7 @@ public static class TicketWindowsPrinter
         root.Children.Add(Metadata("Caja", ValueOrDefault(ticket.RegisterName, "Caja principal"), baseSize));
         root.Children.Add(Metadata("Cajero", ValueOrDefault(ticket.CashierName, "Administrador"), baseSize));
         root.Children.Add(Metadata("Turno", ShortId(ticket.ShiftId), baseSize));
-        root.Children.Add(Metadata("Venta", ShortId(ticket.SaleId), baseSize));
+        root.Children.Add(Metadata("Venta", FormatFolio(ticket.Folio, ticket.SaleId), baseSize));
         root.Children.Add(Rule());
 
         root.Children.Add(ProductHeader(baseSize));
@@ -289,6 +289,7 @@ public static class TicketWindowsPrinter
 
     private static string ValueOrDefault(string value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
     private static string ShortId(Guid value) => value == Guid.Empty ? "N/D" : value.ToString("N")[..8].ToUpperInvariant();
+    private static string FormatFolio(long folio, Guid saleId) => folio > 0 ? folio.ToString("N0", CultureInfo.CurrentCulture) : ShortId(saleId);
     private static string Money(TicketPdfData ticket, decimal value) => (string.IsNullOrWhiteSpace(ticket.CurrencySymbol) ? "$" : ticket.CurrencySymbol.Trim()) + value.ToString("#,##0.00", CultureInfo.InvariantCulture);
     private static string PaymentLabel(string method) => method.ToUpperInvariant() switch
     {

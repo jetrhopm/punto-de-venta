@@ -1,6 +1,6 @@
 # Plan completo del punto de venta
 
-Estado actualizado: 2026-08-14
+Estado actualizado: 2026-08-24
 
 ## Terminado
 
@@ -93,6 +93,16 @@ La implementacion local de la Fase 2 esta terminada. La validacion externa requi
 
 - Mercado Pago Point con sandbox, idempotencia, webhooks y conciliacion.
 - Taecel solo con documentacion y credenciales oficiales vigentes.
+
+Estado de validacion: cerrada por validacion del usuario. La siguiente lista no reabre la fase; son observaciones que deben revisarse en una nueva ronda:
+
+- API detenida durante una venta abierta: la reparacion automatica funciono, pero hay que volver a comprobar el estado seguro de caja, corte y operaciones pendientes cuando la API cae a mitad de la sesion.
+- Restauracion desde otra computadora con los archivos `.dump` y `.dump.sha256`: repetir la restauracion en una instalacion limpia y verificar checksum antes de reemplazar la base.
+- Kits: repetir la prueba de descuento de componentes de inventario y la reversa completa por cancelacion o devolucion.
+- Diagnostico de respaldos: confirmar que la cantidad de tickets y trabajos en cola corresponda a registros reales y no a datos historicos o trabajos pendientes.
+- Configuracion: moneda, unidades de medida y datos del negocio guardan correctamente, pero su reflejo requiere cerrar y abrir el programa; queda como mejora futura asincrona.
+- Margen de ganancia: comprobar que el margen configurado en Opciones habilitadas se aplique al crear un producto nuevo; el cambio manual en Productos ya funciona.
+- Fase externa pendiente: repetir pruebas con una terminal Mercado Pago Point compatible en modo produccion y obtener credenciales oficiales de Taecel y La Red+ antes de activar operaciones reales.
 
 ### Fase 5: nube y opcionales
 

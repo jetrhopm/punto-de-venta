@@ -19,7 +19,7 @@
             <ListView x:Name="SalesList" SelectionChanged="OnSaleSelected" Margin="0,0,12,0">
                 <ListView.View><GridView AllowsColumnReorder="True">
                     <GridViewColumn Header="Fecha" DisplayMemberBinding="{Binding DateText}" Width="145"/>
-                    <GridViewColumn Header="Folio" DisplayMemberBinding="{Binding ShortId}" Width="105"/>
+                    <GridViewColumn Header="Folio" DisplayMemberBinding="{Binding FolioText}" Width="105"/>
                     <GridViewColumn Header="Cajero" DisplayMemberBinding="{Binding Cashier}" Width="170"/>
                     <GridViewColumn Header="Artículos" DisplayMemberBinding="{Binding Items}" Width="70"/>
                     <GridViewColumn Header="Total" DisplayMemberBinding="{Binding TotalText}" Width="95"/>
