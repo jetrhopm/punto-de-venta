@@ -114,7 +114,7 @@ public partial class SalesHistoryWindow : UserControl
     private static async Task<string> ReadMessage(HttpResponseMessage response) => (await response.Content.ReadAsStringAsync()).Replace("{\"message\":\"", string.Empty).TrimEnd('}', '"');
     private sealed record Cashier(Guid? Id, string DisplayName);
     private sealed record HistoryRow(Guid SaleId, long Folio, DateTimeOffset CreatedAtUtc, string Status, decimal Total, string PaymentMethod, decimal Paid, string Cashier, Guid UserId, int Items)
-    { public string ShortId => SaleId.ToString("N")[..8].ToUpperInvariant(); public string FolioText => Folio > 0 ? Folio.ToString("N0", CultureInfo.CurrentCulture) : ShortId; public string DateText => CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm"); public string TotalText => Total.ToString("C2", CultureInfo.CurrentCulture); }
+    { public string ShortId => SaleId.ToString("N")[..8].ToUpperInvariant(); public string FolioText => Folio > 0 ? Folio.ToString("N0", CultureInfo.CurrentCulture) : "N/D"; public string DateText => CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm"); public string TotalText => Total.ToString("C2", CultureInfo.CurrentCulture); }
     private sealed record Detail(Guid SaleId, long Folio, DateTimeOffset CreatedAtUtc, string Status, decimal Total, string Cashier, List<HistoryLine> Lines, List<Payment> Payments);
     private sealed record HistoryLine(Guid ProductId, string Code, string Description, decimal Quantity, decimal UnitPrice, decimal Total);
     private sealed record Payment(string Method, decimal Amount, decimal Received, decimal Change);

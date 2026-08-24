@@ -215,7 +215,7 @@ public static class TicketPdfWriter
     private static void AddRule(List<LayoutRow> rows) => rows.Add(new LayoutRow(null, 0m, false, TextAlignment.Left, 6m, true));
     private static string ValueOrDefault(string value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim().ToUpperInvariant();
     private static string ShortId(Guid value) => value == Guid.Empty ? "N/D" : value.ToString("N")[..8].ToUpperInvariant();
-    private static string FormatFolio(long folio, Guid saleId) => folio > 0 ? folio.ToString("N0", CultureInfo.CurrentCulture) : ShortId(saleId);
+    private static string FormatFolio(long folio, Guid saleId) => folio > 0 ? folio.ToString("N0", CultureInfo.CurrentCulture) : "N/D";
     private static string Money(TicketPdfData ticket, decimal value) => (string.IsNullOrWhiteSpace(ticket.CurrencySymbol) ? "$" : ticket.CurrencySymbol.Trim()) + value.ToString("#,##0.00", CultureInfo.InvariantCulture);
     private static string PaymentLabel(string method) => method.ToUpperInvariant() switch { "CASH" => "EFECTIVO", "CARD" => "TARJETA", "TRANSFER" => "TRANSFERENCIA", "CREDIT" => "CREDITO", _ => method.ToUpperInvariant() };
     private static string FitLeft(string value, int width) => value.Length > width ? value[..width] : value.PadRight(width);
