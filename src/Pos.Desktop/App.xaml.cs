@@ -33,7 +33,24 @@ public partial class App : System.Windows.Application
 
     private static void OnWindowLoaded(object sender, RoutedEventArgs e)
     {
-        if (sender is not Window dialog || !IsDialogWindow(dialog) || dialog.Owner is not Window owner) return;
+        if (sender is not Window dialog || !IsDialogWindow(dialog)) return;
+
+        // A dialog is part of its current task. It must not become a hidden, separate window.
+        dialog.ResizeMode = ResizeMode.NoResize;
+        dialog.ShowInTaskbar = false;
+
+        EventHandler preventMinimize = (_, _) =>
+        {
+            if (dialog.WindowState != WindowState.Minimized) return;
+            dialog.Dispatcher.BeginInvoke(() =>
+            {
+                if (dialog.IsVisible) dialog.WindowState = WindowState.Normal;
+            }, DispatcherPriority.ApplicationIdle);
+        };
+        dialog.StateChanged += preventMinimize;
+        dialog.Closed += (_, _) => dialog.StateChanged -= preventMinimize;
+
+        if (dialog.Owner is not Window owner) return;
         lock (WatchedDialogs)
         {
             if (!WatchedDialogs.Add(dialog)) return;

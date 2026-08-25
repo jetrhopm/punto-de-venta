@@ -10,12 +10,30 @@ public partial class PromotionWindow : Window
 {
     private ProductRow? _selectedProduct;
     private PromotionRow? _selectedPromotion;
-    public PromotionWindow() { InitializeComponent(); Loaded += async (_, _) => await LoadPromotionsAsync(); }
+    private CancellationTokenSource? _productSearchCancellation;
+
+    public PromotionWindow()
+    {
+        InitializeComponent();
+        Loaded += async (_, _) => await LoadPromotionsAsync();
+        Closed += (_, _) => _productSearchCancellation?.Cancel();
+    }
 
     private async void OnProductTextChanged(object sender, TextChangedEventArgs e)
     {
         if (ProductBox.Text.Trim().Length < 2) { ProductList.Visibility = Visibility.Collapsed; return; }
-        try { var rows = await ApiClient.Client.GetFromJsonAsync<List<ProductRow>>($"/api/products/search?q={Uri.EscapeDataString(ProductBox.Text.Trim())}") ?? []; ProductList.ItemsSource = rows; ProductList.DisplayMemberPath = nameof(ProductRow.Display); ProductList.Visibility = rows.Count == 0 ? Visibility.Collapsed : Visibility.Visible; }
+        _productSearchCancellation?.Cancel();
+        _productSearchCancellation = new CancellationTokenSource();
+        var cancellationToken = _productSearchCancellation.Token;
+        try
+        {
+            await Task.Delay(180, cancellationToken);
+            var rows = await ApiClient.Client.GetFromJsonAsync<List<ProductRow>>($"/api/products/search?q={Uri.EscapeDataString(ProductBox.Text.Trim())}", cancellationToken) ?? [];
+            ProductList.ItemsSource = rows;
+            ProductList.DisplayMemberPath = nameof(ProductRow.Display);
+            ProductList.Visibility = rows.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        }
+        catch (OperationCanceledException) { }
         catch { ProductList.Visibility = Visibility.Collapsed; }
     }
     private void OnProductSelected(object sender, MouseButtonEventArgs e) { if (ProductList.SelectedItem is ProductRow row) { _selectedProduct = row; ProductBox.Text = row.Display; ProductList.Visibility = Visibility.Collapsed; } }

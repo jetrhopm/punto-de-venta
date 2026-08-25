@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se publica la versión 2.1.9: los diálogos ya no se pueden minimizar ni aparecer como tareas separadas; las búsquedas de kits y promociones cancelan consultas anteriores mientras se escribe.
 - Se publica la versión 2.1.8 con correcciones del plan de pruebas de usuario final: proveedor opcional en compras, edición de límites de crédito, estados de devolución en historial, artículo común oculto del catálogo y mejoras de importación, pagos mixtos y diálogos.
 - El instalador muestra los términos y condiciones completos antes de aceptarlos.
 - Se publica la versión 2.1.7: los avisos normales emitidos por PostgreSQL durante una restauración ya no se interpretan como fallos; únicamente un código de salida real detiene el proceso.
