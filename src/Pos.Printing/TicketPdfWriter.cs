@@ -1,11 +1,13 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace Pos.Printing;
 
 public sealed record TicketPdfLine(string Description, decimal Quantity, decimal UnitPrice, decimal Total);
 public sealed record TicketPdfPayment(string Method, decimal Amount, decimal Received, decimal Change);
 
+[method: JsonConstructor]
 public sealed record TicketPdfData(
     string StoreName,
     string LegalName,

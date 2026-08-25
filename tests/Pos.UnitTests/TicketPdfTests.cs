@@ -1,6 +1,7 @@
 using Pos.Printing;
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 
 namespace Pos.UnitTests;
 
@@ -32,6 +33,18 @@ public sealed class TicketPdfTests
 
         Assert.Contains($"VENTA: {1234.ToString("N0", CultureInfo.CurrentCulture)}", text);
         Assert.DoesNotContain($"VENTA: {saleId.ToString("N")[..8].ToUpperInvariant()}", text);
+    }
+
+    [Fact]
+    public void DeserializesTicketDataForWindowsPrinter()
+    {
+        var ticket = CreateTicket(Guid.NewGuid(), 80, 1) with { Folio = 1234, ShiftNumber = 91 };
+        var restored = JsonSerializer.Deserialize<TicketPdfData>(JsonSerializer.Serialize(ticket));
+
+        Assert.NotNull(restored);
+        Assert.Equal(1234, restored.Folio);
+        Assert.Equal(91, restored.ShiftNumber);
+        Assert.Single(restored.Lines);
     }
 
     [Fact]
