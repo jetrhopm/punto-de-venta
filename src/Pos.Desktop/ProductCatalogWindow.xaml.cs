@@ -9,6 +9,7 @@ namespace Pos.Desktop;
 public partial class ProductCatalogWindow : UserControl
 {
     private CancellationTokenSource? _loadCancellation;
+    private CancellationTokenSource? _filterCancellation;
     private CatalogProductRow? _selected;
     private List<DepartmentRow> _departments = [];
     private int _page = 1;
@@ -16,11 +17,36 @@ public partial class ProductCatalogWindow : UserControl
     private string _configuredWeightUnit = "Kilogramo";
     private bool _autoPriceWithProfit = true;
     private decimal _defaultProfitPercent = 20m;
+    private bool _catalogReady;
+    private bool _updatingFilterControls;
 
     public ProductCatalogWindow()
     {
         InitializeComponent();
-        Loaded += async (_, _) => { await LoadStoreOptionsAsync(); ClearForm(); await LoadMeasureSettingsAsync(); await LoadDepartmentsAsync(); await LoadCatalogAsync(); SearchBox.Focus(); };
+        Loaded += async (_, _) =>
+        {
+            await LoadStoreOptionsAsync();
+            ClearForm();
+            await LoadMeasureSettingsAsync();
+            await LoadDepartmentsAsync();
+            _catalogReady = true;
+            await LoadCatalogAsync();
+            SearchBox.Focus();
+        };
+        Unloaded += (_, _) =>
+        {
+            _catalogReady = false;
+            _filterCancellation?.Cancel();
+            _loadCancellation?.Cancel();
+        };
+        SearchBox.TextChanged += OnFilterTextChanged;
+        MinimumPriceBox.TextChanged += OnFilterTextChanged;
+        MaximumPriceBox.TextChanged += OnFilterTextChanged;
+        MinimumProfitBox.TextChanged += OnFilterTextChanged;
+        DepartmentFilterBox.SelectionChanged += OnFilterSelectionChanged;
+        SortBox.SelectionChanged += OnFilterSelectionChanged;
+        DescendingBox.Checked += OnFilterCheckedChanged;
+        DescendingBox.Unchecked += OnFilterCheckedChanged;
     }
 
     private async Task LoadStoreOptionsAsync()
@@ -78,6 +104,7 @@ public partial class ProductCatalogWindow : UserControl
             if (TryDecimal(MaximumPriceBox.Text, out var maximumPrice)) query.Add($"maximumPrice={maximumPrice.ToString(CultureInfo.InvariantCulture)}");
             if (TryDecimal(MinimumProfitBox.Text, out var minimumProfit)) query.Add($"minimumProfit={minimumProfit.ToString(CultureInfo.InvariantCulture)}");
             var result = await ApiClient.Client.GetFromJsonAsync<CatalogPage>("/api/products/catalog?" + string.Join('&', query), token);
+            token.ThrowIfCancellationRequested();
             ProductsGrid.ItemsSource = result?.Items ?? [];
             var total = result?.TotalCount ?? 0;
             PageText.Text = result is null ? string.Empty : $"Página {result.Page} de {result.TotalPages} · {total:N0} productos";
@@ -90,18 +117,47 @@ public partial class ProductCatalogWindow : UserControl
     }
 
     private string CurrentSort() => (SortBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "description";
-    private async void OnApplyFiltersClick(object sender, RoutedEventArgs e) { _page = 1; await LoadCatalogAsync(); }
-    private async void OnPreviousPageClick(object sender, RoutedEventArgs e) { if (_page > 1) { _page--; await LoadCatalogAsync(); } }
-    private async void OnNextPageClick(object sender, RoutedEventArgs e) { if (NextPageButton.IsEnabled) { _page++; await LoadCatalogAsync(); } }
+    private void OnFilterTextChanged(object sender, TextChangedEventArgs e) => QueueCatalogSynchronization();
+    private void OnFilterSelectionChanged(object sender, SelectionChangedEventArgs e) => QueueCatalogSynchronization();
+    private void OnFilterCheckedChanged(object sender, RoutedEventArgs e) => QueueCatalogSynchronization();
 
-    private async void OnGridSorting(object sender, DataGridSortingEventArgs e)
+    private void QueueCatalogSynchronization()
+    {
+        if (!_catalogReady || _updatingFilterControls) return;
+        _filterCancellation?.Cancel();
+        _filterCancellation = new CancellationTokenSource();
+        _ = SynchronizeCatalogAsync(_filterCancellation.Token);
+    }
+
+    private async Task SynchronizeCatalogAsync(CancellationToken token)
+    {
+        try
+        {
+            StatusText.Text = "Actualizando catálogo...";
+            await Task.Delay(220, token);
+            _page = 1;
+            await LoadCatalogAsync();
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private void CancelCatalogSynchronization() => _filterCancellation?.Cancel();
+
+    private async void OnApplyFiltersClick(object sender, RoutedEventArgs e) { CancelCatalogSynchronization(); _page = 1; await LoadCatalogAsync(); }
+    private async void OnPreviousPageClick(object sender, RoutedEventArgs e) { if (_page > 1) { CancelCatalogSynchronization(); _page--; await LoadCatalogAsync(); } }
+    private async void OnNextPageClick(object sender, RoutedEventArgs e) { if (NextPageButton.IsEnabled) { CancelCatalogSynchronization(); _page++; await LoadCatalogAsync(); } }
+
+    private void OnGridSorting(object sender, DataGridSortingEventArgs e)
     {
         e.Handled = true;
         if (e.Column.SortMemberPath is null) return;
+        CancelCatalogSynchronization();
+        _updatingFilterControls = true;
         SortBox.SelectedItem = SortBox.Items.OfType<ComboBoxItem>().FirstOrDefault(item => string.Equals(item.Tag?.ToString(), e.Column.SortMemberPath, StringComparison.OrdinalIgnoreCase)) ?? SortBox.SelectedItem;
         DescendingBox.IsChecked = !(DescendingBox.IsChecked == true);
+        _updatingFilterControls = false;
         _page = 1;
-        await LoadCatalogAsync();
+        QueueCatalogSynchronization();
     }
 
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
