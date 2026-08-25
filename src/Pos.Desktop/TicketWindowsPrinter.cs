@@ -57,7 +57,11 @@ public static class TicketWindowsPrinter
             new TicketPdfLine("Tomate por kilogramo", 0.750m, 32m, 24m)
         ],
         [new TicketPdfPayment("Cash", 138.90m, 200m, 61.10m)],
-        138.90m);
+        138.90m)
+    {
+        Folio = 124,
+        ShiftNumber = 91
+    };
 
     public static FrameworkElement CreateTicketVisual(TicketPdfData ticket, TicketPrintProfile profile)
     {
@@ -101,7 +105,7 @@ public static class TicketWindowsPrinter
         root.Children.Add(Metadata("Fecha", ticket.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss"), baseSize));
         root.Children.Add(Metadata("Caja", ValueOrDefault(ticket.RegisterName, "Caja principal"), baseSize));
         root.Children.Add(Metadata("Cajero", ValueOrDefault(ticket.CashierName, "Administrador"), baseSize));
-        root.Children.Add(Metadata("Turno", ShortId(ticket.ShiftId), baseSize));
+        root.Children.Add(Metadata("Turno", FormatShiftNumber(ticket.ShiftNumber), baseSize));
         root.Children.Add(Metadata("Venta", FormatFolio(ticket.Folio, ticket.SaleId), baseSize));
         root.Children.Add(Rule());
 
@@ -288,7 +292,7 @@ public static class TicketWindowsPrinter
     }
 
     private static string ValueOrDefault(string value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
-    private static string ShortId(Guid value) => value == Guid.Empty ? "N/D" : value.ToString("N")[..8].ToUpperInvariant();
+    private static string FormatShiftNumber(long shiftNumber) => shiftNumber > 0 ? shiftNumber.ToString("N0", CultureInfo.CurrentCulture) : "N/D";
     private static string FormatFolio(long folio, Guid saleId) => folio > 0 ? folio.ToString("N0", CultureInfo.CurrentCulture) : "N/D";
     private static string Money(TicketPdfData ticket, decimal value) => (string.IsNullOrWhiteSpace(ticket.CurrencySymbol) ? "$" : ticket.CurrencySymbol.Trim()) + value.ToString("#,##0.00", CultureInfo.InvariantCulture);
     private static string PaymentLabel(string method) => method.ToUpperInvariant() switch

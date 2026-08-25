@@ -45,7 +45,13 @@ public partial class SaleFolioSettingsWindow : Window
             using var response = await ApiClient.Client.PutAsJsonAsync("api/sale-folios", new { nextFolio });
             if (!response.IsSuccessStatusCode)
             {
-                StatusText.Text = await response.Content.ReadAsStringAsync();
+                StatusText.Text = response.StatusCode switch
+                {
+                    System.Net.HttpStatusCode.Unauthorized => "Tu sesión venció. Inicia sesión de nuevo.",
+                    System.Net.HttpStatusCode.Forbidden => "No tienes permiso para modificar los folios.",
+                    System.Net.HttpStatusCode.Conflict => "El consecutivo cambió en otra operación. Actualiza la ventana e inténtalo de nuevo.",
+                    _ => "No se pudo guardar el siguiente folio. Revisa la conexión e inténtalo de nuevo."
+                };
                 return;
             }
             var settings = await response.Content.ReadFromJsonAsync<SaleFolioSettings>();

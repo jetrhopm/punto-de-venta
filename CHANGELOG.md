@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se publica la versión 2.1.11: los tickets muestran un turno numérico consecutivo en lugar del identificador técnico y la configuración de folios presenta errores en español.
 - Se publica la versión 2.1.10: el catálogo de Productos (F3) se sincroniza automáticamente al escribir o cambiar filtros, orden y departamento sin bloquear la interfaz.
 - Se publica la versión 2.1.9: los diálogos ya no se pueden minimizar ni aparecer como tareas separadas; las búsquedas de kits y promociones cancelan consultas anteriores mientras se escribe.
 - Se publica la versión 2.1.8 con correcciones del plan de pruebas de usuario final: proveedor opcional en compras, edición de límites de crédito, estados de devolución en historial, artículo común oculto del catálogo y mejoras de importación, pagos mixtos y diálogos.

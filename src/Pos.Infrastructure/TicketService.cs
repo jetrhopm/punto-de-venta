@@ -30,6 +30,12 @@ public sealed class TicketService(PosDbContext database)
         var register = await database.Registers.AsNoTracking().SingleAsync(item => item.Id == shift.RegisterId, cancellationToken);
         var cashier = await database.Users.AsNoTracking().SingleAsync(item => item.Id == shift.UserId, cancellationToken);
         var store = await database.Stores.AsNoTracking().SingleAsync(item => item.Id == register.StoreId, cancellationToken);
+        var shiftIds = await database.Shifts.AsNoTracking()
+            .OrderBy(item => item.OpenedAtUtc)
+            .ThenBy(item => item.Id)
+            .Select(item => item.Id)
+            .ToListAsync(cancellationToken);
+        var shiftNumber = shiftIds.FindIndex(id => id == shift.Id) + 1L;
         return new TicketPdfData(
             store.Name,
             store.LegalName,
@@ -48,7 +54,8 @@ public sealed class TicketService(PosDbContext database)
             payments,
             sale.Total,
             store.CurrencySymbol,
-            sale.Folio);
+            sale.Folio,
+            shiftNumber);
     }
 
     public async Task<bool?> MarkPrintedAsync(string token, Guid saleId, CancellationToken cancellationToken)
