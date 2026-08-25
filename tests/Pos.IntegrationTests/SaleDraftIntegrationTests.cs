@@ -8,6 +8,19 @@ namespace Pos.IntegrationTests;
 public sealed class SaleDraftIntegrationTests
 {
     [Fact]
+    public void TrialClockDoesNotAllowReturningToDemoAfterItExpired()
+    {
+        var started = new DateTimeOffset(2026, 8, 25, 12, 0, 0, TimeSpan.Zero);
+        var expired = TrialClockPolicy.Evaluate(started, started, started.AddMinutes(31), TimeSpan.FromMinutes(30));
+        var rolledBack = TrialClockPolicy.Evaluate(started, expired.LastSeenAtUtc, started.AddMinutes(10), TimeSpan.FromMinutes(30));
+
+        Assert.False(expired.IsActive);
+        Assert.Equal("trial_expired", expired.State);
+        Assert.False(rolledBack.IsActive);
+        Assert.Equal("trial_clock_changed", rolledBack.State);
+    }
+
+    [Fact]
     public async Task SavesAndRecoversTicketWithoutAffectingInventoryOrCashUntilItIsConfirmed()
     {
         await using var database = new PosDbContextFactory().CreateDbContext([]);

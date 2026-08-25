@@ -22,6 +22,25 @@ public sealed record LicenseStatusResult(
 
 public sealed record ImportLicenseCommand(string Content);
 
+public sealed record TrialClockResult(bool IsActive, string State, DateTimeOffset LastSeenAtUtc, DateTimeOffset ExpiresAtUtc);
+
+public static class TrialClockPolicy
+{
+    public static TrialClockResult Evaluate(DateTimeOffset startedAtUtc, DateTimeOffset lastSeenAtUtc, DateTimeOffset nowUtc, TimeSpan duration)
+    {
+        var expiresAtUtc = startedAtUtc + duration;
+        if (nowUtc < lastSeenAtUtc)
+        {
+            return new(false, "trial_clock_changed", lastSeenAtUtc, expiresAtUtc);
+        }
+
+        // La hora avanzada se guarda incluso si ya venció la demo. Así no puede
+        // regresarse el reloj para volver a un periodo anterior de prueba.
+        var observedAtUtc = nowUtc > lastSeenAtUtc ? nowUtc : lastSeenAtUtc;
+        return new(nowUtc < expiresAtUtc, nowUtc < expiresAtUtc ? "trial" : "trial_expired", observedAtUtc, expiresAtUtc);
+    }
+}
+
 public sealed class LicenseService(PosDbContext database)
 {
     private static readonly byte[] StorageEntropy = SHA256.HashData(Encoding.UTF8.GetBytes("JetVenta license storage v1"));
@@ -94,27 +113,27 @@ public sealed class LicenseService(PosDbContext database)
             return new(false, "trial_machine_mismatch", "La prueba ya fue iniciada en otro equipo. Activa una licencia para continuar.", fingerprint, request, null, null, null);
         }
 
-        if (trial.LastSeenAtUtc > now)
+        var clock = TrialClockPolicy.Evaluate(trial.StartedAtUtc, trial.LastSeenAtUtc, now, TrialDuration);
+        if (clock.State == "trial_clock_changed")
         {
-            return new(false, "trial_clock_changed", "La fecha del equipo parece haber retrocedido. Corrígela o activa una licencia para continuar.", fingerprint, request, null, trial.StartedAtUtc + TrialDuration, null);
+            return new(false, "trial_clock_changed", "La fecha u hora del equipo retrocedió después de haber sido registrada. Corrígela o activa una licencia para continuar.", fingerprint, request, null, clock.ExpiresAtUtc, null);
         }
 
-        var expiresAt = trial.StartedAtUtc + TrialDuration;
-        if (expiresAt <= now)
+        if (clock.LastSeenAtUtc > trial.LastSeenAtUtc)
         {
-            return new(false, "trial_expired", "El periodo de prueba terminó. Carga una licencia válida para continuar usando JetVenta.", fingerprint, request, null, expiresAt, null);
-        }
-
-        if (now > trial.LastSeenAtUtc)
-        {
-            trial = trial with { LastSeenAtUtc = now };
+            trial = trial with { LastSeenAtUtc = clock.LastSeenAtUtc };
             if (!TryWriteTrial(trial, out error))
             {
-                return new(false, "trial_unavailable", error, fingerprint, request, null, expiresAt, null);
+                return new(false, "trial_unavailable", error, fingerprint, request, null, clock.ExpiresAtUtc, null);
             }
         }
 
-        return new(true, "trial", $"No hay una licencia activada. Modo de prueba activo; te quedan {FormatTrialRemaining(expiresAt - now)}. Activa una licencia antes de que termine.", fingerprint, request, null, expiresAt, null);
+        if (!clock.IsActive)
+        {
+            return new(false, "trial_expired", "El periodo de prueba terminó. Carga una licencia válida para continuar usando JetVenta.", fingerprint, request, null, clock.ExpiresAtUtc, null);
+        }
+
+        return new(true, "trial", $"No hay una licencia activada. Modo de prueba activo; te quedan {FormatTrialRemaining(clock.ExpiresAtUtc - now)}. Activa una licencia antes de que termine.", fingerprint, request, null, clock.ExpiresAtUtc, null);
     }
 
     private static string FormatTrialRemaining(TimeSpan remaining)
