@@ -91,8 +91,17 @@ function Get-ProtectedText([string]$Path) {
 }
 
 function Invoke-Native([string]$File, [string[]]$Arguments) {
-    & $File @Arguments 2>&1 | ForEach-Object { Write-RestoreLog "  $_" }
-    if ($LASTEXITCODE -ne 0) { throw "Falló $([IO.Path]::GetFileName($File)) con código $LASTEXITCODE." }
+    $stderrPath = Join-Path ([IO.Path]::GetTempPath()) ("jetventa-native-{0}.err" -f [Guid]::NewGuid().ToString('N'))
+    try {
+        & $File @Arguments 2> $stderrPath | ForEach-Object { Write-RestoreLog "  $_" }
+        $exitCode = $LASTEXITCODE
+        if (Test-Path -LiteralPath $stderrPath) {
+            Get-Content -LiteralPath $stderrPath -ErrorAction SilentlyContinue | ForEach-Object { Write-RestoreLog "  $_" }
+        }
+        if ($exitCode -ne 0) { throw "Falló $([IO.Path]::GetFileName($File)) con código $exitCode." }
+    } finally {
+        Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Read-ConnectionValue([string]$Connection, [string]$Name) {
@@ -138,6 +147,10 @@ if ($isDevelopment) {
 }
 
 $env:PGPASSWORD = $databasePassword
+$stagingDatabase = $null
+$previousDatabase = $null
+$oldDatabaseRenamed = $false
+$stagingDatabasePromoted = $false
 try {
     $backupDirectory = Join-Path $dataRoot 'backups'
     New-Item -ItemType Directory -Force -Path $backupDirectory | Out-Null
@@ -160,11 +173,14 @@ try {
         Invoke-Native $pgRestore @('--host=127.0.0.1', "--port=$port", "--username=$applicationUser", "--dbname=$database", '--clean', '--if-exists', '--no-owner', '--exit-on-error', $backup)
         Write-RestoreLog 'Restauración de pruebas terminada. La base local quedó cargada y verificada.'
     } else {
-        Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$database' AND pid <> pg_backend_pid();")
-        Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "DROP DATABASE $database;")
-        Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "CREATE DATABASE $database OWNER $applicationUser;")
-        Write-RestoreLog 'Restaurando estructura y datos de JetVenta.'
-        Invoke-Native $pgRestore @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', "--dbname=$database", '--clean', '--if-exists', '--no-owner', '--exit-on-error', $backup)
+        $restoreStamp = (Get-Date).ToString('yyyyMMddHHmmss')
+        $stagingDatabase = "${database}_restore_$restoreStamp"
+        $previousDatabase = "${database}_previous_$restoreStamp"
+        Write-RestoreLog "Preparando una base temporal para restaurar sin reemplazar todavía la base actual: $stagingDatabase."
+        Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "DROP DATABASE IF EXISTS $stagingDatabase;")
+        Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "CREATE DATABASE $stagingDatabase OWNER $applicationUser;")
+        Write-RestoreLog 'Restaurando estructura y datos de JetVenta en la base temporal.'
+        Invoke-Native $pgRestore @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', "--dbname=$stagingDatabase", '--clean', '--if-exists', '--no-owner', '--exit-on-error', $backup)
         Write-RestoreLog 'Reparando propietarios y permisos de la base restaurada.'
         $permissionsSql = @'
 CREATE SCHEMA IF NOT EXISTS pos AUTHORIZATION pos_app;
@@ -186,7 +202,7 @@ BEGIN
     END LOOP;
 END $$;
 '@
-        Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', "--dbname=$database", '-v', 'ON_ERROR_STOP=1', '-c', $permissionsSql)
+        Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', "--dbname=$stagingDatabase", '-v', 'ON_ERROR_STOP=1', '-c', $permissionsSql)
         $historyCheckSql = @'
 DO $$
 DECLARE history_table regclass;
@@ -201,18 +217,56 @@ END $$;
 '@
         $env:PGPASSWORD = $applicationPassword
         try {
-            Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_app', "--dbname=$database", '-v', 'ON_ERROR_STOP=1', '-c', $historyCheckSql)
+            Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_app', "--dbname=$stagingDatabase", '-v', 'ON_ERROR_STOP=1', '-c', $historyCheckSql)
         } finally {
             $env:PGPASSWORD = $databasePassword
         }
-        Write-RestoreLog 'Permisos de la base restaurada comprobados con la cuenta de JetVenta.'
-        Start-JetVentaApiAndWait
-        Write-RestoreLog 'Restauración terminada. La API respondió correctamente y JetVenta puede iniciar con la información restaurada.'
+        Write-RestoreLog 'Permisos y migraciones de la base temporal comprobados con la cuenta de JetVenta.'
+        try {
+            Write-RestoreLog 'Intercambiando la base temporal con la base actual.'
+            Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$database' AND pid <> pg_backend_pid();")
+            Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "ALTER DATABASE $database RENAME TO $previousDatabase;")
+            $oldDatabaseRenamed = $true
+            Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "ALTER DATABASE $stagingDatabase RENAME TO $database;")
+            $stagingDatabasePromoted = $true
+            Start-JetVentaApiAndWait
+            Write-RestoreLog 'La API respondió correctamente con la información restaurada. Eliminando la copia temporal anterior.'
+            Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "DROP DATABASE $previousDatabase;")
+            $stagingDatabase = $null
+            $previousDatabase = $null
+            Write-RestoreLog 'Restauración terminada correctamente.'
+        } catch {
+            Write-RestoreLog "La base restaurada no pudo iniciar correctamente. Se intentará recuperar la base anterior: $($_.Exception.Message)"
+            Stop-Service -Name $apiService -Force -ErrorAction SilentlyContinue
+            Wait-ServiceStopped $apiService
+            try {
+                if ($stagingDatabasePromoted) {
+                    Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "DROP DATABASE $database;")
+                    $stagingDatabase = $null
+                }
+                if ($oldDatabaseRenamed) {
+                    Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "ALTER DATABASE $previousDatabase RENAME TO $database;")
+                    $previousDatabase = $null
+                }
+                Start-JetVentaApiAndWait
+                Write-RestoreLog 'La base anterior fue recuperada y la API volvió a responder.'
+            } catch {
+                Write-RestoreLog "No se pudo completar la recuperación de la base anterior: $($_.Exception.Message)"
+            }
+            throw
+        }
     }
 } finally {
-    Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
     if (-not $isDevelopment) {
+        if ($null -ne $stagingDatabase) {
+            try {
+                Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "DROP DATABASE IF EXISTS $stagingDatabase;")
+            } catch {
+                Write-RestoreLog "No se pudo eliminar la base temporal ${stagingDatabase}: $($_.Exception.Message)"
+            }
+        }
         $api = Get-Service -Name $apiService -ErrorAction SilentlyContinue
         if ($null -ne $api -and $api.Status -ne 'Running') { Start-Service -Name $apiService -ErrorAction SilentlyContinue }
     }
+    Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
 }

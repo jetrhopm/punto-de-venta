@@ -86,6 +86,45 @@ public partial class BackupWindow : Window
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo eliminar la copia"); }
     }
 
+    private async void OnResetOperationalDataClick(object sender, RoutedEventArgs e)
+    {
+        var firstConfirmation = MessageBox.Show(
+            "JetVenta creará un respaldo preventivo y después eliminará los datos de operación de esta tienda: productos, clientes, proveedores, ventas, compras, inventario, turnos, cortes, promociones, tickets pendientes y movimientos.\n\nSe conservarán el nombre y la configuración de la tienda, la cuenta administradora y la licencia local. Los respaldos existentes tampoco se eliminarán.\n\n¿Deseas continuar?",
+            "Limpiar datos de operación",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (firstConfirmation != MessageBoxResult.Yes) return;
+
+        var finalConfirmation = MessageBox.Show(
+            "Esta acción no se puede deshacer desde JetVenta. Para recuperar los datos necesitarás cargar el respaldo preventivo.\n\n¿Confirmas que deseas limpiar los datos?",
+            "Confirmación final",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Stop);
+        if (finalConfirmation != MessageBoxResult.Yes) return;
+
+        StatusText.Text = "Creando respaldo preventivo y limpiando datos de operación...";
+        try
+        {
+            using var response = await ApiClient.Client.PostAsync("api/maintenance/reset-operational-data", null);
+            if (!response.IsSuccessStatusCode)
+            {
+                StatusText.Text = $"No se pudieron limpiar los datos: {await response.Content.ReadAsStringAsync()}";
+                return;
+            }
+
+            MessageBox.Show(
+                "Los datos de operación se eliminaron correctamente. Se conservó la tienda, la cuenta administradora, la licencia y los respaldos. JetVenta se cerrará para iniciar sesión de nuevo.",
+                "Datos limpiados",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            System.Windows.Application.Current.Shutdown();
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron limpiar los datos de operación");
+        }
+    }
+
     private async void OnRestoreClick(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog

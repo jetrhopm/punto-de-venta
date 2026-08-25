@@ -308,6 +308,15 @@ app.MapDelete("/api/maintenance/backups/{fileName}", async (string fileName, Htt
     }
     catch (ArgumentException exception) { return Results.BadRequest(new { message = exception.Message }); }
 });
+app.MapPost("/api/maintenance/reset-operational-data", async (HttpRequest request, DatabaseMaintenanceService maintenance, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await maintenance.ResetOperationalDataAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (InvalidOperationException exception) { return Results.Problem(exception.Message, statusCode: StatusCodes.Status500InternalServerError); }
+});
 
 app.MapGet("/api/users", async (HttpRequest request, UserAdministrationService users, CancellationToken cancellationToken) =>
 {

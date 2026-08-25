@@ -34,6 +34,8 @@ Desde la pantalla se puede crear un respaldo y guardar una copia en disco extern
 
 La restauración se ejecuta desde **Configuración > Respaldos > Cargar respaldo**. El usuario selecciona el archivo `.dump`; JetVenta exige que el archivo `.dump.sha256` esté junto a él, valida el SHA-256 y solicita confirmación. Después ejecuta el restaurador protegido con permisos de Windows, crea una copia preventiva de la base de destino, reemplaza la base y reinicia la API. La impresora se selecciona de nuevo porque es una preferencia local de cada caja. El comando PowerShell incluido queda como herramienta técnica de recuperación, no como requisito para el usuario común.
 
+Desde la misma pantalla existe **Limpiar datos**. Esta acción requiere una cuenta administradora y dos confirmaciones, crea primero un respaldo preventivo y elimina los datos de operación para iniciar una tienda limpia. Conserva el nombre y la configuración de la tienda, la cuenta administradora, la licencia local y todos los respaldos. Para recuperar los datos eliminados se debe cargar el respaldo preventivo.
+
 ## Importacion de productos e inventario
 
 Se admiten `.xlsx`, `.csv` y `.txt`. El lector reconoce UTF-8 y Windows-1252, detecta el separador CSV y conserva codigos con ceros iniciales cuando el archivo los contiene como texto.

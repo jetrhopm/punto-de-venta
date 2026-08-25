@@ -8,6 +8,7 @@ using System.Text.Json;
 namespace Pos.Infrastructure;
 
 public sealed record BackupResult(string FileName, long SizeBytes, string Sha256, DateTimeOffset CreatedAtUtc);
+public sealed record ResetOperationalDataResult(BackupResult SafetyBackup);
 
 public sealed class DatabaseMaintenanceService(PosDbContext database)
 {
@@ -105,6 +106,45 @@ public sealed class DatabaseMaintenanceService(PosDbContext database)
         return true;
     }
 
+    public async Task<ResetOperationalDataResult?> ResetOperationalDataAsync(string token, CancellationToken cancellationToken)
+    {
+        var userId = await AdministratorAsync(token, cancellationToken);
+        if (userId is null) return null;
+
+        var safetyBackup = await CreateCoreAsync(cancellationToken);
+        const string resetSql = """
+            TRUNCATE TABLE
+                pos.device,
+                pos.pairing_code,
+                pos.mercado_pago_order,
+                pos.product,
+                pos.department,
+                pos.import_batch,
+                pos.promotion,
+                pos.kit_component,
+                pos.session,
+                pos.shift,
+                pos.sale,
+                pos.sale_draft,
+                pos.payment,
+                pos.inventory_movement,
+                pos.inventory_limit_change,
+                pos.cash_movement,
+                pos.print_job,
+                pos.customer,
+                pos.credit_transaction,
+                pos.supplier,
+                pos.purchase,
+                pos.purchase_line,
+                pos.sale_reversal,
+                pos.sale_return,
+                pos.sale_return_line
+            RESTART IDENTITY CASCADE;
+            """;
+        await database.Database.ExecuteSqlRawAsync(resetSql, cancellationToken);
+        return new ResetOperationalDataResult(safetyBackup);
+    }
+
     private static string FindPgDump()
     {
         var configured = Environment.GetEnvironmentVariable("POS_PG_BIN");
@@ -127,5 +167,13 @@ public sealed class DatabaseMaintenanceService(PosDbContext database)
         if (session is null) return null;
         var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
         return user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "ImportOrExportData", cancellationToken) ? user.Id : null;
+    }
+
+    private async Task<Guid?> AdministratorAsync(string token, CancellationToken cancellationToken)
+    {
+        var userId = await AuthorizedAsync(token, cancellationToken);
+        if (userId is null) return null;
+        var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == userId, cancellationToken);
+        return user.IsAdministrator ? user.Id : null;
     }
 }

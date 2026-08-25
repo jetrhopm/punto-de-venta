@@ -1,6 +1,10 @@
 # Changelog
 
 ## Sin liberar
+- Se corrige la restauración de producción para ignorar avisos normales de PostgreSQL y validar la base en una instancia temporal antes de intercambiarla.
+- Si la API no inicia después del intercambio, JetVenta revierte automáticamente a la base anterior.
+- Se agrega una acción protegida para limpiar los datos de operación con respaldo preventivo, conservando la tienda, la cuenta administradora, la licencia y los respaldos.
+- Se publica la versión 2.1.6 para actualizar desde la versión 2.1.5.
 - Se elimina el límite automático de cinco respaldos locales. JetVenta conserva todas las copias hasta que el administrador las elimine manualmente.
 - Se publica la versión 2.1.5 para actualizar desde la versión 2.1.4.
 - Se corrige la restauración desde archivo: la API se detiene antes de reemplazar la base, se reparan permisos y se verifica que el servicio responda antes de finalizar.
