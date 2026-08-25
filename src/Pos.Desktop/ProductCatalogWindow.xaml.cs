@@ -137,6 +137,7 @@ public partial class ProductCatalogWindow : UserControl
     {
         if (PriceBox is null || CostBox is null || ProfitAmountBox is null) return;
         if (TryDecimal(PriceBox.Text, out var price) && TryDecimal(CostBox.Text, out var cost)) ProfitAmountBox.Text = Money(price - cost);
+        else ProfitAmountBox.Text = "0.00";
     }
     private void UpdateWholesaleProfitAmount()
     {
@@ -179,6 +180,7 @@ public partial class ProductCatalogWindow : UserControl
         var wholesaleProfit = TryDecimal(WholesaleProfitPercentBox.Text, out var parsedWholesaleProfit) ? parsedWholesaleProfit : 0m;
         var wholesaleMinimum = TryDecimal(WholesaleMinimumBox.Text, out var parsedWholesaleMinimum) ? parsedWholesaleMinimum : 0m;
         if (cost < 0 || profit < 0 || price < 0 || wholesalePrice < 0 || wholesaleProfit < 0 || wholesaleMinimum < 0) { StatusText.Text = "Los importes y porcentajes no pueden ser negativos."; return false; }
+        if (price <= 0m && profit <= 0m) { StatusText.Text = "Indica un precio de venta manual mayor a cero o captura un porcentaje de ganancia."; return false; }
         var unit = UnitBox.SelectedItem?.ToString() ?? "Pieza";
         if (string.Equals(unit, "Granel (unidad configurada)", StringComparison.OrdinalIgnoreCase)) unit = _configuredWeightUnit;
         command = new { code = CodeBox.Text.Trim(), description = DescriptionBox.Text.Trim(), price, cost, profitPercent = profit, wholesalePrice, wholesaleProfitPercent = wholesaleProfit, wholesaleMinimumQuantity = wholesaleMinimum, isKit = IsKitBox.IsChecked == true, unitOfMeasure = unit, departmentId = DepartmentBox.SelectedValue is Guid department && department != Guid.Empty ? department : (Guid?)null };

@@ -13,5 +13,6 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Payload.zip" LogicalName="PuntoDeVenta.Payload.zip" />
+    <EmbeddedResource Include="..\LICENSE.rtf" LogicalName="JetVenta.LICENSE.rtf" />
   </ItemGroup>
 </Project>

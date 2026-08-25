@@ -238,7 +238,7 @@ public partial class StartupWindow : Window
         try
         {
             Log($"Solicitando reparación elevada de servicios: {script}");
-            SetStatus("Solicitando permisos para reparar los servicios de JetVenta...", 35, "Revisando", "Reparando", "Pendiente");
+            SetStatus("Se abrirá una ventana de Windows para reparar los servicios de JetVenta. Espera a que termine; se cerrará sola.", 35, "Revisando", "Reparando", "Pendiente");
             using var process = Process.Start(new ProcessStartInfo
             {
                 FileName = powershell,

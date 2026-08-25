@@ -116,7 +116,13 @@ public partial class SalesHistoryWindow : UserControl
     private sealed record HistoryRow(Guid SaleId, long Folio, DateTimeOffset CreatedAtUtc, string Status, decimal Total, string PaymentMethod, decimal Paid, string Cashier, Guid UserId, int Items)
     { public string ShortId => SaleId.ToString("N")[..8].ToUpperInvariant(); public string FolioText => Folio > 0 ? Folio.ToString("N0", CultureInfo.CurrentCulture) : "N/D"; public string DateText => CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm"); public string TotalText => Total.ToString("C2", CultureInfo.CurrentCulture); }
     private sealed record Detail(Guid SaleId, long Folio, DateTimeOffset CreatedAtUtc, string Status, decimal Total, string Cashier, List<HistoryLine> Lines, List<Payment> Payments);
-    private sealed record HistoryLine(Guid ProductId, string Code, string Description, decimal Quantity, decimal UnitPrice, decimal Total);
+    private sealed record HistoryLine(Guid ProductId, string Code, string Description, decimal Quantity, decimal ReturnedQuantity, decimal UnitPrice, decimal Total);
     private sealed record Payment(string Method, decimal Amount, decimal Received, decimal Change);
-    private sealed class LineView(HistoryLine line) { public decimal Quantity => line.Quantity; public string Description => line.Description; public string TotalText => line.Total.ToString("C2", CultureInfo.CurrentCulture); }
+    private sealed class LineView(HistoryLine line)
+    {
+        public decimal Quantity => line.Quantity;
+        public string Description => line.Description;
+        public string ReturnText => line.ReturnedQuantity <= 0m ? "Entregado" : line.ReturnedQuantity >= line.Quantity ? "Devuelto" : $"Devuelto {line.ReturnedQuantity:0.###}";
+        public string TotalText => line.Total.ToString("C2", CultureInfo.CurrentCulture);
+    }
 }

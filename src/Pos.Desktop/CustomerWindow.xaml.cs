@@ -50,6 +50,18 @@ public partial class CustomerWindow : Window
         }
         catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailable; }
     }
+    private async void OnUpdateClick(object sender, RoutedEventArgs e)
+    {
+        if (_selected is null) { MessageText.Text = "Selecciona un cliente con doble clic antes de actualizarlo."; return; }
+        if (string.IsNullOrWhiteSpace(NameTextBox.Text) || !TryParse(LimitTextBox.Text, out var limit) || limit < 0m) { MessageText.Text = "Escribe un nombre y un límite de crédito válido."; return; }
+        try
+        {
+            using var update = await Client.PutAsJsonAsync($"/api/customers/{_selected.Customer.Id}", new { name = NameTextBox.Text.Trim(), phone = _selected.Customer.Phone, email = _selected.Customer.Email, taxId = _selected.Customer.TaxId, creditLimit = limit, creditEnabled = _selected.Customer.CreditEnabled });
+            MessageText.Text = update.IsSuccessStatusCode ? "Cliente actualizado correctamente." : await update.Content.ReadAsStringAsync();
+            if (update.IsSuccessStatusCode) await LoadCustomersAsync();
+        }
+        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailable; }
+    }
     private async void OnPaymentClick(object sender, RoutedEventArgs e)
     {
         if (_selected is null) { MessageText.Text = "Selecciona primero al cliente que realiza el abono."; return; }

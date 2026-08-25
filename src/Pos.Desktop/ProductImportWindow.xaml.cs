@@ -19,6 +19,7 @@ public partial class ProductImportWindow : Window
     private string _sortMember = nameof(ProductImportPreviewRow.RowNumber);
     private ListSortDirection _sortDirection = ListSortDirection.Ascending;
     private bool _refreshScheduled;
+    private ImportResult? _lastImportResult;
 
     public ProductImportWindow() => InitializeComponent();
 
@@ -31,6 +32,8 @@ public partial class ProductImportWindow : Window
         {
             _rows = ProductImportFileReader.Read(dialog.FileName, minimum).ToList();
             _sortedRows = [.. _rows];
+            _lastImportResult = null;
+            SaveReportButton.IsEnabled = false;
             _currentPage = 1;
             FileBox.Text = dialog.FileName;
             ApplySort();
@@ -82,6 +85,7 @@ public partial class ProductImportWindow : Window
         PreviewGrid.CommitEdit(DataGridEditingUnit.Row, true);
         if (_rows.Count == 0 || RefreshPreviewStatus(focusFirstInvalid: true) > 0) return;
         ImportButton.IsEnabled = false;
+        ImportProgressBar.Visibility = Visibility.Visible;
         StatusText.Text = "Creando respaldo previo e importando en una sola transaccion...";
         try
         {
@@ -93,11 +97,15 @@ public partial class ProductImportWindow : Window
             if (!response.IsSuccessStatusCode) { StatusText.Text = "La importacion se revirtio: " + await response.Content.ReadAsStringAsync(); return; }
             var result = await response.Content.ReadFromJsonAsync<ImportResult>();
             StatusText.Text = result is null ? "Importacion terminada." : $"Importacion terminada: {result.Created} creados, {result.Updated} actualizados y {result.Skipped} omitidos.";
-            SaveReport(result);
+            _lastImportResult = result;
+            SaveReportButton.IsEnabled = true;
+            StatusText.Text += " Puedes guardar el reporte cuando lo necesites.";
         }
         catch (Exception exception) { StatusText.Text = $"La importacion no se completo: {exception.Message}"; }
-        finally { ImportButton.IsEnabled = true; }
+        finally { ImportProgressBar.Visibility = Visibility.Collapsed; ImportButton.IsEnabled = true; }
     }
+
+    private void OnSaveReportClick(object sender, RoutedEventArgs e) => SaveReport(_lastImportResult);
 
     private void SaveReport(ImportResult? result)
     {

@@ -7,7 +7,7 @@ namespace Pos.Infrastructure;
 public sealed record SalesHistoryFilter(DateTimeOffset From, DateTimeOffset To, Guid? UserId = null, string? Query = null);
 public sealed record SalesHistoryRow(Guid SaleId, long Folio, DateTimeOffset CreatedAtUtc, string Status, decimal Total, string PaymentMethod, decimal Paid, string Cashier, Guid UserId, int Items);
 public sealed record SaleHistoryDetail(Guid SaleId, long Folio, DateTimeOffset CreatedAtUtc, string Status, decimal Total, string Cashier, IReadOnlyList<SaleHistoryLine> Lines, IReadOnlyList<SaleHistoryPayment> Payments);
-public sealed record SaleHistoryLine(Guid ProductId, string Code, string Description, decimal Quantity, decimal UnitPrice, decimal Total);
+public sealed record SaleHistoryLine(Guid ProductId, string Code, string Description, decimal Quantity, decimal ReturnedQuantity, decimal UnitPrice, decimal Total);
 public sealed record SaleHistoryPayment(string Method, decimal Amount, decimal Received, decimal Change);
 
 public sealed class SalesHistoryService(PosDbContext database)
@@ -46,10 +46,16 @@ public sealed class SalesHistoryService(PosDbContext database)
                             where sale.Id == saleId
                             select new { sale, user }).SingleOrDefaultAsync(cancellationToken);
         if (result is null) throw new KeyNotFoundException("Venta no encontrada.");
+        var returned = await (from line in database.ReturnLines.AsNoTracking()
+                              join returnedSale in database.Returns.AsNoTracking() on line.ReturnId equals returnedSale.Id
+                              where returnedSale.SaleId == saleId
+                              group line by line.ProductId into grouped
+                              select new { ProductId = grouped.Key, Quantity = grouped.Sum(item => item.Quantity) }).ToDictionaryAsync(item => item.ProductId, item => item.Quantity, cancellationToken);
         var lines = await (from line in database.SaleLines.AsNoTracking()
                            join product in database.Products.AsNoTracking() on line.ProductId equals product.Id
                            where line.SaleId == saleId
-                           select new SaleHistoryLine(line.ProductId, product.Code, product.Description, line.Quantity, line.UnitPrice, line.LineTotal)).ToListAsync(cancellationToken);
+                           select new SaleHistoryLine(line.ProductId, product.Code, product.Description, line.Quantity, 0m, line.UnitPrice, line.LineTotal)).ToListAsync(cancellationToken);
+        lines = lines.Select(line => line with { ReturnedQuantity = returned.GetValueOrDefault(line.ProductId) }).ToList();
         var payments = await database.Payments.AsNoTracking().Where(item => item.SaleId == saleId).Select(item => new SaleHistoryPayment(item.Method, item.Amount, item.Received, item.Change)).ToListAsync(cancellationToken);
         return new SaleHistoryDetail(result.sale.Id, result.sale.Folio, result.sale.CreatedAtUtc, result.sale.Status, result.sale.Total, result.user.DisplayName, lines, payments);
     }

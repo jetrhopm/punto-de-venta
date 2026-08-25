@@ -8,7 +8,7 @@ namespace Pos.Infrastructure;
 public sealed record SupplierCommand(string Name, string? Phone, string? Email);
 public sealed record SupplierResult(Guid Id, string Name, string? Phone, string? Email);
 public sealed record PurchaseLineCommand(Guid ProductId, decimal Quantity, decimal UnitCost);
-public sealed record ReceivePurchaseCommand(Guid OperationId, Guid SupplierId, IReadOnlyList<PurchaseLineCommand> Lines);
+public sealed record ReceivePurchaseCommand(Guid OperationId, Guid? SupplierId, IReadOnlyList<PurchaseLineCommand> Lines);
 public sealed record ReceivePurchaseResult(Guid PurchaseId, Guid OperationId, decimal Total, bool Existing);
 
 public sealed class SupplierPurchaseService(PosDbContext database)
@@ -33,16 +33,27 @@ public sealed class SupplierPurchaseService(PosDbContext database)
     {
         var user = await UserAsync(token, cancellationToken);
         if (user is null) return null;
-        if (command.OperationId == Guid.Empty || command.SupplierId == Guid.Empty || command.Lines.Count == 0) throw new ArgumentException("La compra requiere operacion, proveedor y partidas.");
+        if (command.OperationId == Guid.Empty || command.Lines.Count == 0) throw new ArgumentException("La compra requiere operación y partidas.");
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var existing = await database.Purchases.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new ReceivePurchaseResult(existing.Id, existing.OperationId, existing.Total, true);
-        if (!await database.Suppliers.AnyAsync(item => item.Id == command.SupplierId, cancellationToken)) throw new KeyNotFoundException("Proveedor no encontrado.");
+        var supplierId = command.SupplierId;
+        if (supplierId is null || supplierId == Guid.Empty)
+        {
+            var directSupplier = await database.Suppliers.SingleOrDefaultAsync(item => item.Name == "Sin proveedor", cancellationToken);
+            if (directSupplier is null)
+            {
+                directSupplier = new SupplierRecord { Id = Guid.NewGuid(), Name = "Sin proveedor", CreatedAtUtc = DateTimeOffset.UtcNow };
+                database.Suppliers.Add(directSupplier);
+            }
+            supplierId = directSupplier.Id;
+        }
+        else if (!await database.Suppliers.AnyAsync(item => item.Id == supplierId, cancellationToken)) throw new KeyNotFoundException("Proveedor no encontrado.");
         var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
         var ids = command.Lines.Select(item => item.ProductId).Distinct().ToArray();
         var products = await database.Products.Where(item => ids.Contains(item.Id) && item.IsActive).ToDictionaryAsync(item => item.Id, cancellationToken);
         if (products.Count != ids.Length) throw new KeyNotFoundException("Una o mas partidas no existen o estan inactivas.");
-        var purchase = new PurchaseRecord { Id = Guid.NewGuid(), OperationId = command.OperationId, SupplierId = command.SupplierId, UserId = user.Id, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var purchase = new PurchaseRecord { Id = Guid.NewGuid(), OperationId = command.OperationId, SupplierId = supplierId.Value, UserId = user.Id, CreatedAtUtc = DateTimeOffset.UtcNow };
         var total = 0m;
         foreach (var line in command.Lines)
         {

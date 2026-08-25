@@ -81,12 +81,14 @@
         </Grid>
 
         <Grid Grid.Row="4" Margin="0,12,0,0">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <StackPanel>
                 <TextBlock x:Name="StatusText" Foreground="#526577" TextWrapping="Wrap"/>
+                <ProgressBar x:Name="ImportProgressBar" Height="6" Margin="0,8,12,0" IsIndeterminate="True" Visibility="Collapsed"/>
                 <TextBlock x:Name="ErrorDetailsText" Margin="0,5,12,0" Foreground="#B42318" TextWrapping="Wrap"/>
             </StackPanel>
-            <Button Grid.Column="1" x:Name="ImportButton" Width="170" Height="38" IsEnabled="False" Click="OnImportClick">Importar ahora</Button>
+            <Button Grid.Column="1" x:Name="SaveReportButton" Width="160" Height="38" Margin="0,0,8,0" IsEnabled="False" Click="OnSaveReportClick">Guardar reporte</Button>
+            <Button Grid.Column="2" x:Name="ImportButton" Width="170" Height="38" IsEnabled="False" Click="OnImportClick">Importar ahora</Button>
         </Grid>
     </Grid>
 </Window>

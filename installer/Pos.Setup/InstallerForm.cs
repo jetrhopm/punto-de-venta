@@ -54,9 +54,11 @@ public sealed class InstallerForm : Form
             Controls.Add(new Label { Text = "Incluye PostgreSQL, API local, cliente de escritorio y Microsoft Visual C++ Redistributable. Las dependencias válidas se detectan y se conservan.", Location = new Point(30, 115), Size = new Size(700, 45) });
             Controls.Add(new Label { Text = "Al terminar podrás abrir el asistente para crear la tienda, el administrador y decidir cómo cargar el inventario.", Location = new Point(30, 160), Size = new Size(700, 40) });
             _terms.SetBounds(30, 210, 350, 25);
+            var viewTerms = new Button { Text = "Ver términos y condiciones", AutoSize = true, Location = new Point(390, 207) };
+            viewTerms.Click += (_, _) => ShowTerms();
             _desktopShortcut.SetBounds(30, 250, 300, 25);
             _startShortcut.SetBounds(370, 250, 300, 25);
-            Controls.AddRange([_terms, _desktopShortcut, _startShortcut]);
+            Controls.AddRange([_terms, viewTerms, _desktopShortcut, _startShortcut]);
             Controls.Add(new Label { Text = $"Carpeta de instalación: {_installRoot}", Location = new Point(30, 288), Size = new Size(700, 25) });
         }
 
@@ -178,6 +180,17 @@ public sealed class InstallerForm : Form
         Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PuntoDeVenta", false);
         DeleteShortcuts();
         SetProgress(100, "Desinstalación terminada. Los datos y respaldos se conservaron.");
+    }
+
+    private static void ShowTerms()
+    {
+        using var form = new Form { Text = "Términos y condiciones de JetVenta", ClientSize = new Size(700, 500), StartPosition = FormStartPosition.CenterParent, MinimizeBox = false, MaximizeBox = false };
+        var text = new RichTextBox { Dock = DockStyle.Fill, ReadOnly = true, BackColor = Color.White, BorderStyle = BorderStyle.None, DetectUrls = true };
+        using var stream = typeof(InstallerForm).Assembly.GetManifestResourceStream("JetVenta.LICENSE.rtf");
+        if (stream is not null) text.LoadFile(stream, RichTextBoxStreamType.RichText);
+        else text.Text = "No se pudo cargar el documento de términos y condiciones.";
+        form.Controls.Add(text);
+        form.ShowDialog();
     }
 
     private static void EnsureDesktopClosedForUpdate()

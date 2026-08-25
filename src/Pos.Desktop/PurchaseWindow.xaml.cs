@@ -19,7 +19,12 @@ public partial class PurchaseWindow : UserControl
     }
     private async Task LoadSuppliersAsync()
     {
-        try { SupplierComboBox.ItemsSource = await Client.GetFromJsonAsync<List<SupplierResult>>("/api/suppliers") ?? []; SupplierComboBox.SelectedIndex = 0; }
+        try
+        {
+            var suppliers = await Client.GetFromJsonAsync<List<SupplierResult>>("/api/suppliers") ?? [];
+            SupplierComboBox.ItemsSource = new[] { SupplierResult.None }.Concat(suppliers).ToList();
+            SupplierComboBox.SelectedIndex = 0;
+        }
         catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailable; }
     }
     private async void OnCreateSupplierClick(object sender, RoutedEventArgs e)
@@ -47,10 +52,11 @@ public partial class PurchaseWindow : UserControl
     }
     private async void OnReceiveClick(object sender, RoutedEventArgs e)
     {
-        if (SupplierComboBox.SelectedItem is not SupplierResult supplier || _product is null || !TryParse(QuantityTextBox.Text, out var quantity) || !TryParse(UnitCostTextBox.Text, out var cost)) { MessageText.Text = "Selecciona proveedor y producto, e indica cantidad y costo."; return; }
+        if (_product is null || !TryParse(QuantityTextBox.Text, out var quantity) || !TryParse(UnitCostTextBox.Text, out var cost)) { MessageText.Text = "Selecciona un producto e indica cantidad y costo."; return; }
+        var supplierId = (SupplierComboBox.SelectedItem as SupplierResult)?.Id;
         try
         {
-            using var response = await Client.PostAsJsonAsync("/api/purchases/receive", new { operationId = Guid.NewGuid(), supplierId = supplier.Id, lines = new[] { new { productId = _product.Product.Id, quantity, unitCost = cost } } });
+            using var response = await Client.PostAsJsonAsync("/api/purchases/receive", new { operationId = Guid.NewGuid(), supplierId, lines = new[] { new { productId = _product.Product.Id, quantity, unitCost = cost } } });
             if (!response.IsSuccessStatusCode) { MessageText.Text = await response.Content.ReadAsStringAsync(); return; }
             var updatedStock = _product.Product.Stock + quantity;
             _product = new ProductRow(_product.Product with { Stock = updatedStock, Cost = cost });
@@ -68,7 +74,11 @@ public partial class PurchaseWindow : UserControl
         SelectedProductInfoText.Text = $"Precio de venta: ${product.Price:0.00}    |    Costo actual: ${product.Cost:0.00}    |    Existencia: {product.Stock:0.###} {product.UnitOfMeasure}";
     }
     private static bool TryParse(string value, out decimal result) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.CurrentCulture, out result) || decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
-    private sealed record SupplierResult(Guid Id, string Name, string? Phone, string? Email) { public string DisplayText => Name; }
+    private sealed record SupplierResult(Guid? Id, string Name, string? Phone, string? Email)
+    {
+        public static SupplierResult None { get; } = new(null, "Sin proveedor", null, null);
+        public string DisplayText => Name;
+    }
     private sealed record ProductResult(Guid Id, string Code, string Description, decimal Price, decimal Cost, decimal Stock, string UnitOfMeasure);
     private sealed record ProductRow(ProductResult Product) { public string DisplayText => $"{Product.Code} | {Product.Description} | Venta ${Product.Price:0.00} | Existencia {Product.Stock:0.###} {Product.UnitOfMeasure}"; }
 }

@@ -462,7 +462,8 @@ public partial class MainWindow : Window
     private async void OnSearchButtonClick(object sender, RoutedEventArgs e)
     {
         if (ProductResultsList.Items.Count == 1) { ProductResultsList.SelectedIndex = 0; await AddSelectedProductAsync(); }
-        else StatusText.Text = ProductResultsList.Items.Count == 0 ? "No hay productos para agregar." : "Selecciona un producto de la lista.";
+        else if (ProductResultsList.Items.Count == 0 && !string.IsNullOrWhiteSpace(ProductSearchTextBox.Text)) await HandleProductEntryAsync(ProductSearchTextBox.Text.Trim());
+        else StatusText.Text = "Selecciona un producto de la lista.";
         FocusProductInput();
     }
 

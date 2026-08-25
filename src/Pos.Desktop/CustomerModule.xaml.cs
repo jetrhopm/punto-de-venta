@@ -68,6 +68,20 @@ public partial class CustomerModule : UserControl
         catch (HttpRequestException) { SelectedSummaryText.Text = ConnectionHelp.ApiUnavailable; }
     }
 
+    private async void OnUpdateClick(object sender, RoutedEventArgs e)
+    {
+        if (_selected is null) { SelectedSummaryText.Text = "Selecciona un cliente con doble clic antes de actualizarlo."; return; }
+        if (string.IsNullOrWhiteSpace(NameTextBox.Text) || !TryParse(LimitTextBox.Text, out var limit) || limit < 0m) { SelectedSummaryText.Text = "Escribe un nombre y un límite de crédito válido."; return; }
+        try
+        {
+            var customer = _selected.Customer;
+            using var response = await Client.PutAsJsonAsync($"/api/customers/{customer.Id}", new { name = NameTextBox.Text.Trim(), phone = customer.Phone, email = customer.Email, taxId = customer.TaxId, creditLimit = limit, creditEnabled = customer.CreditEnabled });
+            SelectedSummaryText.Text = response.IsSuccessStatusCode ? "Cliente actualizado correctamente." : await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode) await LoadCustomersAsync();
+        }
+        catch (HttpRequestException) { SelectedSummaryText.Text = ConnectionHelp.ApiUnavailable; }
+    }
+
     private async void OnPaymentClick(object sender, RoutedEventArgs e)
     {
         if (_selected is null) { SelectedSummaryText.Text = "Selecciona primero al cliente que realiza el abono."; return; }
