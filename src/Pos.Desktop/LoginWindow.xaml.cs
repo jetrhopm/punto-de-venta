@@ -21,6 +21,7 @@ public partial class LoginWindow : Window
     private static HttpClient Client => ApiClient.Client;
     private bool _isBusy;
     private string? _licenseReminder;
+    private List<LoginUserOption> _users = [];
 
     public LoginWindow()
     {
@@ -48,12 +49,47 @@ public partial class LoginWindow : Window
         SetBusy(false);
         if (configured)
         {
-            SetStatus("JetVenta está listo. Ingresa tus datos para continuar.", StatusKind.Success);
-            PasswordBox.Focus();
+            await LoadActiveUsersAsync();
+            SetStatus("JetVenta está listo. Elige tu usuario e ingresa tu contraseña.", StatusKind.Success);
+            if (UserListBox.SelectedItem is null) UserFilterTextBox.Focus();
+            else PasswordBox.Focus();
         }
     }
 
     private void OnPasswordPreviewKeyUp(object sender, KeyEventArgs e) => UpdateCapsLockWarning();
+
+    private void OnUserFilterTextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) => RefreshUserList();
+
+    private void OnUserSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (UserListBox.SelectedItem is LoginUserOption) PasswordBox.Focus();
+    }
+
+    private async Task LoadActiveUsersAsync()
+    {
+        try
+        {
+            _users = await Client.GetFromJsonAsync<List<LoginUserOption>>("api/auth/active-users") ?? [];
+            RefreshUserList(selectUserName: "ADMIN");
+        }
+        catch (HttpRequestException)
+        {
+            _users = [];
+            SetStatus(UnavailableMessage, StatusKind.Error);
+        }
+    }
+
+    private void RefreshUserList(string? selectUserName = null)
+    {
+        var current = selectUserName ?? (UserListBox.SelectedItem as LoginUserOption)?.UserName;
+        var filter = UserFilterTextBox.Text.Trim();
+        var visible = _users.Where(user => string.IsNullOrWhiteSpace(filter)
+            || user.UserName.Contains(filter, StringComparison.OrdinalIgnoreCase)
+            || user.DisplayName.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+        UserListBox.ItemsSource = visible;
+        UserListBox.SelectedItem = visible.FirstOrDefault(user => string.Equals(user.UserName, current, StringComparison.OrdinalIgnoreCase));
+        if (UserListBox.SelectedItem is null && visible.Count == 1) UserListBox.SelectedItem = visible[0];
+    }
 
     private void UpdateCapsLockWarning() =>
         CapsLockPanel.Visibility = Keyboard.IsKeyToggled(Key.CapsLock) ? Visibility.Visible : Visibility.Collapsed;
@@ -74,10 +110,10 @@ public partial class LoginWindow : Window
     {
         if (_isBusy) return;
 
-        if (string.IsNullOrWhiteSpace(UserNameTextBox.Text))
+        if (UserListBox.SelectedItem is not LoginUserOption selectedUser)
         {
-            SetStatus("Escribe el usuario para continuar.", StatusKind.Error);
-            UserNameTextBox.Focus();
+            SetStatus("Elige un usuario de la lista para continuar.", StatusKind.Error);
+            UserFilterTextBox.Focus();
             return;
         }
 
@@ -101,7 +137,7 @@ public partial class LoginWindow : Window
 
             using var response = await Client.PostAsJsonAsync("api/auth/login", new
             {
-                userName = UserNameTextBox.Text.Trim(),
+                userName = selectedUser.UserName,
                 password = PasswordBox.Password
             });
             if (!response.IsSuccessStatusCode)
@@ -235,6 +271,8 @@ public partial class LoginWindow : Window
         LoginButton.IsEnabled = !isBusy;
         ServerButton.IsEnabled = !isBusy;
         PairButton.IsEnabled = !isBusy;
+        UserFilterTextBox.IsEnabled = !isBusy;
+        UserListBox.IsEnabled = !isBusy;
         BusyProgress.Visibility = isBusy ? Visibility.Visible : Visibility.Collapsed;
         LoginButtonIcon.Kind = isBusy ? PackIconMaterialKind.ProgressClock : PackIconMaterialKind.LoginVariant;
         LoginButtonText.Text = isBusy ? "Espera un momento" : "Iniciar sesión";
@@ -289,6 +327,10 @@ public partial class LoginWindow : Window
     }
 
     private sealed record SetupStatus(bool Configured, string? StoreName);
+    private sealed record LoginUserOption(string UserName, string DisplayName)
+    {
+        public string DisplayText => $"{DisplayName} ({UserName.ToLowerInvariant()})";
+    }
     private sealed record LicenseStatus(bool IsActive, string State, string Message, string MachineFingerprint, string RequestCode, string? LicenseId, DateTimeOffset? ExpiresAtUtc, string? StoreName);
     private sealed record LoginResponse(Guid SessionId, string AccessToken, Guid UserId, string DisplayName, bool IsAdministrator, DateTimeOffset ExpiresAtUtc, List<string> Permissions);
 }

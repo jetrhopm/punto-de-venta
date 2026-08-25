@@ -72,8 +72,6 @@ public sealed class CashRegisterService(PosDbContext database)
         var shift = await GetOpenShiftAsync(token, cancellationToken);
         if (shift is null) return null;
         if (command.CountedCash < 0m) throw new ArgumentException("El efectivo contado no puede ser negativo.");
-        if (await database.SaleDrafts.AnyAsync(item => item.ShiftId == shift.Id && item.Status == "Open" && item.Lines.Any(), cancellationToken))
-            throw new InvalidOperationException("Hay tickets en atención. Cóbrelos o descártalos antes de realizar el corte.");
         var settings = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
         if (settings.RequireCashCountOnClose && command.CountedCash is null) throw new ArgumentException("Esta tienda requiere capturar el efectivo contado al cerrar turno.");
         var counted = settings.RequireCashCountOnClose ? command.CountedCash!.Value : (await SummaryAsync(shift, null, cancellationToken)).ExpectedCash;

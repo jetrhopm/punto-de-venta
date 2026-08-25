@@ -17,11 +17,25 @@ public sealed class SaleDraftService(PosDbContext database)
         var context = await GetOpenShiftContextAsync(accessToken, cancellationToken);
         if (context is null) return null;
 
-        var drafts = await database.SaleDrafts.AsNoTracking()
+        var drafts = await database.SaleDrafts
             .Include(item => item.Lines)
-            .Where(item => item.ShiftId == context.ShiftId && item.UserId == context.UserId && item.Status == "Open" && item.Lines.Any())
+            .Where(item => item.UserId == context.UserId && item.Status == "Open" && item.Lines.Any())
             .OrderBy(item => item.TicketNumber)
             .ToListAsync(cancellationToken);
+
+        // Los tickets en atención no afectan caja ni inventario. Al retomar la sesión
+        // del mismo cajero se asocian al turno nuevo para poder continuarlos o cobrarlos.
+        var recoveredFromPreviousShift = drafts.Where(item => item.ShiftId != context.ShiftId).ToList();
+        if (recoveredFromPreviousShift.Count > 0)
+        {
+            foreach (var draft in recoveredFromPreviousShift)
+            {
+                draft.ShiftId = context.ShiftId;
+                draft.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            }
+
+            await database.SaveChangesAsync(cancellationToken);
+        }
         return await ToResultsAsync(drafts, cancellationToken);
     }
 
@@ -69,7 +83,7 @@ public sealed class SaleDraftService(PosDbContext database)
 
         var context = await GetOpenShiftContextAsync(accessToken, cancellationToken);
         if (context is null) return null;
-        var draft = await database.SaleDrafts.Include(item => item.Lines).SingleOrDefaultAsync(item => item.Id == draftId && item.ShiftId == context.ShiftId && item.UserId == context.UserId && item.Status == "Open", cancellationToken)
+        var draft = await database.SaleDrafts.Include(item => item.Lines).SingleOrDefaultAsync(item => item.Id == draftId && item.UserId == context.UserId && item.Status == "Open", cancellationToken)
             ?? throw new KeyNotFoundException("El ticket en atención no existe o ya fue finalizado.");
 
         var productIds = command.Lines.Select(item => item.ProductId).ToArray();
@@ -77,6 +91,7 @@ public sealed class SaleDraftService(PosDbContext database)
         if (products.Count != productIds.Length) throw new ArgumentException("Una o más partidas ya no están disponibles.");
 
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        draft.ShiftId = context.ShiftId;
         var existingPrices = draft.Lines.ToDictionary(item => item.ProductId, item => item.UnitPrice);
         database.SaleDraftLines.RemoveRange(draft.Lines);
         await database.SaveChangesAsync(cancellationToken);
@@ -105,7 +120,7 @@ public sealed class SaleDraftService(PosDbContext database)
     {
         var context = await GetOpenShiftContextAsync(accessToken, cancellationToken);
         if (context is null) return null;
-        var draft = await database.SaleDrafts.SingleOrDefaultAsync(item => item.Id == draftId && item.ShiftId == context.ShiftId && item.UserId == context.UserId && item.Status == "Open", cancellationToken);
+        var draft = await database.SaleDrafts.SingleOrDefaultAsync(item => item.Id == draftId && item.UserId == context.UserId && item.Status == "Open", cancellationToken);
         if (draft is null) return false;
         draft.Status = "Discarded";
         draft.UpdatedAtUtc = DateTimeOffset.UtcNow;

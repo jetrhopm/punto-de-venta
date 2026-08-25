@@ -762,6 +762,16 @@ app.MapPost("/api/auth/login", async (LoginCommand command, AuthenticationServic
     var result = await authentication.LoginAsync(command, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
+app.MapGet("/api/auth/active-users", async (PosDbContext database, CancellationToken cancellationToken) =>
+{
+    var users = await database.Users.AsNoTracking()
+        .Where(item => item.IsActive)
+        .OrderBy(item => item.DisplayName)
+        .ThenBy(item => item.NormalizedUserName)
+        .Select(item => new { userName = item.NormalizedUserName, displayName = item.DisplayName })
+        .ToListAsync(cancellationToken);
+    return Results.Ok(users);
+});
 
 app.MapPost("/api/shifts/open", async (HttpRequest request, OpenShiftCommand command, ShiftService shifts, CancellationToken cancellationToken) =>
 {

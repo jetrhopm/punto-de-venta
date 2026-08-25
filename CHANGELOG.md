@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se publica la versión 2.1.13: los tickets en atención se conservan al cerrar turno y sólo los recupera el mismo usuario; el inicio de sesión permite filtrar y elegir usuarios activos.
 - Se publica la versión 2.1.12: se corrige la deserialización de datos de ticket para enviar impresiones desde Windows sin afectar la venta confirmada.
 - Se publica la versión 2.1.11: los tickets muestran un turno numérico consecutivo en lugar del identificador técnico y la configuración de folios presenta errores en español.
 - Se publica la versión 2.1.10: el catálogo de Productos (F3) se sincroniza automáticamente al escribir o cambiar filtros, orden y departamento sin bloquear la interfaz.

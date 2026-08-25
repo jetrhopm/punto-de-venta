@@ -4,7 +4,7 @@
         xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
         xmlns:automation="clr-namespace:System.Windows.Automation;assembly=PresentationCore"
         Title="Iniciar sesión - JetVenta"
-        Width="900" Height="580"
+        Width="900" Height="680"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         Background="White">
@@ -81,20 +81,24 @@
                            FontSize="14" Foreground="{StaticResource TextMutedBrush}"/>
             </StackPanel>
 
-            <StackPanel Grid.Row="1" Margin="0,28,0,0">
-                <TextBlock Text="Usuario" FontWeight="SemiBold" Margin="0,0,0,7"/>
+            <StackPanel Grid.Row="1" Margin="0,24,0,0">
+                <TextBlock Text="Elige tu usuario" FontWeight="SemiBold" Margin="0,0,0,7"/>
                 <Grid>
-                    <icons:PackIconMaterial Kind="AccountOutline"
+                    <icons:PackIconMaterial Kind="Magnify"
                                             Width="21" Height="21"
                                             Margin="14,0,0,0"
                                             HorizontalAlignment="Left" VerticalAlignment="Center"
                                             Foreground="{StaticResource TextMutedBrush}"
                                             IsHitTestVisible="False"/>
-                    <TextBox x:Name="UserNameTextBox"
+                    <TextBox x:Name="UserFilterTextBox"
                              Height="46" Padding="45,7,12,7"
-                             Text="admin" FontSize="16"
-                             automation:AutomationProperties.Name="Usuario"/>
+                             FontSize="16" TextChanged="OnUserFilterTextChanged"
+                             automation:AutomationProperties.Name="Filtrar usuarios"
+                             ToolTip="Escribe para filtrar usuarios"/>
                 </Grid>
+                <ListBox x:Name="UserListBox" Height="108" Margin="0,8,0,0"
+                         DisplayMemberPath="DisplayText" SelectionChanged="OnUserSelectionChanged"
+                         automation:AutomationProperties.Name="Usuarios activos"/>
             </StackPanel>
 
             <StackPanel Grid.Row="2" Margin="0,15,0,0">

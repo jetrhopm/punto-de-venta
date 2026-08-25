@@ -39,6 +39,15 @@ public sealed class SaleDraftIntegrationTests
             Assert.Empty(await database.Sales.Where(item => item.ShiftId == shiftId).ToListAsync());
             Assert.Empty(await database.CashMovements.Where(item => item.ShiftId == shiftId).ToListAsync());
 
+            Assert.NotNull(await new CashRegisterService(database).CloseAsync(token, new CloseShiftCommand(50m), CancellationToken.None));
+            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(register.Id, 30m), CancellationToken.None));
+            var resumedDrafts = await drafts.ListOpenAsync(token, CancellationToken.None);
+            Assert.NotNull(resumedDrafts);
+            var resumed = Assert.Single(resumedDrafts);
+            var resumedShiftId = await database.Shifts.Where(item => item.RegisterId == register.Id && item.Status == "Open").Select(item => item.Id).SingleAsync();
+            Assert.Equal(draft.Id, resumed.Id);
+            Assert.Equal(resumedShiftId, await database.SaleDrafts.Where(item => item.Id == draft.Id).Select(item => item.ShiftId).SingleAsync());
+
             var sales = new SaleService(database, new PromotionService(database), new KitService(database));
             var command = new CompleteSaleCommand(draft.OperationId, [new SaleLineCommand(product.Id, 2m)], 36m, DraftId: draft.Id);
             var first = await sales.CompleteAsync(token, command, CancellationToken.None);
