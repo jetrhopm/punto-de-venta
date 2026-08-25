@@ -31,6 +31,48 @@ function Wait-ServiceStopped([string]$Name) {
     $service.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Stopped, [TimeSpan]::FromSeconds(30))
 }
 
+function Wait-ServiceRunning([string]$Name) {
+    $deadline = (Get-Date).AddSeconds(30)
+    do {
+        $service = Get-Service -Name $Name -ErrorAction SilentlyContinue
+        if ($null -ne $service -and $service.Status -eq [System.ServiceProcess.ServiceControllerStatus]::Running) { return $true }
+        Start-Sleep -Milliseconds 500
+    } while ((Get-Date) -lt $deadline)
+    return $false
+}
+
+function Start-JetVentaApiAndWait {
+    $service = Get-Service -Name $apiService -ErrorAction SilentlyContinue
+    if ($null -eq $service) { throw "No se encontró el servicio $apiService después de restaurar la base." }
+
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        try {
+            Write-RestoreLog "Iniciando la API de JetVenta (intento $attempt/3)."
+            Start-Service -Name $apiService -ErrorAction Stop
+            if (-not (Wait-ServiceRunning $apiService)) { throw 'El servicio no llegó al estado Iniciado.' }
+            for ($healthAttempt = 1; $healthAttempt -le 30; $healthAttempt++) {
+                try {
+                    $health = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:5000/health' -TimeoutSec 2
+                    if ($health.StatusCode -eq 200) {
+                        Write-RestoreLog "La API respondió correctamente después de $healthAttempt comprobación(es)."
+                        return
+                    }
+                } catch {
+                    Start-Sleep -Seconds 1
+                }
+            }
+            throw 'La API inició como servicio, pero no respondió en el puerto local.'
+        } catch {
+            Write-RestoreLog "Intento de inicio de API no completado: $($_.Exception.Message)"
+            Stop-Service -Name $apiService -Force -ErrorAction SilentlyContinue
+            if ($attempt -lt 3) { Start-Sleep -Seconds 2 }
+        }
+    }
+
+    $state = (Get-Service -Name $apiService -ErrorAction SilentlyContinue).Status
+    throw "La base fue restaurada, pero la API no quedó disponible. Estado del servicio: $state. Usa Diagnóstico > Levantar API."
+}
+
 function Write-RestoreLog([string]$Message) {
     $line = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss.fff'))] $Message"
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $logPath) | Out-Null
@@ -112,6 +154,11 @@ $env:PGPASSWORD = $databasePassword
 try {
     $backupDirectory = Join-Path $dataRoot 'backups'
     New-Item -ItemType Directory -Force -Path $backupDirectory | Out-Null
+    if (-not $isDevelopment) {
+        Write-RestoreLog 'Deteniendo temporalmente la API de JetVenta antes de crear la copia preventiva.'
+        Stop-Service -Name $apiService -Force -ErrorAction SilentlyContinue
+        Wait-ServiceStopped $apiService
+    }
     $safetyBackup = Join-Path $backupDirectory ("antes-de-restaurar-{0:yyyyMMdd-HHmmss}.dump" -f (Get-Date))
     Write-RestoreLog 'Creando copia preventiva de la base local.'
     $maintenanceUser = if ($isDevelopment) { $applicationUser } else { 'pos_admin' }
@@ -124,11 +171,8 @@ try {
         Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", "--username=$applicationUser", '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$database' AND pid <> pg_backend_pid();")
         Write-RestoreLog 'Restaurando estructura y datos de JetVenta en modo de pruebas.'
         Invoke-Native $pgRestore @('--host=127.0.0.1', "--port=$port", "--username=$applicationUser", "--dbname=$database", '--clean', '--if-exists', '--no-owner', '--exit-on-error', $backup)
-        Write-RestoreLog 'Restauración de pruebas terminada.'
+        Write-RestoreLog 'Restauración de pruebas terminada. La base local quedó cargada y verificada.'
     } else {
-        Write-RestoreLog 'Deteniendo temporalmente la API de JetVenta.'
-        Stop-Service -Name $apiService -Force -ErrorAction SilentlyContinue
-        Wait-ServiceStopped $apiService
         Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$database' AND pid <> pg_backend_pid();")
         Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "DROP DATABASE $database;")
         Invoke-Native $psql @('--host=127.0.0.1', "--port=$port", '--username=pos_admin', '--dbname=postgres', '-v', 'ON_ERROR_STOP=1', '-c', "CREATE DATABASE $database OWNER $applicationUser;")
@@ -175,9 +219,9 @@ END $$;
             $env:PGPASSWORD = $databasePassword
         }
         Write-RestoreLog 'Permisos de la base restaurada comprobados con la cuenta de JetVenta.'
-        Start-Service -Name $apiService
+        Start-JetVentaApiAndWait
         Trim-LocalBackups $backupDirectory
-        Write-RestoreLog 'Restauración terminada. JetVenta aplicará migraciones pendientes al iniciar la API.'
+        Write-RestoreLog 'Restauración terminada. La API respondió correctamente y JetVenta puede iniciar con la información restaurada.'
     }
 } finally {
     Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue

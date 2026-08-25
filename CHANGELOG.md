@@ -1,6 +1,10 @@
 # Changelog
 
 ## Sin liberar
+- Se corrige la restauración desde archivo: la API se detiene antes de reemplazar la base, se reparan permisos y se verifica que el servicio responda antes de finalizar.
+- La ventana de restauración muestra la última etapa registrada en tiempo real y conserva el diagnóstico exacto si algo falla.
+- Se reorganiza la ventana de respaldos para que sus botones no se encimen ni se recorten.
+- Se publica la versión 2.1.4 para actualizar desde la versión 2.1.3.
 - Se corrige el pago mixto para respetar las formas de pago activadas por el administrador.
 - Se reorganizan los importes de efectivo, tarjeta y transferencia en filas independientes para evitar texto encimado o recortado.
 - Se publica la versión 2.1.3 para que Windows detecte esta corrección como actualización.

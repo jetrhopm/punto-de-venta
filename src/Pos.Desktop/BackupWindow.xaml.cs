@@ -4,12 +4,22 @@ using System.IO;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Windows;
+using System.Windows.Input;
 
 namespace Pos.Desktop;
 
 public partial class BackupWindow : Window
 {
     public BackupWindow() { InitializeComponent(); Loaded += async (_, _) => await LoadAsync(); }
+
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            Close();
+            e.Handled = true;
+        }
+    }
 
     private async Task LoadAsync()
     {
@@ -145,6 +155,12 @@ public partial class BackupWindow : Window
             progress.SetStatus("Restaurando la tienda. No cierres Windows ni apagues el equipo...");
             StatusText.Text = "Restauración en curso. La ventana verde muestra que el proceso sigue activo.";
             using var process = Process.Start(start) ?? throw new InvalidOperationException("No se pudo iniciar la restauración.");
+            while (!process.HasExited)
+            {
+                var latestLogLine = await ReadLastRestoreLogLineAsync();
+                if (!string.IsNullOrWhiteSpace(latestLogLine)) progress.SetStatus(latestLogLine);
+                await Task.Delay(500);
+            }
             await process.WaitForExitAsync();
             if (process.ExitCode == 0)
             {
@@ -157,8 +173,9 @@ public partial class BackupWindow : Window
             {
                 var logPath = RestoreLogPath();
                 StatusText.Text = $"La restauración falló. El respaldo original no se eliminó. Revisa: {logPath}";
-                progress.SetStatus("No se pudo completar la restauración. Consulta el diagnóstico para conocer el paso que falló.");
-                MessageBox.Show($"No se pudo completar la restauración. El respaldo seleccionado no se eliminó.\n\nDiagnóstico guardado en:\n{logPath}", "Restauración no completada", MessageBoxButton.OK, MessageBoxImage.Error);
+                var lastLogLine = await ReadLastRestoreLogLineAsync() ?? "No se encontró el último detalle del proceso.";
+                progress.SetStatus($"No se pudo completar la restauración. Último detalle: {lastLogLine}");
+                MessageBox.Show($"No se pudo completar la restauración. El respaldo seleccionado no se eliminó.\n\nÚltimo detalle:\n{lastLogLine}\n\nDiagnóstico guardado en:\n{logPath}", "Restauración no completada", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
         catch (Exception exception)
@@ -175,6 +192,21 @@ public partial class BackupWindow : Window
     }
 
     private static string RestoreLogPath() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "logs", "restauracion.log");
+
+    private static async Task<string?> ReadLastRestoreLogLineAsync()
+    {
+        var path = RestoreLogPath();
+        if (!File.Exists(path)) return null;
+        try
+        {
+            await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            string? last = null;
+            while (await reader.ReadLineAsync() is { } line) last = line;
+            return last;
+        }
+        catch (IOException) { return null; }
+    }
 
     private static string? FindRestoreScript()
     {
