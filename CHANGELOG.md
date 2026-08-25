@@ -1,6 +1,8 @@
 # Changelog
 
 ## Sin liberar
+- Se elimina el límite automático de cinco respaldos locales. JetVenta conserva todas las copias hasta que el administrador las elimine manualmente.
+- Se publica la versión 2.1.5 para actualizar desde la versión 2.1.4.
 - Se corrige la restauración desde archivo: la API se detiene antes de reemplazar la base, se reparan permisos y se verifica que el servicio responda antes de finalizar.
 - La ventana de restauración muestra la última etapa registrada en tiempo real y conserva el diagnóstico exacto si algo falla.
 - Se reorganiza la ventana de respaldos para que sus botones no se encimen ni se recorten.

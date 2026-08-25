@@ -70,7 +70,6 @@ public sealed class DatabaseMaintenanceService(PosDbContext database)
             var info = new FileInfo(path);
             var result = new BackupResult(info.Name, info.Length, hash, createdAt);
             await File.WriteAllTextAsync(path + ".json", JsonSerializer.Serialize(result), cancellationToken);
-            TrimLocalBackups(directory, 5);
             return result;
         }
         finally
@@ -120,21 +119,6 @@ public sealed class DatabaseMaintenanceService(PosDbContext database)
     }
 
     private static string BackupDirectory() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "backups");
-
-    private static void TrimLocalBackups(string directory, int keep)
-    {
-        foreach (var obsolete in Directory.GetFiles(directory, "*.dump").Select(path => new FileInfo(path)).OrderByDescending(file => file.CreationTimeUtc).Skip(keep))
-        {
-            DeleteIfExists(obsolete.FullName);
-            DeleteIfExists(obsolete.FullName + ".sha256");
-            DeleteIfExists(obsolete.FullName + ".json");
-        }
-    }
-
-    private static void DeleteIfExists(string path)
-    {
-        if (File.Exists(path)) File.Delete(path);
-    }
 
     private async Task<Guid?> AuthorizedAsync(string token, CancellationToken cancellationToken)
     {
