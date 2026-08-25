@@ -90,18 +90,33 @@ function Get-ProtectedText([string]$Path) {
     return [Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect([IO.File]::ReadAllBytes($Path), $null, [Security.Cryptography.DataProtectionScope]::LocalMachine))
 }
 
+function Quote-NativeArgument([string]$Value) {
+    if ($null -eq $Value -or $Value.Length -eq 0) { return '""' }
+    if ($Value -notmatch '[\s"]') { return $Value }
+    return '"' + ($Value -replace '"', '\"') + '"'
+}
+
 function Invoke-Native([string]$File, [string[]]$Arguments) {
-    $stderrPath = Join-Path ([IO.Path]::GetTempPath()) ("jetventa-native-{0}.err" -f [Guid]::NewGuid().ToString('N'))
-    try {
-        & $File @Arguments 2> $stderrPath | ForEach-Object { Write-RestoreLog "  $_" }
-        $exitCode = $LASTEXITCODE
-        if (Test-Path -LiteralPath $stderrPath) {
-            Get-Content -LiteralPath $stderrPath -ErrorAction SilentlyContinue | ForEach-Object { Write-RestoreLog "  $_" }
-        }
-        if ($exitCode -ne 0) { throw "Falló $([IO.Path]::GetFileName($File)) con código $exitCode." }
-    } finally {
-        Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+    $start = [Diagnostics.ProcessStartInfo]::new()
+    $start.FileName = $File
+    $start.Arguments = (($Arguments | ForEach-Object { Quote-NativeArgument ([string]$_) }) -join ' ')
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $start
+    [void]$process.Start()
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    $process.WaitForExit()
+    $stdout = $stdoutTask.GetAwaiter().GetResult()
+    $stderr = $stderrTask.GetAwaiter().GetResult()
+    foreach ($line in @($stdout, $stderr) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ -split "`r?`n" }) {
+        Write-RestoreLog "  $line"
     }
+    if ($process.ExitCode -ne 0) { throw "Falló $([IO.Path]::GetFileName($File)) con código $($process.ExitCode)." }
 }
 
 function Read-ConnectionValue([string]$Connection, [string]$Name) {

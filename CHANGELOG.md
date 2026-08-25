@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se publica la versión 2.1.7: los avisos normales emitidos por PostgreSQL durante una restauración ya no se interpretan como fallos; únicamente un código de salida real detiene el proceso.
 - Se corrige la restauración de producción para ignorar avisos normales de PostgreSQL y validar la base en una instancia temporal antes de intercambiarla.
 - Si la API no inicia después del intercambio, JetVenta revierte automáticamente a la base anterior.
 - Se agrega una acción protegida para limpiar los datos de operación con respaldo preventivo, conservando la tienda, la cuenta administradora, la licencia y los respaldos.
