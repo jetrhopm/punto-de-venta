@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se publica la versión 2.2.2: al iniciar la instalación o actualización, la ventana muestra una vista amplia con porcentaje, etapa actual y registro legible de la actividad.
 - Se publica la versión 2.2.1: se corrige la barra de progreso del instalador cuando todavía no hay avance, evitando una excepción al abrirlo.
 - Se publica la versión 2.2.0: el instalador adopta una pantalla visual de JetVenta con componentes, acuerdo, accesos, ubicación fija y actividad de instalación en tiempo real.
 - Se publica la versión 2.1.15: el instalador y Configuración permiten abrir JetVenta automáticamente al iniciar sesión en Windows para la caja actual.

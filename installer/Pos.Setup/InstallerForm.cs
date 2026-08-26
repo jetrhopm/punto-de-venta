@@ -27,6 +27,10 @@ public sealed class InstallerForm : Form
     private readonly TextBox _details = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BackColor = Color.FromArgb(14, 27, 43), ForeColor = Color.FromArgb(209, 225, 239), BorderStyle = BorderStyle.FixedSingle, Font = new Font("Consolas", 9f) };
     private readonly Button _action = CreateActionButton();
     private readonly Button _cancel = CreateSecondaryButton("Cancelar");
+    private readonly List<Control> _summaryControls = [];
+    private readonly Label _activityTitle = CreateLabel(string.Empty, Point.Empty, Size.Empty, 19, FontStyle.Bold, Color.White);
+    private readonly Label _activityDescription = CreateLabel(string.Empty, Point.Empty, Size.Empty, 10, FontStyle.Regular, Color.FromArgb(161, 193, 219));
+    private readonly Label _progressValue = CreateLabel("0%", Point.Empty, Size.Empty, 10, FontStyle.Bold, Color.FromArgb(77, 209, 235));
     private bool _busy;
     private bool _completed;
 
@@ -44,13 +48,21 @@ public sealed class InstallerForm : Form
         Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!);
         FormClosing += OnFormClosing;
         BuildInstallerLayout();
+        var summaryStart = Controls.Count;
         if (_uninstall) BuildUninstallLayout(); else BuildInstallLayout();
+        _summaryControls.AddRange(Controls.Cast<Control>().Skip(summaryStart));
         _action.Text = uninstall ? "Desinstalar" : _existingInstallation ? "Actualizar" : "Instalar";
         _action.SetBounds(704, 608, 174, 38);
         _cancel.SetBounds(598, 608, 96, 38);
         _action.Click += OnActionClick;
         _cancel.Click += OnCancelClick;
-        Controls.AddRange([_status, _progress, _details, _cancel, _action]);
+        _activityTitle.Visible = false;
+        _activityDescription.Visible = false;
+        _progressValue.Visible = false;
+        _status.Visible = false;
+        _progress.Visible = false;
+        _details.Visible = false;
+        Controls.AddRange([_activityTitle, _activityDescription, _progressValue, _status, _progress, _details, _cancel, _action]);
         SetProgress(0, uninstall
             ? "Listo para desinstalar. Los datos se conservarán."
             : _existingInstallation
@@ -168,6 +180,7 @@ public sealed class InstallerForm : Form
         }
 
         _busy = true;
+        ShowActivityView();
         _action.Enabled = false;
         _cancel.Enabled = false;
         _terms.Enabled = false;
@@ -195,6 +208,49 @@ public sealed class InstallerForm : Form
     private void OnCancelClick(object? sender, EventArgs e)
     {
         if (!_busy) Close();
+    }
+
+    private void ShowActivityView()
+    {
+        foreach (var control in _summaryControls)
+        {
+            control.Visible = false;
+        }
+
+        _activityTitle.Text = _uninstall
+            ? "Retirando JetVenta"
+            : _existingInstallation
+                ? "Actualizando JetVenta"
+                : "Instalando JetVenta";
+        _activityDescription.Text = _uninstall
+            ? "Estamos retirando el programa. La tienda, los datos y los respaldos se conservarán."
+            : "Estamos preparando los componentes y servicios necesarios para operar la tienda.";
+        _activityTitle.SetBounds(30, 190, 860, 34);
+        _activityDescription.SetBounds(30, 229, 860, 25);
+        _status.SetBounds(30, 274, 760, 27);
+        _status.Font = new Font("Segoe UI", 12f, FontStyle.Bold);
+        _status.ForeColor = Color.FromArgb(233, 244, 252);
+        _progressValue.SetBounds(800, 274, 90, 27);
+        _progressValue.TextAlign = ContentAlignment.MiddleRight;
+        _progress.SetBounds(30, 313, 860, 20);
+        _details.SetBounds(30, 361, 860, 190);
+        _details.Font = new Font("Consolas", 10f);
+        _cancel.SetBounds(598, 592, 96, 38);
+        _action.SetBounds(704, 592, 174, 38);
+        _activityTitle.Visible = true;
+        _activityDescription.Visible = true;
+        _progressValue.Visible = true;
+        _status.Visible = true;
+        _progress.Visible = true;
+        _details.Visible = true;
+        _activityTitle.BringToFront();
+        _activityDescription.BringToFront();
+        _progressValue.BringToFront();
+        _status.BringToFront();
+        _progress.BringToFront();
+        _details.BringToFront();
+        _cancel.BringToFront();
+        _action.BringToFront();
     }
 
     private async Task InstallAsync()
@@ -620,7 +676,13 @@ public sealed class InstallerForm : Form
     private void SetProgress(int value, string message)
     {
         if (IsDisposed) return;
-        void Update() { _progress.Value = Math.Clamp(value, 0, 100); _status.Text = message; Log(message); }
+        void Update()
+        {
+            _progress.Value = Math.Clamp(value, 0, 100);
+            _progressValue.Text = $"{_progress.Value}%";
+            _status.Text = message;
+            Log(message);
+        }
         if (InvokeRequired) BeginInvoke(Update); else Update();
     }
 

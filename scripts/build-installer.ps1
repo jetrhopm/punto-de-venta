@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$Version = '2.2.1')
+param([string]$Version = '2.2.2')
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -28,7 +28,14 @@ New-Item -ItemType Directory -Force -Path $published, $output | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'No se pudo publicar el instalador autocontenido.' }
 
 $setup = Join-Path $output 'Setup.exe'
-Copy-Item (Join-Path $published 'Pos.Setup.exe') $setup -Force
+try {
+    Copy-Item (Join-Path $published 'Pos.Setup.exe') $setup -Force
+}
+catch {
+    $setup = Join-Path $output "JetVenta-Setup-$Version.exe"
+    Copy-Item (Join-Path $published 'Pos.Setup.exe') $setup -Force
+    Write-Warning "Setup.exe estaba en uso. Se creó el instalador actualizado con este nombre: $setup"
+}
 Remove-Item $payload -Force
 Write-Host "Instalador autocontenido creado: $setup"
 Write-Host "Version: $Version"
