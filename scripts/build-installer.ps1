@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$Version = '2.2.0')
+param([string]$Version = '2.2.1')
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'

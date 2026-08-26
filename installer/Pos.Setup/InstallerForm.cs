@@ -728,6 +728,11 @@ internal sealed class InstallerProgressBar : Control
 
     protected override void OnPaint(PaintEventArgs eventArgs)
     {
+        if (ClientSize.Width < 10 || ClientSize.Height < 10)
+        {
+            return;
+        }
+
         var graphics = eventArgs.Graphics;
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
         using var track = new SolidBrush(Color.FromArgb(29, 50, 70));
@@ -735,7 +740,13 @@ internal sealed class InstallerProgressBar : Control
         graphics.FillRoundedRectangle(track, ClientRectangle, 5);
         graphics.DrawRoundedRectangle(border, ClientRectangle, 5);
         var ratio = Maximum <= Minimum ? 0 : (Value - Minimum) / (float)(Maximum - Minimum);
-        var fill = Rectangle.FromLTRB(1, 1, Math.Max(1, (int)((Width - 2) * ratio)), Height - 1);
+        var fillWidth = (int)((Width - 2) * ratio);
+        if (fillWidth < 2)
+        {
+            return;
+        }
+
+        var fill = new Rectangle(1, 1, fillWidth, Height - 2);
         using var brush = new LinearGradientBrush(fill, Color.FromArgb(9, 174, 207), Color.FromArgb(21, 207, 149), LinearGradientMode.Horizontal);
         graphics.FillRoundedRectangle(brush, fill, 4);
     }
