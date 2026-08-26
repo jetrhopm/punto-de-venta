@@ -73,10 +73,10 @@ public sealed class InstallerForm : Form
     private void BuildInstallerLayout()
     {
         Controls.Add(new Panel { BackColor = Color.FromArgb(0, 180, 210), Dock = DockStyle.Top, Height = 4 });
-        Controls.Add(new PictureBox { Location = new Point(31, 26), Size = new Size(118, 118), SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.Transparent, Image = LoadLogo() });
-        Controls.Add(CreateLabel("INSTALACIÓN DE JETVENTA", new Point(164, 39), new Size(680, 34), 25, FontStyle.Bold, Color.White));
-        Controls.Add(CreateLabel("Instalador autocontenido para Windows 10 y Windows 11 de 64 bits", new Point(166, 78), new Size(650, 24), 11, FontStyle.Regular, Color.FromArgb(158, 192, 220)));
-        Controls.Add(CreateLabel("Todo lo necesario para operar se instala y configura en este equipo.", new Point(166, 104), new Size(650, 24), 10, FontStyle.Regular, Color.FromArgb(117, 155, 186)));
+        Controls.Add(new PictureBox { Location = new Point(31, 29), Size = new Size(250, 102), SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.Transparent, Image = LoadBanner() });
+        Controls.Add(CreateLabel("INSTALACIÓN DE JETVENTA", new Point(307, 39), new Size(550, 34), 25, FontStyle.Bold, Color.White));
+        Controls.Add(CreateLabel("Instalador autocontenido para Windows 10 y Windows 11 de 64 bits", new Point(309, 78), new Size(550, 24), 11, FontStyle.Regular, Color.FromArgb(158, 192, 220)));
+        Controls.Add(CreateLabel("Todo lo necesario para operar se instala y configura en este equipo.", new Point(309, 104), new Size(550, 24), 10, FontStyle.Regular, Color.FromArgb(117, 155, 186)));
         Controls.Add(new Panel { BackColor = Color.FromArgb(34, 71, 101), Location = new Point(30, 156), Size = new Size(860, 1) });
     }
 
@@ -157,9 +157,9 @@ public sealed class InstallerForm : Form
         Font = new Font("Segoe UI", 10f), FlatAppearance = { BorderColor = Color.FromArgb(66, 101, 130), BorderSize = 1 }
     };
 
-    private static Image? LoadLogo()
+    private static Image? LoadBanner()
     {
-        using var stream = typeof(InstallerForm).Assembly.GetManifestResourceStream("JetVenta.Assets.app-icon-512.png");
+        using var stream = typeof(InstallerForm).Assembly.GetManifestResourceStream("JetVenta.Assets.jetventa-banner.png");
         if (stream is null) return null;
         using var image = Image.FromStream(stream);
         return new Bitmap(image);

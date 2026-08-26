@@ -15,5 +15,6 @@
     <EmbeddedResource Include="Payload.zip" LogicalName="PuntoDeVenta.Payload.zip" />
     <EmbeddedResource Include="..\LICENSE.rtf" LogicalName="JetVenta.LICENSE.rtf" />
     <EmbeddedResource Include="Assets\app-icon-512.png" LogicalName="JetVenta.Assets.app-icon-512.png" />
+    <EmbeddedResource Include="Assets\jetventa-banner.png" LogicalName="JetVenta.Assets.jetventa-banner.png" />
   </ItemGroup>
 </Project>
