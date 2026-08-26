@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se publica la versión 2.2.0: el instalador adopta una pantalla visual de JetVenta con componentes, acuerdo, accesos, ubicación fija y actividad de instalación en tiempo real.
 - Se publica la versión 2.1.15: el instalador y Configuración permiten abrir JetVenta automáticamente al iniciar sesión en Windows para la caja actual.
 - Se publica la versión 2.1.14: la demo registra una hora avanzada incluso si ya venció, por lo que retroceder el reloj ya no reactiva el periodo de prueba.
 - Se publica la versión 2.1.13: los tickets en atención se conservan al cerrar turno y sólo los recupera el mismo usuario; el inicio de sesión permite filtrar y elegir usuarios activos.
