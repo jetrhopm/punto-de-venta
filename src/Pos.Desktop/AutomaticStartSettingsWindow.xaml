@@ -1,0 +1,21 @@
+<Window x:Class="Pos.Desktop.AutomaticStartSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
+        Title="Inicio automático" Width="620" Height="400" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <Grid Margin="28">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel Orientation="Horizontal">
+            <Border Width="48" Height="48" Background="{StaticResource PrimarySoftBrush}" CornerRadius="5"><icons:PackIconMaterial Kind="PowerSettingsNew" Width="28" Height="28" Foreground="{StaticResource PrimaryBrush}"/></Border>
+            <StackPanel Margin="12,1,0,0"><TextBlock Text="Inicio automático" FontSize="22" FontWeight="Bold"/><TextBlock Text="Comportamiento de esta caja al iniciar Windows" Foreground="{StaticResource TextMutedBrush}" Margin="0,3,0,0"/></StackPanel>
+        </StackPanel>
+        <StackPanel Grid.Row="1" Margin="0,26,0,16">
+            <CheckBox x:Name="EnabledCheck" FontSize="16" FontWeight="SemiBold" Content="Abrir JetVenta al iniciar sesión en Windows"/>
+            <TextBlock Margin="27,8,0,18" TextWrapping="Wrap" Foreground="{StaticResource TextMutedBrush}" Text="JetVenta mostrará su pantalla de preparación y después el inicio de sesión. No abre una caja ni inicia sesión automáticamente."/>
+            <Border Background="{StaticResource SurfaceMutedBrush}" CornerRadius="5" Padding="14">
+                <StackPanel><TextBlock Text="Aplicación por equipo" FontWeight="SemiBold"/><TextBlock Margin="0,5,0,0" TextWrapping="Wrap" Foreground="{StaticResource TextMutedBrush}" Text="Esta preferencia se guarda para el usuario actual de Windows. Puede cambiarse desde esta pantalla o desactivarse desde Administrador de tareas &gt; Aplicaciones de inicio."/></StackPanel>
+            </Border>
+        </StackPanel>
+        <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,0,14,0"/><Button Grid.Column="1" Style="{StaticResource PrimaryButtonStyle}" Width="155" Click="OnSaveClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ContentSaveOutline" Width="19" Height="19" Margin="0,0,7,0"/><TextBlock Text="Guardar"/></StackPanel></Button></Grid>
+    </Grid>
+</Window>

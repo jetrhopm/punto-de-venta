@@ -19,6 +19,7 @@ public sealed class InstallerForm : Form
     private readonly CheckBox _terms = new() { Text = "Acepto los términos y condiciones", AutoSize = true };
     private readonly CheckBox _desktopShortcut = new() { Text = "Crear acceso directo en el escritorio", AutoSize = true, Checked = true };
     private readonly CheckBox _startShortcut = new() { Text = "Crear acceso directo en el menú Inicio", AutoSize = true, Checked = true };
+    private readonly CheckBox _startWithWindows = new() { Text = "Iniciar JetVenta al iniciar Windows", AutoSize = true };
     private readonly Label _status = new() { AutoEllipsis = true };
     private readonly ProgressBar _progress = new() { Minimum = 0, Maximum = 100 };
     private readonly TextBox _details = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BackColor = Color.White };
@@ -32,7 +33,7 @@ public sealed class InstallerForm : Form
         _existingInstallation = !uninstall && HasExistingInstallation();
         _installedVersion = GetInstalledVersion();
         Text = uninstall ? "Desinstalar JetVenta" : "Instalación de JetVenta";
-        ClientSize = new Size(760, 650);
+        ClientSize = new Size(760, 680);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -58,15 +59,17 @@ public sealed class InstallerForm : Form
             viewTerms.Click += (_, _) => ShowTerms();
             _desktopShortcut.SetBounds(30, 250, 300, 25);
             _startShortcut.SetBounds(370, 250, 300, 25);
-            Controls.AddRange([_terms, viewTerms, _desktopShortcut, _startShortcut]);
-            Controls.Add(new Label { Text = $"Carpeta de instalación: {_installRoot}", Location = new Point(30, 288), Size = new Size(700, 25) });
+            _startWithWindows.Checked = IsAutomaticStartEnabled();
+            _startWithWindows.SetBounds(30, 280, 360, 25);
+            Controls.AddRange([_terms, viewTerms, _desktopShortcut, _startShortcut, _startWithWindows]);
+            Controls.Add(new Label { Text = $"Carpeta de instalación: {_installRoot}", Location = new Point(30, 315), Size = new Size(700, 25) });
         }
 
-        _status.SetBounds(30, 325, 700, 28);
-        _progress.SetBounds(30, 360, 700, 24);
-        _details.SetBounds(30, 400, 700, 175);
+        _status.SetBounds(30, 350, 700, 28);
+        _progress.SetBounds(30, 385, 700, 24);
+        _details.SetBounds(30, 425, 700, 175);
         _action.Text = uninstall ? "Desinstalar" : _existingInstallation ? "Actualizar" : "Instalar";
-        _action.SetBounds(540, 595, 190, 38);
+        _action.SetBounds(540, 620, 190, 38);
         _action.Click += OnActionClick;
         Controls.AddRange([_status, _progress, _details, _action]);
         SetProgress(0, uninstall
@@ -169,6 +172,7 @@ public sealed class InstallerForm : Form
         await RunPowerShellAsync(Path.Combine(_installRoot, "install-production.ps1"), string.Empty);
         RegisterInstallation();
         CreateShortcuts();
+        ConfigureAutomaticStart(_startWithWindows.Checked);
         SetProgress(100, "Instalación terminada. Ya puedes abrir la configuración inicial.");
     }
 
@@ -179,6 +183,7 @@ public sealed class InstallerForm : Form
         if (File.Exists(script)) await RunPowerShellAsync(script, "-Uninstall");
         Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PuntoDeVenta", false);
         DeleteShortcuts();
+        ConfigureAutomaticStart(false);
         SetProgress(100, "Desinstalación terminada. Los datos y respaldos se conservaron.");
     }
 
@@ -463,6 +468,30 @@ public sealed class InstallerForm : Form
     private void DeleteShortcuts()
     {
         foreach (var path in new[] { DesktopShortcutPath, StartShortcutPath }) try { File.Delete(path); } catch { }
+    }
+
+    private void ConfigureAutomaticStart(bool enabled)
+    {
+        const string runKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        const string valueName = "JetVenta";
+        using var key = Registry.CurrentUser.CreateSubKey(runKeyPath);
+        if (enabled)
+        {
+            var target = Path.Combine(_installRoot, "client", "Pos.Desktop.exe");
+            key?.SetValue(valueName, Program.QuoteArgument(target), RegistryValueKind.String);
+            Log("Inicio automático de JetVenta activado para este usuario de Windows.");
+        }
+        else
+        {
+            key?.DeleteValue(valueName, false);
+            Log("Inicio automático de JetVenta desactivado para este usuario de Windows.");
+        }
+    }
+
+    private static bool IsAutomaticStartEnabled()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
+        return key?.GetValue("JetVenta") is string value && !string.IsNullOrWhiteSpace(value);
     }
 
     private void StartDesktop()

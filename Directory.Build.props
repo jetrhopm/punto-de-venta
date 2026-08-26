@@ -1,9 +1,9 @@
 <Project>
   <PropertyGroup>
-    <Version>2.1.14</Version>
-    <AssemblyVersion>2.1.14.0</AssemblyVersion>
-    <FileVersion>2.1.14.0</FileVersion>
-    <InformationalVersion>2.1.14</InformationalVersion>
+    <Version>2.1.15</Version>
+    <AssemblyVersion>2.1.15.0</AssemblyVersion>
+    <FileVersion>2.1.15.0</FileVersion>
+    <InformationalVersion>2.1.15</InformationalVersion>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
     <AnalysisLevel>latest</AnalysisLevel>
