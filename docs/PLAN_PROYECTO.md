@@ -1,6 +1,6 @@
 # Plan completo del punto de venta
 
-Estado actualizado: 2026-08-24
+Estado actualizado: 2026-08-27
 
 ## Terminado
 
@@ -49,6 +49,7 @@ Mejoras locales verificadas antes de continuar multicaja:
 
 - Asistente WPF completo de primera configuracion.
 - Administracion de usuarios y permisos en API; bloqueo progresivo y recuperacion administrada quedan para el siguiente incremento de seguridad.
+- Pendiente de seguridad: autorizacion temporal con credenciales de un usuario autorizado para ejecutar una accion puntual sin conceder permisos permanentes; debe caducar, limitarse a la operacion y quedar auditada.
 - Turnos: apertura, entradas, salidas y corte conectados en WPF.
 - Alta y edicion de productos protegidas por permiso; importacion CSV/XLSX con vista previa, respaldo, idempotencia y transaccion completada.
 - Venta finalizada con `operation_id` idempotente, efectivo y cambio.
@@ -109,6 +110,7 @@ Estado de validacion: cerrada por validacion del usuario. La siguiente lista no 
 - VPS Hostinger por HTTPS, sin PostgreSQL publico.
 - Recuperacion ante perdida de Internet.
 - CFDI solo despues de seleccionar PAC y validar timbrado real.
+- Pendiente opcional: inicio de sesion con tarjetas NFC para usuarios. Antes de implementarlo se debe identificar el modelo del lector, si expone PC/SC o solo teclado, y el tipo de tarjetas disponibles. No se usara un UID simple como unica autenticacion; se evaluara una tarjeta con autenticacion segura y se conservara la contrasena como alternativa.
 
 ## Criterio para avanzar
 
