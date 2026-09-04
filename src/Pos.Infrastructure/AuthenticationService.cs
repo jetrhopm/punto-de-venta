@@ -19,14 +19,36 @@ public sealed class AuthenticationService(PosDbContext database, PasswordHasher<
         var user = await database.Users.SingleOrDefaultAsync(item => item.NormalizedUserName == normalized && item.IsActive, cancellationToken);
         if (user is null || passwordHasher.VerifyHashedPassword(user, user.PasswordHash, command.Password) == PasswordVerificationResult.Failed) return null;
 
+        var staleTemporaryPermissions = await database.Permissions.IgnoreQueryFilters()
+            .Where(item => item.UserId == user.Id && item.ExpiresAtUtc != null)
+            .ToListAsync(cancellationToken);
+        database.Permissions.RemoveRange(staleTemporaryPermissions);
+
         var accessToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, TokenHash = Hash(accessToken), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddHours(8) };
         database.Sessions.Add(session);
         await database.SaveChangesAsync(cancellationToken);
         IReadOnlyList<string> permissions = user.IsAdministrator
             ? Enum.GetNames<Pos.Domain.Permission>()
-            : await database.Permissions.Where(item => item.UserId == user.Id).Select(item => item.Code).ToListAsync(cancellationToken);
+            : await database.Permissions.Where(item => item.UserId == user.Id && item.ExpiresAtUtc == null).Select(item => item.Code).ToListAsync(cancellationToken);
         return new LoginResult(session.Id, accessToken, user.Id, user.DisplayName, user.IsAdministrator, session.ExpiresAtUtc, permissions);
+    }
+
+    public async Task<bool> LogoutAsync(string actorToken, CancellationToken cancellationToken)
+    {
+        var hash = Hash(actorToken ?? string.Empty);
+        var session = await database.Sessions.SingleOrDefaultAsync(
+            item => item.TokenHash == hash && item.RevokedAtUtc == null,
+            cancellationToken);
+        if (session is null) return false;
+
+        var temporaryPermissions = await database.Permissions.IgnoreQueryFilters()
+            .Where(item => item.UserId == session.UserId && item.ExpiresAtUtc != null)
+            .ToListAsync(cancellationToken);
+        database.Permissions.RemoveRange(temporaryPermissions);
+        session.RevokedAtUtc = DateTimeOffset.UtcNow;
+        await database.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<TemporaryPermissionAuthorizationResult?> GrantTemporaryPermissionAsync(
@@ -53,7 +75,9 @@ public sealed class AuthenticationService(PosDbContext database, PasswordHasher<
             .SingleOrDefaultAsync(item => item.UserId == actor.Id && item.Code == command.Permission, cancellationToken);
         if (current is { ExpiresAtUtc: null }) return new TemporaryPermissionAuthorizationResult(null, DateTimeOffset.UtcNow, approver.DisplayName);
 
-        var expiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(2);
+        // El permiso cubre el tiempo de contar efectivo y se revoca al terminar la acción.
+        // La expiración es únicamente el respaldo de seguridad si el cliente pierde conexión.
+        var expiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10);
         if (current is null)
         {
             current = new PermissionRecord

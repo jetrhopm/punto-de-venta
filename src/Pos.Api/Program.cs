@@ -69,6 +69,25 @@ builder.Services.AddHostedService<DailyBackupHostedService>();
 
 var app = builder.Build();
 
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (Exception exception)
+    {
+        WriteStartupLog($"ERROR EN {context.Request.Method} {context.Request.Path}: {exception}");
+        if (context.Response.HasStarted) throw;
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            code = "operation_failed",
+            message = "JetVenta sigue conectado, pero no pudo completar esta operación. Vuelve a intentarlo; si continúa, consulta Configuración > Diagnóstico."
+        });
+    }
+});
+
 try
 {
     const int migrationAttempts = 12;
@@ -774,6 +793,11 @@ app.MapPost("/api/auth/temporary-permission", async (HttpRequest request, Tempor
     var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
     var result = await authentication.GrantTemporaryPermissionAsync(token, command, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapDelete("/api/auth/session", async (HttpRequest request, AuthenticationService authentication, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    return await authentication.LogoutAsync(token, cancellationToken) ? Results.NoContent() : Results.NotFound();
 });
 app.MapDelete("/api/auth/temporary-permission/{grantId:guid}", async (Guid grantId, HttpRequest request, AuthenticationService authentication, CancellationToken cancellationToken) =>
 {

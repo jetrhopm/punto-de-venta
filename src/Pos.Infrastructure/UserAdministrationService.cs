@@ -33,7 +33,7 @@ public sealed class UserAdministrationService(PosDbContext database, PasswordHas
     {
         if (await AuthorizedUserAsync(token, cancellationToken) is null) return null;
         var users = await database.Users.AsNoTracking().OrderBy(item => item.NormalizedUserName).ToListAsync(cancellationToken);
-        var permissions = await database.Permissions.AsNoTracking().ToListAsync(cancellationToken);
+        var permissions = await database.Permissions.AsNoTracking().Where(item => item.ExpiresAtUtc == null).ToListAsync(cancellationToken);
         return users.Select(user => ToResult(user, permissions.Where(item => item.UserId == user.Id).Select(item => item.Code).ToArray())).ToArray();
     }
 
@@ -128,7 +128,7 @@ public sealed class UserAdministrationService(PosDbContext database, PasswordHas
         database.Permissions.AddRange(permissions.Distinct(StringComparer.Ordinal).Select(code => new PermissionRecord { Id = Guid.NewGuid(), UserId = userId, Code = code }));
     }
 
-    private async Task<UserResult> FindResultAsync(UserRecord user, CancellationToken cancellationToken) => ToResult(user, await database.Permissions.AsNoTracking().Where(item => item.UserId == user.Id).Select(item => item.Code).ToArrayAsync(cancellationToken));
+    private async Task<UserResult> FindResultAsync(UserRecord user, CancellationToken cancellationToken) => ToResult(user, await database.Permissions.AsNoTracking().Where(item => item.UserId == user.Id && item.ExpiresAtUtc == null).Select(item => item.Code).ToArrayAsync(cancellationToken));
     private static UserResult ToResult(UserRecord user, IReadOnlyList<string> permissions) => new(user.Id, user.NormalizedUserName, user.DisplayName, user.IsAdministrator, user.IsActive, permissions);
     private async Task<UserRecord?> AuthorizedUserAsync(string token, CancellationToken cancellationToken)
     {

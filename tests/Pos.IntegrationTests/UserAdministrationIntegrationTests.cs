@@ -48,20 +48,22 @@ public sealed class UserAdministrationIntegrationTests
     }
 
     [Fact]
-    public async Task GrantsAndRevokesOneTemporaryPermissionForTheCurrentCashier()
+    public async Task TemporaryPermissionIsHiddenFromAdministrationAndRemovedOnLogout()
     {
         await using var database = new PosDbContextFactory().CreateDbContext([]);
         await database.Database.MigrateAsync();
 
         var suffix = Guid.NewGuid().ToString("N");
         var actorToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var administratorToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         var hasher = new PasswordHasher<UserRecord>();
         var administrator = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = ("ADMIN_AUTH_" + suffix).ToUpperInvariant(), DisplayName = "Administrador autorizador", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
         administrator.PasswordHash = hasher.HashPassword(administrator, "clave-admin");
         var cashier = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = ("CAJERO_AUTH_" + suffix).ToUpperInvariant(), DisplayName = "Cajero autorizado", IsAdministrator = false, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
         cashier.PasswordHash = hasher.HashPassword(cashier, "clave-cajero");
         var session = new SessionRecord { Id = Guid.NewGuid(), UserId = cashier.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(actorToken))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
-        database.AddRange(administrator, cashier, session);
+        var administratorSession = new SessionRecord { Id = Guid.NewGuid(), UserId = administrator.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(administratorToken))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        database.AddRange(administrator, cashier, session, administratorSession);
         await database.SaveChangesAsync();
 
         try
@@ -74,8 +76,13 @@ public sealed class UserAdministrationIntegrationTests
             Assert.True(grant.ExpiresAtUtc > DateTimeOffset.UtcNow);
             Assert.True(await database.Permissions.AnyAsync(item => item.UserId == cashier.Id && item.Code == "CloseShift"));
 
-            Assert.True(await authentication.RevokeTemporaryPermissionAsync(actorToken, grant.GrantId!.Value, CancellationToken.None));
+            var users = await new UserAdministrationService(database, hasher).ListAsync(administratorToken, CancellationToken.None);
+            var listedCashier = Assert.Single(users!, item => item.Id == cashier.Id);
+            Assert.DoesNotContain("CloseShift", listedCashier.Permissions);
+
+            Assert.True(await authentication.LogoutAsync(actorToken, CancellationToken.None));
             Assert.False(await database.Permissions.IgnoreQueryFilters().AnyAsync(item => item.UserId == cashier.Id && item.Code == "CloseShift"));
+            Assert.NotNull((await database.Sessions.SingleAsync(item => item.Id == session.Id)).RevokedAtUtc);
         }
         finally
         {

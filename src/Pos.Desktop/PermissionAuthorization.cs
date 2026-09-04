@@ -80,6 +80,6 @@ public sealed class TemporaryPermissionLease : IAsyncDisposable
         _permissionScope?.Dispose();
         if (_grantId is null || string.IsNullOrWhiteSpace(SessionContext.AccessToken)) return;
         try { await ApiClient.Client.DeleteAsync($"api/auth/temporary-permission/{_grantId.Value}"); }
-        catch (HttpRequestException) { }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or ObjectDisposedException) { }
     }
 }

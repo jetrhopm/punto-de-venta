@@ -402,9 +402,14 @@ public partial class MainWindow : Window
             StatusText.Text = "No tienes permiso para cerrar turno. Pide al administrador que lo autorice o que active \"Realizar corte del turno propio y ver efectivo esperado\" en Configuración > Cajeros y permisos.";
             return false;
         }
+
         HttpResponseMessage summaryResponse;
         try { summaryResponse = await Client.GetAsync("/api/shifts/summary"); }
-        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableShiftProtected; return false; }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            StatusText.Text = await DescribeCloseConnectionFailureAsync();
+            return false;
+        }
         if (!summaryResponse.IsSuccessStatusCode)
         {
             StatusText.Text = await ReadApiMessageAsync(summaryResponse);
@@ -417,7 +422,11 @@ public partial class MainWindow : Window
         if (summary is null) { StatusText.Text = "No se pudo calcular el efectivo esperado."; return false; }
         CutSettingsResponse? cutSettings = null;
         try { cutSettings = await Client.GetFromJsonAsync<CutSettingsResponse>("/api/cut-settings"); }
-        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableRetry; return false; }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            StatusText.Text = await DescribeCloseConnectionFailureAsync();
+            return false;
+        }
         decimal? countedCash;
         if (cutSettings?.RequireCashCountOnClose != false)
         {
@@ -430,10 +439,17 @@ public partial class MainWindow : Window
             if (MessageBox.Show("Se cerrará el turno sin solicitar efectivo contado ni registrar ajuste. ¿Deseas continuar?", "Cerrar turno", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return false;
             countedCash = null;
         }
+
         try
         {
             using var response = await Client.PostAsJsonAsync("/api/shifts/close", new { countedCash });
-            if (!response.IsSuccessStatusCode) { StatusText.Text = await ReadApiMessageAsync(response); return false; }
+            if (!response.IsSuccessStatusCode)
+            {
+                StatusText.Text = response.StatusCode == System.Net.HttpStatusCode.Unauthorized
+                    ? "La autorización para cerrar el turno no fue aceptada. Solicita nuevamente la autorización del administrador."
+                    : await ReadApiMessageAsync(response);
+                return false;
+            }
             var result = await response.Content.ReadFromJsonAsync<ShiftSummaryResponse>();
             if (result is null) { StatusText.Text = "Turno cerrado."; return true; }
             StatusText.Text = $"Turno cerrado. Diferencia: ${result.Difference:0.00}";
@@ -450,7 +466,59 @@ public partial class MainWindow : Window
             }
             return true;
         }
-        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; return false; }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            var closeState = await ConfirmCloseAfterConnectionFailureAsync(summary.ShiftId);
+            if (closeState == true)
+            {
+                StatusText.Text = "El turno sí quedó cerrado. La respuesta tardó más de lo esperado, pero JetVenta confirmó el cierre.";
+                return true;
+            }
+
+            StatusText.Text = closeState == false
+                ? "La API responde y el turno continúa abierto. El cierre no se aplicó; puedes volver a intentarlo sin duplicar el corte."
+                : ConnectionHelp.ApiUnavailableShiftProtected;
+            return false;
+        }
+    }
+
+    private static async Task<string> DescribeCloseConnectionFailureAsync()
+    {
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            using var health = await Client.GetAsync("/health", timeout.Token);
+            return health.IsSuccessStatusCode
+                ? "La API está activa, pero no pudo consultar la caja. Vuelve a intentar; si continúa, abre Configuración > Diagnóstico para revisar la base de datos."
+                : ConnectionHelp.ApiUnavailableShiftProtected;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            return ConnectionHelp.ApiUnavailableShiftProtected;
+        }
+    }
+
+    private static async Task<bool?> ConfirmCloseAfterConnectionFailureAsync(Guid shiftId)
+    {
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                using var response = await Client.GetAsync("/api/shifts/current", timeout.Token);
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return true;
+                if (response.IsSuccessStatusCode)
+                {
+                    var current = await response.Content.ReadFromJsonAsync<CurrentShiftResponse>(timeout.Token);
+                    return current?.ShiftId != shiftId;
+                }
+            }
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException) { }
+
+            if (attempt < 2) await Task.Delay(350);
+        }
+
+        return null;
     }
 
     private async void OnProductSearchTextChanged(object sender, TextChangedEventArgs e)
@@ -1179,11 +1247,13 @@ public partial class MainWindow : Window
 
                     if (decisionWindow.Decision == ExitShiftDecision.CloseShiftAndSignOut)
                     {
+                        await EndSessionAsync();
                         CompleteSignOut();
                         return;
                     }
                 }
             }
+            await EndSessionAsync();
             CompleteExit();
         }
         catch (Exception exception)
@@ -1192,6 +1262,17 @@ public partial class MainWindow : Window
             MessageBox.Show(StatusText.Text, "No se puede salir", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally { _exitDialogOpen = false; }
+    }
+
+    private async Task EndSessionAsync()
+    {
+        var moduleAuthorization = _modulePermissionLease;
+        _modulePermissionLease = null;
+        if (moduleAuthorization is not null) await moduleAuthorization.DisposeAsync();
+
+        if (string.IsNullOrWhiteSpace(SessionContext.AccessToken)) return;
+        try { await Client.DeleteAsync("/api/auth/session"); }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or ObjectDisposedException) { }
     }
 
     private void CompleteExit()
