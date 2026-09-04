@@ -376,9 +376,9 @@ app.MapPut("/api/users/{userId:guid}/permissions", async (Guid userId, HttpReque
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 
-app.MapGet("/api/customers", async (string? q, HttpRequest request, CustomerCreditService customers, CancellationToken cancellationToken) =>
+app.MapGet("/api/customers", async (string? q, bool? creditOnly, HttpRequest request, CustomerCreditService customers, CancellationToken cancellationToken) =>
 {
-    var result = await customers.ListAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), q, cancellationToken);
+    var result = await customers.ListAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), q, creditOnly ?? false, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
 app.MapPost("/api/customers", async (HttpRequest request, CustomerCommand command, CustomerCreditService customers, CancellationToken cancellationToken) =>
@@ -390,6 +390,12 @@ app.MapPut("/api/customers/{customerId:guid}", async (Guid customerId, HttpReque
 {
     try { var result = await customers.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), customerId, command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["customer"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+app.MapPut("/api/customers/{customerId:guid}/status", async (Guid customerId, HttpRequest request, CustomerStatusCommand command, CustomerCreditService customers, CancellationToken cancellationToken) =>
+{
+    try { var result = await customers.SetStatusAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), customerId, command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });

@@ -6,6 +6,7 @@ using System.Text;
 namespace Pos.Infrastructure;
 
 public sealed record CustomerCommand(string Name, string? Phone, string? Email, string? TaxId, decimal CreditLimit, bool CreditEnabled);
+public sealed record CustomerStatusCommand(bool IsActive);
 public sealed record CustomerResult(Guid Id, string Name, string? Phone, string? Email, string? TaxId, decimal CreditLimit, bool CreditEnabled, bool IsActive, decimal Balance);
 public sealed record CreditPaymentCommand(Guid OperationId, Guid CustomerId, decimal Amount, string Reason);
 public sealed record CreditPaymentResult(Guid TransactionId, Guid CustomerId, decimal Amount, decimal BalanceBefore, decimal BalanceAfter);
@@ -13,11 +14,13 @@ public sealed record CreditStatementItem(Guid Id, string Type, decimal Amount, d
 
 public sealed class CustomerCreditService(PosDbContext database)
 {
-    public async Task<IReadOnlyList<CustomerResult>?> ListAsync(string token, string? query, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<CustomerResult>?> ListAsync(string token, string? query, bool creditOnly, CancellationToken cancellationToken)
     {
         if (await GetUserAsync(token, "ManageCustomersAndCredit", cancellationToken) is null) return null;
         var search = (query ?? string.Empty).Trim().ToUpperInvariant();
-        var customers = await database.Customers.AsNoTracking().Where(item => item.IsActive && (search.Length == 0 || item.Name.ToUpper().Contains(search) || (item.Phone ?? "").Contains(search))).OrderBy(item => item.Name).Take(100).ToListAsync(cancellationToken);
+        var customerQuery = database.Customers.AsNoTracking().Where(item => item.IsActive && (search.Length == 0 || item.Name.ToUpper().Contains(search) || (item.Phone ?? "").Contains(search)));
+        if (creditOnly) customerQuery = customerQuery.Where(item => item.CreditEnabled);
+        var customers = await customerQuery.OrderBy(item => item.Name).Take(100).ToListAsync(cancellationToken);
         var balances = await database.CreditTransactions.AsNoTracking().GroupBy(item => item.CustomerId).Select(group => new { CustomerId = group.Key, Balance = group.Sum(item => item.Amount) }).ToDictionaryAsync(item => item.CustomerId, item => item.Balance, cancellationToken);
         return customers.Select(item => ToResult(item, balances.GetValueOrDefault(item.Id))).ToArray();
     }
@@ -38,8 +41,20 @@ public sealed class CustomerCreditService(PosDbContext database)
         var customer = await database.Customers.SingleOrDefaultAsync(item => item.Id == customerId, cancellationToken) ?? throw new KeyNotFoundException("Cliente no encontrado.");
         var balance = await BalanceAsync(customerId, cancellationToken);
         if (command.CreditLimit < balance) throw new InvalidOperationException("El limite no puede ser menor que el saldo actual.");
+        if (!command.CreditEnabled && balance > 0m) throw new InvalidOperationException("No se puede deshabilitar el crédito mientras exista saldo pendiente.");
         customer.Name = command.Name.Trim(); customer.Phone = Clean(command.Phone); customer.Email = Clean(command.Email); customer.TaxId = Clean(command.TaxId); customer.CreditLimit = decimal.Round(command.CreditLimit, 2); customer.CreditEnabled = command.CreditEnabled;
         await database.SaveChangesAsync(cancellationToken); return ToResult(customer, balance);
+    }
+
+    public async Task<CustomerResult?> SetStatusAsync(string token, Guid customerId, CustomerStatusCommand command, CancellationToken cancellationToken)
+    {
+        if (await GetUserAsync(token, "ManageCustomersAndCredit", cancellationToken) is null) return null;
+        var customer = await database.Customers.SingleOrDefaultAsync(item => item.Id == customerId, cancellationToken) ?? throw new KeyNotFoundException("Cliente no encontrado.");
+        var balance = await BalanceAsync(customerId, cancellationToken);
+        if (!command.IsActive && balance > 0m) throw new InvalidOperationException("No se puede desactivar un cliente con saldo pendiente. Registra o liquida el abono antes de desactivarlo.");
+        customer.IsActive = command.IsActive;
+        await database.SaveChangesAsync(cancellationToken);
+        return ToResult(customer, balance);
     }
 
     public async Task<CreditPaymentResult?> ApplyPaymentAsync(string token, CreditPaymentCommand command, CancellationToken cancellationToken)

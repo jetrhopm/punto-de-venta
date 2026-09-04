@@ -1,10 +1,9 @@
-using System.Globalization;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using MahApps.Metro.IconPacks;
 
 namespace Pos.Desktop;
 
@@ -13,89 +12,169 @@ public partial class CustomerModule : UserControl
     private static HttpClient Client => ApiClient.Client;
     private readonly bool _creditMode;
     private CancellationTokenSource? _searchCancellation;
-    private CustomerRow? _selected;
+    private CustomerView? _selected;
 
     public CustomerModule(bool creditMode = false)
     {
         InitializeComponent();
         _creditMode = creditMode;
-        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", SessionContext.AccessToken);
-        if (creditMode)
-        {
-            TitleText.Text = "Créditos de clientes";
-            SubtitleText.Text = "Consulta saldos y registra abonos de los clientes con crédito.";
-        }
+        ConfigureMode();
         Loaded += async (_, _) => await LoadCustomersAsync();
+    }
+
+    private void ConfigureMode()
+    {
+        if (!_creditMode) return;
+
+        TitleText.Text = "Créditos de clientes";
+        SubtitleText.Text = "Consulta cuentas con crédito, saldos pendientes, movimientos y abonos.";
+        HeaderIcon.Kind = PackIconMaterialKind.AccountCashOutline;
+        HeaderIcon.Foreground = System.Windows.Media.Brushes.White;
+        HeaderIconBackground.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(35, 138, 104));
+        ListTitleText.Text = "Cuentas con crédito activo";
+        CreditSummaryPanel.Visibility = Visibility.Visible;
+        CustomerActionsPanel.Visibility = Visibility.Collapsed;
+        CreditActionsPanel.Visibility = Visibility.Visible;
+        CustomersList.ToolTip = "Doble clic para consultar la cuenta, movimientos y abonos";
     }
 
     private async void OnSearchChanged(object sender, TextChangedEventArgs e)
     {
         _searchCancellation?.Cancel();
         _searchCancellation = new CancellationTokenSource();
-        try { await Task.Delay(180, _searchCancellation.Token); await LoadCustomersAsync(_searchCancellation.Token); }
+        try
+        {
+            await Task.Delay(180, _searchCancellation.Token);
+            await LoadCustomersAsync(_searchCancellation.Token);
+        }
         catch (OperationCanceledException) { }
     }
 
-    private async Task LoadCustomersAsync(CancellationToken cancellationToken = default)
+    private async Task LoadCustomersAsync(CancellationToken cancellationToken = default, Guid? selectCustomerId = null)
     {
         try
         {
-            var data = await Client.GetFromJsonAsync<List<CustomerResult>>($"/api/customers?q={Uri.EscapeDataString(SearchTextBox.Text.Trim())}", cancellationToken) ?? [];
-            CustomersList.ItemsSource = data.Select(item => new CustomerRow(item)).ToList();
+            var query = Uri.EscapeDataString(SearchTextBox.Text.Trim());
+            var customers = await Client.GetFromJsonAsync<List<CustomerView>>($"/api/customers?q={query}&creditOnly={_creditMode.ToString().ToLowerInvariant()}", cancellationToken) ?? [];
+            CustomersList.ItemsSource = customers;
+            _selected = selectCustomerId is null ? null : customers.FirstOrDefault(customer => customer.Id == selectCustomerId);
+            CustomersList.SelectedItem = _selected;
+            SetActionAvailability();
+            if (_creditMode) CreditSummaryText.Text = customers.Sum(customer => customer.Balance).ToString("C2");
+            if (customers.Count == 0) StatusText.Text = _creditMode ? "No hay clientes con crédito activo." : "No hay clientes activos que coincidan con la búsqueda.";
         }
-        catch (HttpRequestException) { SelectedSummaryText.Text = ConnectionHelp.ApiUnavailable; }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; }
     }
 
-    private void OnCustomerSelected(object sender, MouseButtonEventArgs e)
+    private void OnCustomerSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (CustomersList.SelectedItem is not CustomerRow row) return;
-        _selected = row;
-        NameTextBox.Text = row.Customer.Name;
-        LimitTextBox.Text = row.Customer.CreditLimit.ToString("0.00", CultureInfo.InvariantCulture);
-        SelectedSummaryText.Text = $"Cliente seleccionado: {row.Customer.Name}. Saldo actual: ${row.Customer.Balance:0.00}.";
+        _selected = CustomersList.SelectedItem as CustomerView;
+        SetActionAvailability();
+        if (_selected is not null) StatusText.Text = _creditMode
+            ? $"Cuenta seleccionada: {_selected.Name}. Saldo pendiente: {_selected.Balance:C2}."
+            : $"Cliente seleccionado: {_selected.Name}. Doble clic para consultar sus datos.";
     }
 
-    private async void OnCreateClick(object sender, RoutedEventArgs e)
+    private void SetActionAvailability()
     {
-        if (string.IsNullOrWhiteSpace(NameTextBox.Text)) { SelectedSummaryText.Text = "Escribe el nombre del cliente para crearlo."; return; }
-        if (!TryParse(LimitTextBox.Text, out var limit) || limit < 0m) { SelectedSummaryText.Text = "Indica un límite de crédito válido o deja 0.00."; return; }
+        EditCustomerButton.IsEnabled = _selected is not null;
+        DeactivateCustomerButton.IsEnabled = _selected is not null;
+        OpenCreditAccountButton.IsEnabled = _selected is not null;
+    }
+
+    private async void OnCreateCustomerClick(object sender, RoutedEventArgs e) => await OpenCustomerEditorAsync(null);
+
+    private async void OnEditCustomerClick(object sender, RoutedEventArgs e)
+    {
+        if (_selected is not null) await OpenCustomerEditorAsync(_selected);
+    }
+
+    private async void OnDeactivateCustomerClick(object sender, RoutedEventArgs e)
+    {
+        if (_selected is not null) await DeactivateCustomerAsync(_selected);
+    }
+
+    private async void OnOpenCreditAccountClick(object sender, RoutedEventArgs e)
+    {
+        if (_selected is not null) await OpenCreditAccountAsync(_selected);
+    }
+
+    private async void OnCustomerDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (_selected is null) return;
+        if (_creditMode)
+        {
+            await OpenCreditAccountAsync(_selected);
+            return;
+        }
+
+        var dialog = new CustomerDetailsWindow(_selected) { Owner = Window.GetWindow(this) };
+        if (dialog.ShowDialog() != true) return;
+        switch (dialog.Action)
+        {
+            case CustomerDetailsAction.Edit:
+                await OpenCustomerEditorAsync(_selected);
+                break;
+            case CustomerDetailsAction.ManageCredit:
+                await OpenCreditAccountAsync(_selected);
+                break;
+            case CustomerDetailsAction.Deactivate:
+                await DeactivateCustomerAsync(_selected);
+                break;
+        }
+    }
+
+    private async Task OpenCustomerEditorAsync(CustomerView? customer)
+    {
+        var dialog = new CustomerEditorWindow(customer) { Owner = Window.GetWindow(this) };
+        if (dialog.ShowDialog() != true || dialog.Result is null) return;
+
         try
         {
-            using var response = await Client.PostAsJsonAsync("/api/customers", new { name = NameTextBox.Text.Trim(), creditLimit = limit, creditEnabled = true });
-            SelectedSummaryText.Text = response.IsSuccessStatusCode ? "Cliente creado correctamente." : await response.Content.ReadAsStringAsync();
-            if (response.IsSuccessStatusCode) { NameTextBox.Clear(); LimitTextBox.Text = "0.00"; await LoadCustomersAsync(); }
+            var result = dialog.Result;
+            using var response = customer is null
+                ? await Client.PostAsJsonAsync("/api/customers", new { name = result.Name, phone = result.Phone, email = result.Email, taxId = result.TaxId, creditLimit = 0m, creditEnabled = false })
+                : await Client.PutAsJsonAsync($"/api/customers/{customer.Id}", new { name = result.Name, phone = result.Phone, email = result.Email, taxId = result.TaxId, creditLimit = customer.CreditLimit, creditEnabled = customer.CreditEnabled });
+            if (!response.IsSuccessStatusCode)
+            {
+                StatusText.Text = await ReadErrorAsync(response);
+                return;
+            }
+
+            var saved = await response.Content.ReadFromJsonAsync<CustomerView>();
+            await LoadCustomersAsync(selectCustomerId: saved?.Id);
+            StatusText.Text = customer is null ? "Cliente creado correctamente. Puedes habilitarle crédito desde sus detalles." : "Datos generales del cliente actualizados.";
         }
-        catch (HttpRequestException) { SelectedSummaryText.Text = ConnectionHelp.ApiUnavailable; }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; }
     }
 
-    private async void OnUpdateClick(object sender, RoutedEventArgs e)
+    private async Task OpenCreditAccountAsync(CustomerView customer)
     {
-        if (_selected is null) { SelectedSummaryText.Text = "Selecciona un cliente con doble clic antes de actualizarlo."; return; }
-        if (string.IsNullOrWhiteSpace(NameTextBox.Text) || !TryParse(LimitTextBox.Text, out var limit) || limit < 0m) { SelectedSummaryText.Text = "Escribe un nombre y un límite de crédito válido."; return; }
+        var dialog = new CreditAccountWindow(customer) { Owner = Window.GetWindow(this) };
+        dialog.ShowDialog();
+        await LoadCustomersAsync(selectCustomerId: customer.Id);
+    }
+
+    private async Task DeactivateCustomerAsync(CustomerView customer)
+    {
+        if (MessageBox.Show($"¿Deseas desactivar a {customer.Name}? No aparecerá para ventas ni créditos.", "Desactivar cliente", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         try
         {
-            var customer = _selected.Customer;
-            using var response = await Client.PutAsJsonAsync($"/api/customers/{customer.Id}", new { name = NameTextBox.Text.Trim(), phone = customer.Phone, email = customer.Email, taxId = customer.TaxId, creditLimit = limit, creditEnabled = customer.CreditEnabled });
-            SelectedSummaryText.Text = response.IsSuccessStatusCode ? "Cliente actualizado correctamente." : await response.Content.ReadAsStringAsync();
-            if (response.IsSuccessStatusCode) await LoadCustomersAsync();
+            using var response = await Client.PutAsJsonAsync($"/api/customers/{customer.Id}/status", new { isActive = false });
+            if (!response.IsSuccessStatusCode)
+            {
+                StatusText.Text = await ReadErrorAsync(response);
+                return;
+            }
+            await LoadCustomersAsync();
+            StatusText.Text = "Cliente desactivado correctamente.";
         }
-        catch (HttpRequestException) { SelectedSummaryText.Text = ConnectionHelp.ApiUnavailable; }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; }
     }
 
-    private async void OnPaymentClick(object sender, RoutedEventArgs e)
+    private static async Task<string> ReadErrorAsync(HttpResponseMessage response)
     {
-        if (_selected is null) { SelectedSummaryText.Text = "Selecciona primero al cliente que realiza el abono."; return; }
-        if (!TryParse(AmountTextBox.Text, out var amount) || amount <= 0m) { SelectedSummaryText.Text = "Indica un importe de abono mayor a cero."; return; }
-        try
-        {
-            using var response = await Client.PostAsJsonAsync("/api/customers/credit-payments", new { operationId = Guid.NewGuid(), customerId = _selected.Customer.Id, amount, reason = "Abono registrado desde clientes" });
-            SelectedSummaryText.Text = response.IsSuccessStatusCode ? "Abono registrado correctamente." : await response.Content.ReadAsStringAsync();
-            if (response.IsSuccessStatusCode) { AmountTextBox.Clear(); await LoadCustomersAsync(); }
-        }
-        catch (HttpRequestException) { SelectedSummaryText.Text = ConnectionHelp.ApiUnavailable; }
+        var content = await response.Content.ReadAsStringAsync();
+        return string.IsNullOrWhiteSpace(content) ? "No se pudo completar la operación." : content;
     }
-
-    private static bool TryParse(string value, out decimal result) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.CurrentCulture, out result) || decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
-    private sealed record CustomerResult(Guid Id, string Name, string? Phone, string? Email, string? TaxId, decimal CreditLimit, bool CreditEnabled, bool IsActive, decimal Balance);
-    private sealed record CustomerRow(CustomerResult Customer) { public string DisplayText => $"{Customer.Name} | Límite ${Customer.CreditLimit:0.00} | Saldo ${Customer.Balance:0.00}"; }
 }
