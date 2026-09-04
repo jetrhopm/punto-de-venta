@@ -176,6 +176,15 @@
                                 <Button Click="OnPrintLastTicketClick"><StackPanel><icons:PackIconMaterial Kind="PrinterOutline" Width="21" Height="21" HorizontalAlignment="Center"/><TextBlock Text="Último ticket" FontSize="11" TextAlignment="Center"/></StackPanel></Button>
                                 <Button x:Name="OpenCashDrawerButton" Click="OnOpenCashDrawerClick" ToolTip="Abrir el cajón sin registrar un movimiento"><StackPanel><icons:PackIconMaterial Kind="LockOpenOutline" Width="21" Height="21" HorizontalAlignment="Center" Foreground="{StaticResource WarningBrush}"/><TextBlock Text="Abrir cajón" FontSize="11" TextAlignment="Center"/></StackPanel></Button>
                             </UniformGrid>
+                            <Button Style="{StaticResource DangerButtonStyle}" Background="{StaticResource DangerBrush}" Foreground="White" BorderBrush="{StaticResource DangerBrush}" Height="72" Margin="3,8,3,0" Click="OnCloseShiftClick" ToolTip="Cerrar el turno y realizar el corte de caja">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                        <icons:PackIconMaterial Kind="ContentCut" Width="24" Height="24" Margin="0,0,8,0"/>
+                                        <TextBlock Text="CERRAR CORTE" FontSize="18" FontWeight="Bold"/>
+                                    </StackPanel>
+                                    <TextBlock Text="Cerrar turno y caja" FontSize="12" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Button>
                     </StackPanel>
                 </Grid>
             </Border>
