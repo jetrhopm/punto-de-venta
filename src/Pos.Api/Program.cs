@@ -808,7 +808,7 @@ app.MapGet("/api/auth/active-users", async (PosDbContext database, CancellationT
 {
     var users = await database.Users.AsNoTracking()
         .Where(item => item.IsActive)
-        .OrderBy(item => item.DisplayName)
+        .OrderBy(item => item.CreatedAtUtc)
         .ThenBy(item => item.NormalizedUserName)
         .Select(item => new { userName = item.NormalizedUserName, displayName = item.DisplayName })
         .ToListAsync(cancellationToken);

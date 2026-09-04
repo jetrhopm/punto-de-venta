@@ -51,18 +51,16 @@ public partial class LoginWindow : Window
         {
             await LoadActiveUsersAsync();
             SetStatus("JetVenta está listo. Elige tu usuario e ingresa tu contraseña.", StatusKind.Success);
-            if (UserListBox.SelectedItem is null) UserFilterTextBox.Focus();
+            if (UserComboBox.SelectedItem is null) UserComboBox.Focus();
             else PasswordBox.Focus();
         }
     }
 
     private void OnPasswordPreviewKeyUp(object sender, KeyEventArgs e) => UpdateCapsLockWarning();
 
-    private void OnUserFilterTextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) => RefreshUserList();
-
     private void OnUserSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        if (UserListBox.SelectedItem is LoginUserOption) PasswordBox.Focus();
+        if (UserComboBox.SelectedItem is LoginUserOption) PasswordBox.Focus();
     }
 
     private async Task LoadActiveUsersAsync()
@@ -70,25 +68,14 @@ public partial class LoginWindow : Window
         try
         {
             _users = await Client.GetFromJsonAsync<List<LoginUserOption>>("api/auth/active-users") ?? [];
-            RefreshUserList(selectUserName: "ADMIN");
+            UserComboBox.ItemsSource = _users;
+            UserComboBox.SelectedItem = _users.FirstOrDefault();
         }
         catch (HttpRequestException)
         {
             _users = [];
             SetStatus(UnavailableMessage, StatusKind.Error);
         }
-    }
-
-    private void RefreshUserList(string? selectUserName = null)
-    {
-        var current = selectUserName ?? (UserListBox.SelectedItem as LoginUserOption)?.UserName;
-        var filter = UserFilterTextBox.Text.Trim();
-        var visible = _users.Where(user => string.IsNullOrWhiteSpace(filter)
-            || user.UserName.Contains(filter, StringComparison.OrdinalIgnoreCase)
-            || user.DisplayName.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
-        UserListBox.ItemsSource = visible;
-        UserListBox.SelectedItem = visible.FirstOrDefault(user => string.Equals(user.UserName, current, StringComparison.OrdinalIgnoreCase));
-        if (UserListBox.SelectedItem is null && visible.Count == 1) UserListBox.SelectedItem = visible[0];
     }
 
     private void UpdateCapsLockWarning() =>
@@ -110,10 +97,13 @@ public partial class LoginWindow : Window
     {
         if (_isBusy) return;
 
-        if (UserListBox.SelectedItem is not LoginUserOption selectedUser)
+        var typedUserName = UserComboBox.Text.Trim();
+        var selectedUser = _users.FirstOrDefault(user => string.Equals(user.UserName, typedUserName, StringComparison.OrdinalIgnoreCase))
+            ?? UserComboBox.SelectedItem as LoginUserOption;
+        if (selectedUser is null)
         {
-            SetStatus("Elige un usuario de la lista para continuar.", StatusKind.Error);
-            UserFilterTextBox.Focus();
+            SetStatus("Elige un usuario de la lista o escribe un usuario válido.", StatusKind.Error);
+            UserComboBox.Focus();
             return;
         }
 
@@ -271,8 +261,7 @@ public partial class LoginWindow : Window
         LoginButton.IsEnabled = !isBusy;
         ServerButton.IsEnabled = !isBusy;
         PairButton.IsEnabled = !isBusy;
-        UserFilterTextBox.IsEnabled = !isBusy;
-        UserListBox.IsEnabled = !isBusy;
+        UserComboBox.IsEnabled = !isBusy;
         BusyProgress.Visibility = isBusy ? Visibility.Visible : Visibility.Collapsed;
         LoginButtonIcon.Kind = isBusy ? PackIconMaterialKind.ProgressClock : PackIconMaterialKind.LoginVariant;
         LoginButtonText.Text = isBusy ? "Espera un momento" : "Iniciar sesión";

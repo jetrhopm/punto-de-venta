@@ -82,23 +82,25 @@
             </StackPanel>
 
             <StackPanel Grid.Row="1" Margin="0,24,0,0">
-                <TextBlock Text="Elige tu usuario" FontWeight="SemiBold" Margin="0,0,0,7"/>
+                <TextBlock Text="Usuario" FontWeight="SemiBold" Margin="0,0,0,7"/>
                 <Grid>
-                    <icons:PackIconMaterial Kind="Magnify"
+                    <icons:PackIconMaterial Kind="AccountOutline"
                                             Width="21" Height="21"
                                             Margin="14,0,0,0"
                                             HorizontalAlignment="Left" VerticalAlignment="Center"
                                             Foreground="{StaticResource TextMutedBrush}"
                                             IsHitTestVisible="False"/>
-                    <TextBox x:Name="UserFilterTextBox"
-                             Height="46" Padding="45,7,12,7"
-                             FontSize="16" TextChanged="OnUserFilterTextChanged"
-                             automation:AutomationProperties.Name="Filtrar usuarios"
-                             ToolTip="Escribe para filtrar usuarios"/>
+                    <ComboBox x:Name="UserComboBox"
+                              Height="46" Padding="45,7,12,7"
+                              FontSize="16"
+                              IsEditable="True"
+                              IsTextSearchEnabled="False"
+                              StaysOpenOnEdit="True"
+                              DisplayMemberPath="DisplayText"
+                              SelectionChanged="OnUserSelectionChanged"
+                              automation:AutomationProperties.Name="Usuario"
+                              ToolTip="Elige un usuario o escribe su nombre"/>
                 </Grid>
-                <ListBox x:Name="UserListBox" Height="108" Margin="0,8,0,0"
-                         DisplayMemberPath="DisplayText" SelectionChanged="OnUserSelectionChanged"
-                         automation:AutomationProperties.Name="Usuarios activos"/>
             </StackPanel>
 
             <StackPanel Grid.Row="2" Margin="0,15,0,0">
