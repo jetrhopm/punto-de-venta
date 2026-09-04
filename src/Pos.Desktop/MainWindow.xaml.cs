@@ -775,8 +775,17 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task CreateNewTicketAsync()
+    private async Task CreateNewTicketAsync(bool saveCurrentTicket = true)
     {
+        if (saveCurrentTicket
+            && _activeTicket is { Lines.Count: > 0 } activeTicket
+            && _tickets.Contains(activeTicket)
+            && !await PersistActiveTicketAsync())
+        {
+            StatusText.Text = "No se pudo guardar el ticket actual. Revisa la conexión antes de abrir otro.";
+            return;
+        }
+
         try
         {
             using var response = await Client.PostAsync("/api/sale-drafts", null);

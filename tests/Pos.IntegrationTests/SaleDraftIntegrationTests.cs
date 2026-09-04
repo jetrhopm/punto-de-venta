@@ -43,10 +43,19 @@ public sealed class SaleDraftIntegrationTests
             var draft = await drafts.CreateAsync(token, CancellationToken.None);
             Assert.NotNull(draft);
 
+            // Abrir otro ticket no debe descartar el anterior, aunque todavía
+            // no tenga partidas: el cajero decide explícitamente cuál eliminar.
+            var secondDraft = await drafts.CreateAsync(token, CancellationToken.None);
+            Assert.NotNull(secondDraft);
+            Assert.Equal("Open", await database.SaleDrafts.Where(item => item.Id == draft!.Id).Select(item => item.Status).SingleAsync());
+
             await drafts.SaveLinesAsync(token, draft!.Id, new SaveSaleDraftLinesCommand([new SaleDraftLineCommand(product.Id, 2m)]), CancellationToken.None);
+            await drafts.SaveLinesAsync(token, secondDraft!.Id, new SaveSaleDraftLinesCommand([new SaleDraftLineCommand(product.Id, 1m)]), CancellationToken.None);
+            Assert.True(await drafts.DiscardAsync(token, secondDraft.Id, CancellationToken.None));
             var recovered = await drafts.ListOpenAsync(token, CancellationToken.None);
             var shiftId = await database.Shifts.Where(item => item.RegisterId == register.Id && item.Status == "Open").Select(item => item.Id).SingleAsync();
             var recoveredTicket = Assert.Single(recovered!);
+            Assert.Equal(draft.Id, recoveredTicket.Id);
             Assert.Equal(2m, recoveredTicket.Lines.Single().Quantity);
             Assert.Equal(4m, await database.Products.Where(item => item.Id == product.Id).Select(item => item.Stock).SingleAsync());
             Assert.Empty(await database.Sales.Where(item => item.ShiftId == shiftId).ToListAsync());
