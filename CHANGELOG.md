@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se publica la versión 2.2.5: se corrige el descarte de tickets para eliminar siempre el ticket seleccionado y conservar los demás tickets en atención.
 - Se publica la versión 2.2.4: se corrige el icono de Inicio automático en Configuración y en su ventana de detalle para evitar que el módulo falle al abrirse.
 - Se publica la versión 2.2.3: se renuevan el icono de Windows, los accesos directos, las pantallas de JetVenta y el banner del instalador con los nuevos recursos de marca en PNG transparente.
 - Se publica la versión 2.2.2: al iniciar la instalación o actualización, la ventana muestra una vista amplia con porcentaje, etapa actual y registro legible de la actividad.

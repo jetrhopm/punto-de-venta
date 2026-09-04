@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<CartLineView> _emptyCart = [];
     private readonly SemaphoreSlim _draftSaveLock = new(1, 1);
     private TicketTabView? _activeTicket;
+    private bool _discardInProgress;
     private bool _exitConfirmed;
     private bool _exitDialogOpen;
     public MainWindow()
@@ -862,13 +863,18 @@ public partial class MainWindow : Window
 
     private async void OnDiscardTicketClick(object sender, RoutedEventArgs e)
     {
-        var ticket = _activeTicket;
-        if (ticket is null) return;
+        if (_discardInProgress) return;
+
+        // La pestaña seleccionada es la fuente de verdad. La referencia activa
+        // puede quedar desfasada mientras WPF procesa el cambio de pestaña.
+        var ticket = TicketTabs.SelectedItem as TicketTabView ?? _activeTicket;
+        if (ticket is null || !_tickets.Contains(ticket)) return;
         if (ticket.Lines.Count > 0 && MessageBox.Show($"¿Descartar {ticket.Title}? Sus productos no se venderán ni afectarán inventario.", "Descartar ticket", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
         {
             return;
         }
 
+        _discardInProgress = true;
         var lockHeld = false;
         try
         {
@@ -881,12 +887,15 @@ public partial class MainWindow : Window
                 return;
             }
 
-            _tickets.Remove(ticket);
+            var removedIndex = _tickets.IndexOf(ticket);
+            if (removedIndex < 0) return;
+            _tickets.RemoveAt(removedIndex);
             if (_tickets.Count == 0) await CreateNewTicketAsync();
             else
             {
-                TicketTabs.SelectedIndex = 0;
-                ActivateTicket(_tickets[0]);
+                var nextIndex = Math.Min(removedIndex, _tickets.Count - 1);
+                TicketTabs.SelectedIndex = nextIndex;
+                ActivateTicket(_tickets[nextIndex]);
             }
             StatusText.Text = "Ticket descartado. No se registró ninguna venta.";
         }
@@ -897,6 +906,7 @@ public partial class MainWindow : Window
         finally
         {
             if (lockHeld) _draftSaveLock.Release();
+            _discardInProgress = false;
         }
     }
 
