@@ -76,6 +76,13 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0" ToolTip="Usuario con sesión activa">
+                        <icons:PackIconMaterial Kind="AccountCircleOutline" Width="21" Height="21" Margin="0,0,6,0" Foreground="{StaticResource PrimaryBrush}"/>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Cajero" FontSize="10" Foreground="{StaticResource TextMutedBrush}"/>
+                            <TextBlock x:Name="CashierNameText" Text="Usuario" MaxWidth="150" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </StackPanel>
                     <Button Style="{StaticResource IconOnlyButton}" ToolTip="Minimizar" Click="OnMinimizeClick"><icons:PackIconMaterial Kind="WindowMinimize" Width="19" Height="19"/></Button>
                     <Button Style="{StaticResource IconOnlyButton}" ToolTip="Salir" Click="OnExitClick"><icons:PackIconMaterial Kind="LogoutVariant" Width="20" Height="20" Foreground="{StaticResource DangerBrush}"/></Button>
                 </StackPanel>

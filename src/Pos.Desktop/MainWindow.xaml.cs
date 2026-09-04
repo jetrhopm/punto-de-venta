@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        CashierNameText.Text = string.IsNullOrWhiteSpace(SessionContext.DisplayName) ? "Usuario" : SessionContext.DisplayName.Trim();
         TicketTabs.ItemsSource = _tickets;
         CartList.ItemsSource = _emptyCart;
         Loaded += (_, _) => ApplyNavigationPermissions();
