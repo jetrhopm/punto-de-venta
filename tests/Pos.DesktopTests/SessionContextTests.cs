@@ -3,6 +3,20 @@ namespace Pos.DesktopTests;
 public sealed class SessionContextTests
 {
     [Fact]
+    public void TemporaryPermissionDoesNotBecomePermanentPermission()
+    {
+        Pos.Desktop.SessionContext.Clear();
+
+        using (Pos.Desktop.SessionContext.BeginTemporaryPermission("CloseShift"))
+        {
+            Assert.True(Pos.Desktop.SessionContext.HasPermission("CloseShift"));
+            Assert.False(Pos.Desktop.SessionContext.HasPermanentPermission("CloseShift"));
+        }
+
+        Assert.False(Pos.Desktop.SessionContext.HasPermission("CloseShift"));
+    }
+
+    [Fact]
     public void Clear_RemovesIdentityAndPermissions()
     {
         Pos.Desktop.SessionContext.AccessToken = "session-token";

@@ -49,6 +49,15 @@ public static class PermissionAuthorization
         if (window.ShowDialog() != true || window.Authorization is null) return null;
         return new TemporaryPermissionLease(permission, window.Authorization.GrantId, window.Authorization.AuthorizedBy);
     }
+
+    public static async Task<TemporaryPermissionLease?> RequestCriticalActionAsync(Window owner, string permission, string action)
+    {
+        if (SessionContext.HasPermanentPermission(permission)) return TemporaryPermissionLease.NotRequired;
+
+        var window = new PermissionAuthorizationWindow(permission, action) { Owner = owner };
+        if (window.ShowDialog() != true || window.Authorization is null) return null;
+        return new TemporaryPermissionLease(permission, window.Authorization.GrantId, window.Authorization.AuthorizedBy);
+    }
 }
 
 public sealed class TemporaryPermissionLease : IAsyncDisposable
@@ -72,6 +81,7 @@ public sealed class TemporaryPermissionLease : IAsyncDisposable
     public static TemporaryPermissionLease NotRequired { get; } = new();
     public string? Permission { get; }
     public string? AuthorizedBy { get; }
+    public Guid? GrantId => _grantId;
 
     public async ValueTask DisposeAsync()
     {

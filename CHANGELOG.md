@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- El cierre de caja exige la autorización temporal concreta emitida para esa acción y la consume al completarse; permisos temporales vencidos, residuales o de otra función no permiten realizar un corte.
 - Se prepara la versión 2.2.9: el cierre de turno distingue una caída real de la API de un fallo puntual, confirma el estado tras respuestas inciertas y registra el error técnico sin dejar el programa bloqueado.
 - Los permisos temporales ya no aparecen como permisos permanentes en Cajeros y permisos; se eliminan al cerrar sesión y se limpian antes de un nuevo inicio de sesión.
 - Se corrige el cierre autorizado de cajeros: consultar las reglas del corte acepta `Cerrar turno` y ya no exige por error `Modificar configuración de la tienda`.

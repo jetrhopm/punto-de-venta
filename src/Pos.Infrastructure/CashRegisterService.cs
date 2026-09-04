@@ -5,7 +5,7 @@ using System.Text;
 namespace Pos.Infrastructure;
 
 public sealed record CashMovementCommand(string Type, decimal Amount, string Reason);
-public sealed record CloseShiftCommand(decimal? CountedCash);
+public sealed record CloseShiftCommand(decimal? CountedCash, Guid? AuthorizationGrantId = null);
 public sealed record ShiftSummary(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
 public sealed record CashCutSummary(decimal InitialCash, decimal TotalSales, int SalesCount, decimal CashSales, decimal CardSales, decimal TransferSales, decimal CreditSales, decimal CashIn, decimal CashOut, decimal CashReturns, decimal Profit, decimal ExpectedCash);
 public sealed record CashierCutOption(Guid Id, string Name);
@@ -70,12 +70,15 @@ public sealed class CashRegisterService(PosDbContext database)
 
     public async Task<ShiftSummary?> CloseAsync(string token, CloseShiftCommand command, CancellationToken cancellationToken)
     {
-        if (!await HasPermissionAsync(token, "CloseShift", cancellationToken)) return null;
+        var closeAuthorization = await GetCloseAuthorizationAsync(token, command.AuthorizationGrantId, cancellationToken);
+        if (closeAuthorization is null) return null;
         var shift = await GetOpenShiftAsync(token, cancellationToken);
         if (shift is null) return null;
         if (command.CountedCash < 0m) throw new ArgumentException("El efectivo contado no puede ser negativo.");
         var settings = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
         if (settings.RequireCashCountOnClose && command.CountedCash is null) throw new ArgumentException("Esta tienda requiere capturar el efectivo contado al cerrar turno.");
+
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
         var counted = settings.RequireCashCountOnClose ? command.CountedCash!.Value : (await SummaryAsync(shift, null, cancellationToken)).ExpectedCash;
         var summary = await SummaryAsync(shift, counted, cancellationToken);
         if (settings.RequireCashCountOnClose && settings.AutoAdjustCashDifference && summary.Difference != 0m)
@@ -85,8 +88,38 @@ public sealed class CashRegisterService(PosDbContext database)
             summary = await SummaryAsync(shift, counted, cancellationToken);
         }
         shift.Status = "Closed"; shift.ClosedAtUtc = DateTimeOffset.UtcNow; shift.CountedCash = decimal.Round(counted, 2); shift.Difference = summary.Difference;
+        if (closeAuthorization.TemporaryGrant is not null) database.Permissions.Remove(closeAuthorization.TemporaryGrant);
         await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return summary with { ClosedAtUtc = shift.ClosedAtUtc };
+    }
+
+    private async Task<CloseAuthorization?> GetCloseAuthorizationAsync(string token, Guid? temporaryGrantId, CancellationToken cancellationToken)
+    {
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty)));
+        var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(
+            item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow,
+            cancellationToken);
+        if (session is null) return null;
+
+        var user = await database.Users.AsNoTracking().SingleOrDefaultAsync(item => item.Id == session.UserId && item.IsActive, cancellationToken);
+        if (user is null) return null;
+        if (user.IsAdministrator || await database.Permissions.IgnoreQueryFilters().AnyAsync(
+                item => item.UserId == user.Id && item.Code == "CloseShift" && item.ExpiresAtUtc == null,
+                cancellationToken))
+        {
+            return new CloseAuthorization(null);
+        }
+
+        if (temporaryGrantId is null) return null;
+        var temporaryGrant = await database.Permissions.IgnoreQueryFilters().SingleOrDefaultAsync(
+            item => item.Id == temporaryGrantId.Value &&
+                    item.UserId == user.Id &&
+                    item.Code == "CloseShift" &&
+                    item.ExpiresAtUtc != null &&
+                    item.ExpiresAtUtc > DateTimeOffset.UtcNow,
+            cancellationToken);
+        return temporaryGrant is null ? null : new CloseAuthorization(temporaryGrant);
     }
 
     private async Task<ShiftRecord?> GetOpenShiftAsync(string token, CancellationToken cancellationToken)
@@ -152,4 +185,6 @@ public sealed class CashRegisterService(PosDbContext database)
         var actual = counted ?? expected;
         return new ShiftSummary(shift.Id, expected, actual, decimal.Round(actual - expected, 2), shift.ClosedAtUtc);
     }
+
+    private sealed record CloseAuthorization(PermissionRecord? TemporaryGrant);
 }

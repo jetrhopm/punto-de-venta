@@ -8,6 +8,7 @@ public static class SessionContext
     public static bool IsAdministrator { get; set; }
     public static HashSet<string> Permissions { get; } = new(StringComparer.Ordinal);
 
+    public static bool HasPermanentPermission(string permission) => IsAdministrator || Permissions.Contains(permission);
     public static bool HasPermission(string permission) => IsAdministrator || Permissions.Contains(permission) || TemporaryPermissions.ContainsKey(permission);
 
     public static IDisposable BeginTemporaryPermission(string permission)

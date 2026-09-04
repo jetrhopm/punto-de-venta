@@ -103,7 +103,10 @@ public partial class MainWindow : Window
             {
                 var module = new CutWindow();
                 module.CloseRequested += (_, _) => ShowSalesWorkspace();
-                module.CloseShiftRequested += async (_, _) => await CloseShiftFromDialogAsync(openNewShift: true);
+                module.CloseShiftRequested += async (_, _) =>
+                {
+                    if (await CloseShiftFromDialogAsync(openNewShift: true, _modulePermissionLease)) ShowSalesWorkspace();
+                };
                 ShowEmbeddedModule(module, "Corte", "Consulta cortes sin cerrar los tickets en atención.", lease);
                 lease = null;
                 return;
@@ -394,9 +397,13 @@ public partial class MainWindow : Window
         await CloseShiftFromDialogAsync(openNewShift: true);
     }
 
-    private async Task<bool> CloseShiftFromDialogAsync(bool openNewShift = false)
+    private async Task<bool> CloseShiftFromDialogAsync(bool openNewShift = false, TemporaryPermissionLease? existingAuthorization = null)
     {
-        await using var authorization = await PermissionAuthorization.RequestAsync(this, "CloseShift", "Cerrar el turno y realizar el corte requiere autorización.");
+        var borrowedAuthorization = existingAuthorization?.Permission == "CloseShift" ? existingAuthorization : null;
+        await using var requestedAuthorization = borrowedAuthorization is null
+            ? await PermissionAuthorization.RequestCriticalActionAsync(this, "CloseShift", "Cerrar el turno y realizar el corte requiere autorización.")
+            : null;
+        var authorization = borrowedAuthorization ?? requestedAuthorization;
         if (authorization is null)
         {
             StatusText.Text = "No tienes permiso para cerrar turno. Pide al administrador que lo autorice o que active \"Realizar corte del turno propio y ver efectivo esperado\" en Configuración > Cajeros y permisos.";
@@ -442,7 +449,7 @@ public partial class MainWindow : Window
 
         try
         {
-            using var response = await Client.PostAsJsonAsync("/api/shifts/close", new { countedCash });
+            using var response = await Client.PostAsJsonAsync("/api/shifts/close", new { countedCash, authorizationGrantId = authorization.GrantId });
             if (!response.IsSuccessStatusCode)
             {
                 StatusText.Text = response.StatusCode == System.Net.HttpStatusCode.Unauthorized
@@ -1231,7 +1238,7 @@ public partial class MainWindow : Window
                 if (decisionWindow.ShowDialog() != true || decisionWindow.Decision == ExitShiftDecision.Cancel) return;
                 if (decisionWindow.Decision is ExitShiftDecision.CloseShiftAndExit or ExitShiftDecision.CloseShiftAndSignOut)
                 {
-                    var closed = await CloseShiftFromDialogAsync();
+                    var closed = await CloseShiftFromDialogAsync(existingAuthorization: _modulePermissionLease);
                     if (!closed)
                     {
                         MessageBox.Show(StatusText.Text, "No se pudo cerrar el turno", MessageBoxButton.OK, MessageBoxImage.Warning);

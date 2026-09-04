@@ -41,7 +41,47 @@ public sealed class CashRegisterIntegrationTests
             Assert.NotNull(grant);
             Assert.DoesNotContain("ConfigureStore", await database.Permissions.Where(item => item.UserId == cashier.Id).Select(item => item.Code).ToListAsync());
             Assert.NotNull(await new CutSettingsService(database).GetAsync(token, CancellationToken.None));
-            Assert.NotNull(await new CashRegisterService(database).CloseAsync(token, new CloseShiftCommand(250m), CancellationToken.None));
+            Assert.Null(await new CashRegisterService(database).CloseAsync(token, new CloseShiftCommand(250m), CancellationToken.None));
+            Assert.True(await database.Shifts.AnyAsync(item => item.RegisterId == register.Id && item.Status == "Open"));
+            Assert.NotNull(await new CashRegisterService(database).CloseAsync(token, new CloseShiftCommand(250m, grant!.GrantId), CancellationToken.None));
+            Assert.False(await database.Shifts.AnyAsync(item => item.RegisterId == register.Id && item.Status == "Open"));
+            Assert.False(await database.Permissions.IgnoreQueryFilters().AnyAsync(item => item.Id == grant!.GrantId));
+
+            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(register.Id, 100m), CancellationToken.None));
+            var expiredGrant = new PermissionRecord
+            {
+                Id = Guid.NewGuid(),
+                UserId = cashier.Id,
+                Code = "CloseShift",
+                GrantedByUserId = administrator.Id,
+                ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1)
+            };
+            database.Permissions.Add(expiredGrant);
+            await database.SaveChangesAsync();
+
+            Assert.Null(await new CashRegisterService(database).CloseAsync(token, new CloseShiftCommand(100m, expiredGrant.Id), CancellationToken.None));
+            Assert.True(await database.Shifts.AnyAsync(item => item.RegisterId == register.Id && item.Status == "Open"));
+
+            database.Permissions.Remove(expiredGrant);
+            var unrelatedGrant = new PermissionRecord
+            {
+                Id = Guid.NewGuid(),
+                UserId = cashier.Id,
+                Code = "ConfigureStore",
+                GrantedByUserId = administrator.Id,
+                ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10)
+            };
+            database.Permissions.Add(unrelatedGrant);
+            await database.SaveChangesAsync();
+
+            Assert.Null(await new CashRegisterService(database).CloseAsync(token, new CloseShiftCommand(100m, unrelatedGrant.Id), CancellationToken.None));
+            Assert.True(await database.Shifts.AnyAsync(item => item.RegisterId == register.Id && item.Status == "Open"));
+
+            database.Permissions.Remove(unrelatedGrant);
+            database.Permissions.Add(new PermissionRecord { Id = Guid.NewGuid(), UserId = cashier.Id, Code = "CloseShift" });
+            await database.SaveChangesAsync();
+
+            Assert.NotNull(await new CashRegisterService(database).CloseAsync(token, new CloseShiftCommand(100m), CancellationToken.None));
             Assert.False(await database.Shifts.AnyAsync(item => item.RegisterId == register.Id && item.Status == "Open"));
         }
         finally
