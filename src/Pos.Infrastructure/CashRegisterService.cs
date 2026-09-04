@@ -59,6 +59,7 @@ public sealed class CashRegisterService(PosDbContext database)
 
     public async Task<ShiftSummary?> AddMovementAsync(string token, CashMovementCommand command, CancellationToken cancellationToken)
     {
+        if (!await HasPermissionAsync(token, "RecordCashMovements", cancellationToken)) return null;
         var shift = await GetOpenShiftAsync(token, cancellationToken);
         if (shift is null) return null;
         if (command.Type is not ("In" or "Out") || command.Amount <= 0m || string.IsNullOrWhiteSpace(command.Reason)) throw new ArgumentException("El movimiento requiere tipo, importe positivo y concepto.");
@@ -69,6 +70,7 @@ public sealed class CashRegisterService(PosDbContext database)
 
     public async Task<ShiftSummary?> CloseAsync(string token, CloseShiftCommand command, CancellationToken cancellationToken)
     {
+        if (!await HasPermissionAsync(token, "CloseShift", cancellationToken)) return null;
         var shift = await GetOpenShiftAsync(token, cancellationToken);
         if (shift is null) return null;
         if (command.CountedCash < 0m) throw new ArgumentException("El efectivo contado no puede ser negativo.");
@@ -101,6 +103,15 @@ public sealed class CashRegisterService(PosDbContext database)
         if (session is null) return null;
         var user = await database.Users.AsNoTracking().SingleOrDefaultAsync(item => item.Id == session.UserId && item.IsActive, cancellationToken);
         return user is { IsAdministrator: true } || user is not null && await database.Permissions.AnyAsync(item => item.UserId == user.Id && (item.Code == "CloseShift" || item.Code == "ViewPreviousShifts"), cancellationToken) ? user : null;
+    }
+
+    private async Task<bool> HasPermissionAsync(string token, string permission, CancellationToken cancellationToken)
+    {
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty)));
+        var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
+        if (session is null) return false;
+        var user = await database.Users.AsNoTracking().SingleOrDefaultAsync(item => item.Id == session.UserId && item.IsActive, cancellationToken);
+        return user is { IsAdministrator: true } || user is not null && await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == permission, cancellationToken);
     }
 
     private async Task<CashCutSummary> AggregateCutAsync(IReadOnlyCollection<ShiftRecord> shifts, CancellationToken cancellationToken)
