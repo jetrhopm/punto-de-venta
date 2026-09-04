@@ -11,13 +11,13 @@ public sealed class CutSettingsService(PosDbContext database)
 {
     public async Task<CutSettingsResult?> GetAsync(string token, CancellationToken cancellationToken)
     {
-        if (!await AuthorizedAsync(token, cancellationToken)) return null;
+        if (!await AuthorizedAsync(token, cancellationToken, "CloseShift", "ConfigureStore")) return null;
         return ToResult(await database.Stores.AsNoTracking().OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken));
     }
 
     public async Task<CutSettingsResult?> UpdateAsync(string token, SetCutSettingsCommand command, CancellationToken cancellationToken)
     {
-        if (!await AuthorizedAsync(token, cancellationToken)) return null;
+        if (!await AuthorizedAsync(token, cancellationToken, "ConfigureStore")) return null;
         if (command.CashLimit < 0m || command.CashLimit > 9_999_999m) throw new ArgumentException("El límite de efectivo debe ser un importe válido.");
         if (command.CashLimitEnabled && command.CashLimit <= 0m) throw new ArgumentException("Indica un límite de efectivo mayor a cero.");
         if (command.CashLimitMessage?.Trim().Length is > 300) throw new ArgumentException("El mensaje admite hasta 300 caracteres.");
@@ -32,12 +32,14 @@ public sealed class CutSettingsService(PosDbContext database)
     }
 
     private static CutSettingsResult ToResult(StoreRecord store) => new(store.RequireCashCountOnClose, store.AutoAdjustCashDifference, store.CashLimitEnabled, store.CashLimit, store.CashLimitMessage);
-    private async Task<bool> AuthorizedAsync(string token, CancellationToken cancellationToken)
+    private async Task<bool> AuthorizedAsync(string token, CancellationToken cancellationToken, params string[] permissions)
     {
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty)));
         var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
         if (session is null) return false;
         var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
-        return user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "ConfigureStore", cancellationToken);
+        return user.IsAdministrator || await database.Permissions.AnyAsync(
+            item => item.UserId == user.Id && permissions.Contains(item.Code),
+            cancellationToken);
     }
 }

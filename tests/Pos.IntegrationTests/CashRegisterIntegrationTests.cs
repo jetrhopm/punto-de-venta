@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 using Pos.Infrastructure;
 using System.Security.Cryptography;
 using System.Text;
@@ -7,6 +8,54 @@ namespace Pos.IntegrationTests;
 
 public sealed class CashRegisterIntegrationTests
 {
+    [Fact]
+    public async Task CashierCanReadCutSettingsAndCloseWithTemporaryCloseShiftPermission()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var hasher = new PasswordHasher<UserRecord>();
+        var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda autorización " + suffix, BusinessType = "Pruebas", RequireCashCountOnClose = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var administrator = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = ("ADMIN_CUT_" + suffix).ToUpperInvariant(), DisplayName = "Administrador de corte", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        administrator.PasswordHash = hasher.HashPassword(administrator, "clave-admin");
+        var cashier = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = ("CASHIER_CUT_" + suffix).ToUpperInvariant(), DisplayName = "Cajero sin corte", IsAdministrator = false, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        cashier.PasswordHash = hasher.HashPassword(cashier, "clave-cajero");
+        var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja autorización " + suffix, IsActive = true };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = cashier.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        database.AddRange(store, administrator, cashier, register, session);
+        await database.SaveChangesAsync();
+
+        try
+        {
+            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(register.Id, 250m), CancellationToken.None));
+            Assert.Null(await new CutSettingsService(database).GetAsync(token, CancellationToken.None));
+            Assert.Null(await new CashRegisterService(database).CloseAsync(token, new CloseShiftCommand(250m), CancellationToken.None));
+
+            var grant = await new AuthenticationService(database, hasher).GrantTemporaryPermissionAsync(
+                token,
+                new TemporaryPermissionAuthorizationCommand(administrator.NormalizedUserName, "clave-admin", "CloseShift"),
+                CancellationToken.None);
+
+            Assert.NotNull(grant);
+            Assert.DoesNotContain("ConfigureStore", await database.Permissions.Where(item => item.UserId == cashier.Id).Select(item => item.Code).ToListAsync());
+            Assert.NotNull(await new CutSettingsService(database).GetAsync(token, CancellationToken.None));
+            Assert.NotNull(await new CashRegisterService(database).CloseAsync(token, new CloseShiftCommand(250m), CancellationToken.None));
+            Assert.False(await database.Shifts.AnyAsync(item => item.RegisterId == register.Id && item.Status == "Open"));
+        }
+        finally
+        {
+            database.Permissions.RemoveRange(database.Permissions.IgnoreQueryFilters().Where(item => item.UserId == cashier.Id || item.UserId == administrator.Id));
+            database.Shifts.RemoveRange(database.Shifts.Where(item => item.RegisterId == register.Id));
+            database.Sessions.RemoveRange(database.Sessions.Where(item => item.UserId == cashier.Id || item.UserId == administrator.Id));
+            database.Registers.Remove(register);
+            database.Users.RemoveRange(administrator, cashier);
+            database.Stores.Remove(store);
+            await database.SaveChangesAsync();
+        }
+    }
+
     [Fact]
     public async Task ClosesConsecutiveShiftsAndCountsOnlyCashPayments()
     {
