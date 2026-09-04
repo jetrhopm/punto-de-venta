@@ -31,6 +31,14 @@
             <Setter Property="Padding" Value="5"/>
             <Setter Property="FontSize" Value="11"/>
         </Style>
+        <Style x:Key="SalesQuickActionButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Height" Value="76"/>
+            <Setter Property="Margin" Value="4,0"/>
+            <Setter Property="Padding" Value="7,6"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
         <Style x:Key="IconOnlyButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Width" Value="38"/>
             <Setter Property="Height" Value="38"/>
@@ -171,10 +179,25 @@
                     <StackPanel Grid.Row="2" Margin="0,18,0,0">
                         <TextBlock x:Name="CurrentCustomerText" Text="Cliente actual: público en general" FontWeight="SemiBold" Margin="3,0,0,5"/>
                         <Button Style="{StaticResource SuccessButtonStyle}" Height="72" Margin="3,15,3,4" Click="OnChargeClick"><StackPanel><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><icons:PackIconMaterial Kind="CashRegister" Width="24" Height="24" Margin="0,0,8,0"/><TextBlock Text="COBRAR" FontSize="18" FontWeight="Bold"/></StackPanel><TextBlock Text="F12" FontSize="12" HorizontalAlignment="Center" Margin="0,2,0,0"/></StackPanel></Button>
-                            <UniformGrid Columns="3">
-                                <Button Click="OnTicketHistoryClick"><StackPanel><icons:PackIconMaterial Kind="ReceiptTextOutline" Width="21" Height="21" HorizontalAlignment="Center"/><TextBlock Text="Historial de tickets" FontSize="11" TextAlignment="Center"/></StackPanel></Button>
-                                <Button Click="OnPrintLastTicketClick"><StackPanel><icons:PackIconMaterial Kind="PrinterOutline" Width="21" Height="21" HorizontalAlignment="Center"/><TextBlock Text="Último ticket" FontSize="11" TextAlignment="Center"/></StackPanel></Button>
-                                <Button x:Name="OpenCashDrawerButton" Click="OnOpenCashDrawerClick" ToolTip="Abrir el cajón sin registrar un movimiento"><StackPanel><icons:PackIconMaterial Kind="LockOpenOutline" Width="21" Height="21" HorizontalAlignment="Center" Foreground="{StaticResource WarningBrush}"/><TextBlock Text="Abrir cajón" FontSize="11" TextAlignment="Center"/></StackPanel></Button>
+                            <UniformGrid Columns="3" Margin="0,4">
+                                <Button Style="{StaticResource SalesQuickActionButton}" Background="#EAF4FB" BorderBrush="#BBD8EA" Foreground="{StaticResource PrimaryBrush}" Click="OnTicketHistoryClick" ToolTip="Consultar e imprimir tickets anteriores">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <icons:PackIconMaterial Kind="ReceiptTextOutline" Width="26" Height="26" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Historial de tickets" Margin="0,6,0,0" TextAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource SalesQuickActionButton}" Background="#F2EEFA" BorderBrush="#D5C7E8" Foreground="#705092" Click="OnPrintLastTicketClick" ToolTip="Imprimir el último ticket confirmado">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <icons:PackIconMaterial Kind="PrinterOutline" Width="26" Height="26" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Último ticket" Margin="0,6,0,0" TextAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="OpenCashDrawerButton" Style="{StaticResource SalesQuickActionButton}" Background="#FFF6E8" BorderBrush="#E8D2A8" Foreground="#9A661F" Click="OnOpenCashDrawerClick" ToolTip="Abrir el cajón sin registrar un movimiento">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <icons:PackIconMaterial Kind="LockOpenOutline" Width="26" Height="26" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Abrir cajón" Margin="0,6,0,0" TextAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
                             </UniformGrid>
                             <Button Style="{StaticResource DangerButtonStyle}" Background="{StaticResource DangerBrush}" Foreground="White" BorderBrush="{StaticResource DangerBrush}" Height="72" Margin="3,8,3,0" Click="OnCloseShiftClick" ToolTip="Cerrar el turno y realizar el corte de caja">
                                 <StackPanel>
