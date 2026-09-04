@@ -3,10 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
         Title="Usuarios y permisos"
-        Width="1080"
-        Height="760"
-        MinWidth="900"
-        MinHeight="620"
+        Width="1240"
+        Height="860"
+        MinWidth="1050"
+        MinHeight="700"
         WindowStartupLocation="CenterOwner"
         PreviewKeyDown="OnPreviewKeyDown">
     <Grid Margin="22">
@@ -47,7 +47,7 @@
                     </Button>
                 </DockPanel>
 
-                <DataGrid Grid.Row="1" x:Name="UsersGrid" Margin="0,14,0,12" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" SelectionChanged="OnUserSelected">
+                <DataGrid Grid.Row="1" x:Name="UsersGrid" Margin="0,14,0,12" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" SelectionChanged="OnUserSelected" MouseDoubleClick="OnUserDoubleClick">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Usuario" Binding="{Binding UserName}" Width="1.1*"/>
                         <DataGridTextColumn Header="Nombre" Binding="{Binding DisplayName}" Width="1.7*"/>

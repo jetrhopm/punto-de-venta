@@ -99,6 +99,18 @@ public partial class UserAdministrationWindow : Window
         if (user is not null) ListStatusText.Text = $"Seleccionado: {user.DisplayName}.";
     }
 
+    private void OnUserDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (UsersGrid.SelectedItem is not UserRow user) return;
+        if (!CanModify(user))
+        {
+            ListStatusText.Text = "Solo un administrador puede modificar a otro administrador.";
+            return;
+        }
+        ShowEditEditor(user);
+        e.Handled = true;
+    }
+
     private void SetListActions(UserRow? user)
     {
         var canModify = user is not null && (SessionContext.IsAdministrator || !user.IsAdministrator);
