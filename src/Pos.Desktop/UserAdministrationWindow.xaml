@@ -3,9 +3,12 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
         Title="Usuarios y permisos"
-        Width="1100"
+        Width="1080"
         Height="760"
-        WindowStartupLocation="CenterOwner">
+        MinWidth="900"
+        MinHeight="620"
+        WindowStartupLocation="CenterOwner"
+        PreviewKeyDown="OnPreviewKeyDown">
     <Grid Margin="22">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -18,112 +21,118 @@
             </Border>
             <StackPanel Margin="12,1,0,0">
                 <TextBlock Text="Usuarios y permisos" FontSize="22" FontWeight="Bold"/>
-                <TextBlock Text="Define los accesos de cada cajero sin otorgar funciones adicionales." Foreground="{StaticResource TextMutedBrush}" Margin="0,3,0,0"/>
+                <TextBlock Text="Controla quién puede operar cada función de la tienda." Foreground="{StaticResource TextMutedBrush}" Margin="0,3,0,0"/>
             </StackPanel>
         </StackPanel>
 
         <Grid Grid.Row="1" Margin="0,20,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1.05*"/>
-                <ColumnDefinition Width="1.45*"/>
-            </Grid.ColumnDefinitions>
-
-            <Grid Margin="0,0,14,0">
+            <Grid x:Name="ListPanel">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <TextBlock Text="Cuentas registradas" FontSize="17" FontWeight="SemiBold"/>
-                <DataGrid Grid.Row="1" x:Name="UsersGrid" Margin="0,10,0,10" AutoGenerateColumns="False" IsReadOnly="True" SelectionChanged="OnUserSelected">
+
+                <DockPanel>
+                    <StackPanel>
+                        <TextBlock Text="Usuarios registrados" FontSize="18" FontWeight="SemiBold"/>
+                        <TextBlock Text="Selecciona una cuenta para editarla, activarla o desactivarla." Foreground="{StaticResource TextMutedBrush}" Margin="0,3,0,0"/>
+                    </StackPanel>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource PrimaryButtonStyle}" Click="OnCreateClick" MinWidth="174">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <icons:PackIconMaterial Kind="AccountPlusOutline" Width="19" Height="19" Margin="0,0,7,0"/>
+                            <TextBlock Text="Crear usuario"/>
+                        </StackPanel>
+                    </Button>
+                </DockPanel>
+
+                <DataGrid Grid.Row="1" x:Name="UsersGrid" Margin="0,14,0,12" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" SelectionChanged="OnUserSelected">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Usuario" Binding="{Binding UserName}" Width="*"/>
-                        <DataGridTextColumn Header="Nombre" Binding="{Binding DisplayName}" Width="1.5*"/>
-                        <DataGridCheckBoxColumn Header="Admin" Binding="{Binding IsAdministrator}"/>
-                        <DataGridCheckBoxColumn Header="Activo" Binding="{Binding IsActive}"/>
+                        <DataGridTextColumn Header="Usuario" Binding="{Binding UserName}" Width="1.1*"/>
+                        <DataGridTextColumn Header="Nombre" Binding="{Binding DisplayName}" Width="1.7*"/>
+                        <DataGridTextColumn Header="Rol" Binding="{Binding Role}" Width="130"/>
+                        <DataGridTextColumn Header="Estado" Binding="{Binding State}" Width="110"/>
                     </DataGrid.Columns>
                 </DataGrid>
-                <Button Grid.Row="2" x:Name="StatusButton" Click="OnToggleStatusClick">
-                    <StackPanel Orientation="Horizontal">
-                        <icons:PackIconMaterial Kind="AccountCheckOutline" Width="19" Height="19" Margin="0,0,7,0"/>
-                        <TextBlock Text="Activar o desactivar seleccionado"/>
-                    </StackPanel>
-                </Button>
+
+                <StackPanel Grid.Row="2" Orientation="Horizontal">
+                    <Button x:Name="EditButton" Click="OnEditClick" MinWidth="185" Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <icons:PackIconMaterial Kind="PencilOutline" Width="19" Height="19" Margin="0,0,7,0"/>
+                            <TextBlock Text="Editar seleccionado"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="StatusButton" Click="OnToggleStatusClick" MinWidth="250">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <icons:PackIconMaterial Kind="AccountCheckOutline" Width="19" Height="19" Margin="0,0,7,0"/>
+                            <TextBlock x:Name="StatusButtonText" Text="Activar o desactivar seleccionado"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+                <Border Grid.Row="3" Background="{StaticResource SurfaceMutedBrush}" CornerRadius="4" Padding="10,7" Margin="0,12,0,0">
+                    <TextBlock x:Name="ListStatusText" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                </Border>
             </Grid>
 
-            <Border Grid.Column="1" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="6" Padding="18">
+            <Border x:Name="EditorPanel" Visibility="Collapsed" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="6" Padding="20">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <StackPanel Orientation="Horizontal">
-                            <icons:PackIconMaterial Kind="AccountPlusOutline" Width="22" Height="22" Foreground="{StaticResource PrimaryBrush}" Margin="0,0,8,0"/>
-                            <TextBlock Text="Crear usuario" FontSize="18" FontWeight="SemiBold"/>
-                        </StackPanel>
-                        <UniformGrid Columns="2" Margin="0,12,0,0">
-                            <StackPanel Margin="0,0,8,0">
+                        <DockPanel>
+                            <StackPanel>
+                                <TextBlock x:Name="EditorTitleText" Text="Crear usuario" FontSize="20" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="EditorDescriptionText" Text="Completa los datos y define los permisos de la cuenta." Foreground="{StaticResource TextMutedBrush}" Margin="0,3,0,0"/>
+                            </StackPanel>
+                            <Button DockPanel.Dock="Right" Click="OnCancelEditorClick" MinWidth="120">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <icons:PackIconMaterial Kind="ArrowLeft" Width="18" Height="18" Margin="0,0,6,0"/>
+                                    <TextBlock Text="Volver"/>
+                                </StackPanel>
+                            </Button>
+                        </DockPanel>
+
+                        <UniformGrid Columns="2" Margin="0,18,0,0">
+                            <StackPanel Margin="0,0,10,0">
                                 <TextBlock Text="Usuario" FontWeight="SemiBold"/>
                                 <TextBox x:Name="NewUserBox" Margin="0,5,0,0"/>
                             </StackPanel>
-                            <StackPanel Margin="8,0,0,0">
-                                <TextBlock Text="Nombre" FontWeight="SemiBold"/>
+                            <StackPanel Margin="10,0,0,0">
+                                <TextBlock Text="Nombre para mostrar" FontWeight="SemiBold"/>
                                 <TextBox x:Name="NewNameBox" Margin="0,5,0,0"/>
                             </StackPanel>
                         </UniformGrid>
-                        <TextBlock Text="Contraseña" FontWeight="SemiBold" Margin="0,12,0,5"/>
+
+                        <TextBlock x:Name="PasswordLabelText" Text="Contraseña" FontWeight="SemiBold" Margin="0,14,0,5"/>
                         <PasswordBox x:Name="NewPasswordBox"/>
-                        <CheckBox x:Name="NewAdminBox" Content="Crear como administrador" Margin="0,11"/>
-                        <Button Style="{StaticResource PrimaryButtonStyle}" Click="OnCreateClick">
-                            <StackPanel Orientation="Horizontal">
-                                <icons:PackIconMaterial Kind="AccountPlusOutline" Width="19" Height="19" Margin="0,0,7,0"/>
-                                <TextBlock Text="Crear usuario"/>
-                            </StackPanel>
-                        </Button>
+                        <TextBlock x:Name="PasswordHintText" Text="La contraseña es obligatoria para crear la cuenta." FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,4,0,0"/>
 
-                        <Separator Margin="0,18"/>
-                        <StackPanel Orientation="Horizontal">
-                            <icons:PackIconMaterial Kind="ShieldAccountOutline" Width="22" Height="22" Foreground="#76538D" Margin="0,0,8,0"/>
-                            <TextBlock Text="Permisos del usuario seleccionado" FontSize="18" FontWeight="SemiBold"/>
-                        </StackPanel>
-                        <Border Background="{StaticResource SurfaceMutedBrush}" CornerRadius="4" Padding="9" Margin="0,9,0,0">
-                            <TextBlock Text="Marca únicamente las acciones que el usuario necesita. Los administradores tienen acceso completo y sus permisos no se pueden limitar aquí." Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                        <CheckBox x:Name="NewAdminBox" Content="Crear como administrador" Margin="0,14,0,0" Checked="OnAdministratorChanged" Unchecked="OnAdministratorChanged"/>
+                        <Border Background="{StaticResource SurfaceMutedBrush}" CornerRadius="4" Padding="10,8" Margin="0,10,0,0">
+                            <TextBlock x:Name="PermissionHintText" TextWrapping="Wrap" Foreground="{StaticResource TextMutedBrush}"/>
                         </Border>
-                        <TabControl Margin="0,10,0,0" Height="245">
-                            <TabItem Header="Ventas">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto"><WrapPanel x:Name="SalesPermissionsPanel" Margin="10"/></ScrollViewer>
-                            </TabItem>
-                            <TabItem Header="Clientes">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto"><WrapPanel x:Name="CustomerPermissionsPanel" Margin="10"/></ScrollViewer>
-                            </TabItem>
-                            <TabItem Header="Productos">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto"><WrapPanel x:Name="ProductPermissionsPanel" Margin="10"/></ScrollViewer>
-                            </TabItem>
-                            <TabItem Header="Inventario">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto"><WrapPanel x:Name="InventoryPermissionsPanel" Margin="10"/></ScrollViewer>
-                            </TabItem>
-                            <TabItem Header="Otros">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto"><WrapPanel x:Name="OtherPermissionsPanel" Margin="10"/></ScrollViewer>
-                            </TabItem>
-                        </TabControl>
-                        <Button Margin="3,8,3,3" Click="OnSavePermissionsClick">
-                            <StackPanel Orientation="Horizontal">
-                                <icons:PackIconMaterial Kind="ShieldCheckOutline" Width="19" Height="19" Margin="0,0,7,0"/>
-                                <TextBlock Text="Guardar permisos"/>
-                            </StackPanel>
-                        </Button>
 
-                        <Separator Margin="0,18"/>
-                        <StackPanel Orientation="Horizontal">
-                            <icons:PackIconMaterial Kind="LockReset" Width="21" Height="21" Foreground="{StaticResource WarningBrush}" Margin="0,0,8,0"/>
-                            <TextBlock Text="Restablecer contraseña" FontWeight="SemiBold"/>
+                        <TextBlock Text="Permisos" FontSize="17" FontWeight="SemiBold" Margin="0,18,0,0"/>
+                        <TabControl Margin="0,9,0,0" MinHeight="240">
+                            <TabItem Header="Ventas"><ScrollViewer VerticalScrollBarVisibility="Auto"><WrapPanel x:Name="SalesPermissionsPanel" Margin="12"/></ScrollViewer></TabItem>
+                            <TabItem Header="Clientes"><ScrollViewer VerticalScrollBarVisibility="Auto"><WrapPanel x:Name="CustomerPermissionsPanel" Margin="12"/></ScrollViewer></TabItem>
+                            <TabItem Header="Productos"><ScrollViewer VerticalScrollBarVisibility="Auto"><WrapPanel x:Name="ProductPermissionsPanel" Margin="12"/></ScrollViewer></TabItem>
+                            <TabItem Header="Inventario"><ScrollViewer VerticalScrollBarVisibility="Auto"><WrapPanel x:Name="InventoryPermissionsPanel" Margin="12"/></ScrollViewer></TabItem>
+                            <TabItem Header="Otros"><ScrollViewer VerticalScrollBarVisibility="Auto"><WrapPanel x:Name="OtherPermissionsPanel" Margin="12"/></ScrollViewer></TabItem>
+                        </TabControl>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                            <Button Click="OnCancelEditorClick" MinWidth="135" Margin="0,0,8,0">
+                                <TextBlock Text="Cancelar (Esc)"/>
+                            </Button>
+                            <Button x:Name="SaveButton" Style="{StaticResource PrimaryButtonStyle}" Click="OnSaveClick" IsDefault="True" MinWidth="165">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <icons:PackIconMaterial Kind="ContentSaveOutline" Width="19" Height="19" Margin="0,0,7,0"/>
+                                    <TextBlock Text="Guardar (Enter)"/>
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
-                        <PasswordBox x:Name="ResetPasswordBox" Margin="0,8,0,5"/>
-                        <Button Click="OnResetPasswordClick">
-                            <StackPanel Orientation="Horizontal">
-                                <icons:PackIconMaterial Kind="LockReset" Width="19" Height="19" Margin="0,0,7,0"/>
-                                <TextBlock Text="Cambiar contraseña"/>
-                            </StackPanel>
-                        </Button>
                         <Border Background="{StaticResource SurfaceMutedBrush}" CornerRadius="4" Padding="10,7" Margin="0,12,0,0">
-                            <TextBlock x:Name="StatusText" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="EditorStatusText" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
                         </Border>
                     </StackPanel>
                 </ScrollViewer>

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se prepara la versión 2.2.7: se rediseña la administración de usuarios, se agregan creación y edición separadas, y el nuevo cajero recibe permisos operativos seguros por defecto.
 - Se publica la versión 2.2.6: al abrir varios tickets se conservan hasta que el cajero los descarte explícitamente; antes de crear el siguiente ticket se guarda el actual.
 - Se publica la versión 2.2.5: se corrige el descarte de tickets para eliminar siempre el ticket seleccionado y conservar los demás tickets en atención.
 - Se publica la versión 2.2.4: se corrige el icono de Inicio automático en Configuración y en su ventana de detalle para evitar que el módulo falle al abrirse.

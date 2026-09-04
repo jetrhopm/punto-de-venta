@@ -329,6 +329,13 @@ app.MapPost("/api/users", async (HttpRequest request, UserCommand command, UserA
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["user"] = [exception.Message] }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
+app.MapPut("/api/users/{userId:guid}", async (Guid userId, HttpRequest request, UpdateUserCommand command, UserAdministrationService users, CancellationToken cancellationToken) =>
+{
+    try { var result = await users.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), userId, command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["user"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
 app.MapPut("/api/users/{userId:guid}/status", async (Guid userId, HttpRequest request, UserStatusCommand command, UserAdministrationService users, CancellationToken cancellationToken) =>
 {
     try { var result = await users.SetStatusAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), userId, command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }

@@ -6,6 +6,7 @@ using System.Text;
 namespace Pos.Infrastructure;
 
 public sealed record UserCommand(string UserName, string Password, string DisplayName, bool IsAdministrator);
+public sealed record UpdateUserCommand(string UserName, string DisplayName, bool IsAdministrator, string? Password);
 public sealed record UserStatusCommand(bool IsActive);
 public sealed record UserPermissionsCommand(IReadOnlyList<string> Permissions);
 public sealed record UserPasswordCommand(string Password);
@@ -13,6 +14,22 @@ public sealed record UserResult(Guid Id, string UserName, string DisplayName, bo
 
 public sealed class UserAdministrationService(PosDbContext database, PasswordHasher<UserRecord> passwordHasher)
 {
+    private static readonly string[] DefaultCashierPermissions =
+    [
+        nameof(Pos.Domain.Permission.Sell),
+        nameof(Pos.Domain.Permission.UseCommonProduct),
+        nameof(Pos.Domain.Permission.ViewProducts),
+        nameof(Pos.Domain.Permission.CancelSaleLines),
+        nameof(Pos.Domain.Permission.ReprintTickets),
+        nameof(Pos.Domain.Permission.OpenCashDrawer),
+        nameof(Pos.Domain.Permission.RecordCashMovements),
+        nameof(Pos.Domain.Permission.ViewSalesHistory),
+        nameof(Pos.Domain.Permission.OpenShift),
+        nameof(Pos.Domain.Permission.CloseShift)
+    ];
+
+    private static readonly string[] AllPermissions = Enum.GetNames<Pos.Domain.Permission>();
+
     public async Task<IReadOnlyList<UserResult>?> ListAsync(string token, CancellationToken cancellationToken)
     {
         if (await AuthorizedUserAsync(token, cancellationToken) is null) return null;
@@ -32,8 +49,38 @@ public sealed class UserAdministrationService(PosDbContext database, PasswordHas
         var user = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = normalized, DisplayName = command.DisplayName.Trim(), IsAdministrator = command.IsAdministrator, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
         user.PasswordHash = passwordHasher.HashPassword(user, command.Password);
         database.Users.Add(user);
+        var permissions = command.IsAdministrator ? AllPermissions : DefaultCashierPermissions;
+        database.Permissions.AddRange(permissions.Select(code => new PermissionRecord { Id = Guid.NewGuid(), UserId = user.Id, Code = code }));
         await database.SaveChangesAsync(cancellationToken);
-        return ToResult(user, []);
+        return ToResult(user, permissions);
+    }
+
+    public async Task<UserResult?> UpdateAsync(string token, Guid userId, UpdateUserCommand command, CancellationToken cancellationToken)
+    {
+        var caller = await AuthorizedUserAsync(token, cancellationToken);
+        if (caller is null) return null;
+        var user = await database.Users.SingleOrDefaultAsync(item => item.Id == userId, cancellationToken) ?? throw new KeyNotFoundException("Usuario no encontrado.");
+        EnsureCanModify(caller, user);
+        if (command.IsAdministrator && !caller.IsAdministrator) throw new InvalidOperationException("Solo un administrador puede crear o asignar administradores.");
+        Validate(command.UserName, command.DisplayName, command.Password, requirePassword: false);
+
+        var normalized = InitialSetupService.NormalizeUserName(command.UserName);
+        if (await database.Users.AnyAsync(item => item.Id != userId && item.NormalizedUserName == normalized, cancellationToken)) throw new InvalidOperationException("El usuario ya existe.");
+        if (!command.IsAdministrator && user.IsAdministrator && user.IsActive && await database.Users.CountAsync(item => item.IsAdministrator && item.IsActive, cancellationToken) <= 1) throw new InvalidOperationException("No se puede quitar el último administrador activo.");
+
+        var wasAdministrator = user.IsAdministrator;
+        user.NormalizedUserName = normalized;
+        user.DisplayName = command.DisplayName.Trim();
+        user.IsAdministrator = command.IsAdministrator;
+        if (!string.IsNullOrEmpty(command.Password)) user.PasswordHash = passwordHasher.HashPassword(user, command.Password);
+
+        if (command.IsAdministrator || wasAdministrator != command.IsAdministrator)
+        {
+            await ReplacePermissionsAsync(user.Id, command.IsAdministrator ? AllPermissions : DefaultCashierPermissions, cancellationToken);
+        }
+
+        await database.SaveChangesAsync(cancellationToken);
+        return await FindResultAsync(user, cancellationToken);
     }
 
     public async Task<UserResult?> SetStatusAsync(string token, Guid userId, UserStatusCommand command, CancellationToken cancellationToken)
@@ -69,11 +116,17 @@ public sealed class UserAdministrationService(PosDbContext database, PasswordHas
         var allowed = Enum.GetNames<Pos.Domain.Permission>().ToHashSet(StringComparer.Ordinal);
         var permissions = command.Permissions.Distinct(StringComparer.Ordinal).ToArray();
         if (permissions.Any(item => !allowed.Contains(item))) throw new ArgumentException("Se recibio un permiso no valido.");
-        var current = await database.Permissions.Where(item => item.UserId == userId).ToListAsync(cancellationToken);
-        database.Permissions.RemoveRange(current);
-        database.Permissions.AddRange(permissions.Select(code => new PermissionRecord { Id = Guid.NewGuid(), UserId = userId, Code = code }));
+        if (user.IsAdministrator) permissions = AllPermissions;
+        await ReplacePermissionsAsync(userId, permissions, cancellationToken);
         await database.SaveChangesAsync(cancellationToken);
         return ToResult(user, permissions);
+    }
+
+    private async Task ReplacePermissionsAsync(Guid userId, IEnumerable<string> permissions, CancellationToken cancellationToken)
+    {
+        var current = await database.Permissions.Where(item => item.UserId == userId).ToListAsync(cancellationToken);
+        database.Permissions.RemoveRange(current);
+        database.Permissions.AddRange(permissions.Distinct(StringComparer.Ordinal).Select(code => new PermissionRecord { Id = Guid.NewGuid(), UserId = userId, Code = code }));
     }
 
     private async Task<UserResult> FindResultAsync(UserRecord user, CancellationToken cancellationToken) => ToResult(user, await database.Permissions.AsNoTracking().Where(item => item.UserId == user.Id).Select(item => item.Code).ToArrayAsync(cancellationToken));
@@ -93,6 +146,12 @@ public sealed class UserAdministrationService(PosDbContext database, PasswordHas
     }
     private static void Validate(UserCommand command)
     {
-        if (string.IsNullOrWhiteSpace(command.UserName) || command.UserName.Trim().Length > 80 || string.IsNullOrEmpty(command.Password) || command.Password.Length > 256 || string.IsNullOrWhiteSpace(command.DisplayName) || command.DisplayName.Trim().Length > 160) throw new ArgumentException("Usuario, contrasena y nombre son obligatorios y deben tener una longitud valida.");
+        Validate(command.UserName, command.DisplayName, command.Password, requirePassword: true);
+    }
+
+    private static void Validate(string userName, string displayName, string? password, bool requirePassword)
+    {
+        if (string.IsNullOrWhiteSpace(userName) || userName.Trim().Length > 80 || string.IsNullOrWhiteSpace(displayName) || displayName.Trim().Length > 160 || (requirePassword && string.IsNullOrEmpty(password)) || password?.Length > 256)
+            throw new ArgumentException("Usuario, contrasena y nombre son obligatorios y deben tener una longitud valida.");
     }
 }
