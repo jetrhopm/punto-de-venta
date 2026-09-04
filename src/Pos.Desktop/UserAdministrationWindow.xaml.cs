@@ -48,7 +48,7 @@ public partial class UserAdministrationWindow : Window
     private static readonly HashSet<string> CashierPermissions = new(StringComparer.Ordinal)
     {
         "Sell", "UseCommonProduct", "ViewProducts", "CancelSaleLines", "ReprintTickets", "OpenCashDrawer",
-        "RecordCashMovements", "ViewSalesHistory", "OpenShift", "CloseShift"
+        "RecordCashMovements", "ViewSalesHistory", "OpenShift"
     };
 
     private readonly Dictionary<string, CheckBox> _permissionBoxes = new(StringComparer.Ordinal);

@@ -8,48 +8,44 @@ public partial class ConfigurationWindow : UserControl
     public ConfigurationWindow()
     {
         InitializeComponent();
-        StoreButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
-        FoliosButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
-        MeasureButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
-        CurrencyButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
-        PaymentMethodsButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
-        CutButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
-        OptionsButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
-        UsersButton.IsEnabled = SessionContext.IsAdministrator || SessionContext.HasPermission("ManageUsers");
-        PrinterButton.IsEnabled = SessionContext.HasPermission("ConfigurePrinters");
-        ScannerButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
-        TicketButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
-        CashDrawerButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
-        ScaleButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
-        SystemDetailsButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
-        DiagnosticButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
-        BackupButton.IsEnabled = SessionContext.HasPermission("ImportOrExportData");
-        ImportButton.IsEnabled = SessionContext.HasPermission("ImportOrExportData");
-        LicenseButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
-        AutomaticStartButton.IsEnabled = SessionContext.HasPermission("ConfigureStore");
-        StatusText.Text = "Las opciones deshabilitadas requieren un permiso del administrador.";
+        StatusText.Text = "Las acciones con acceso restringido solicitarán autorización temporal.";
     }
 
-    private void OnStoreClick(object sender, RoutedEventArgs e) => new StoreSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnFoliosClick(object sender, RoutedEventArgs e) => new SaleFolioSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnMeasureClick(object sender, RoutedEventArgs e) => new MeasureSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnCurrencyClick(object sender, RoutedEventArgs e) => new CurrencySettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnPaymentMethodsClick(object sender, RoutedEventArgs e) => new PaymentMethodSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnMercadoPagoClick(object sender, RoutedEventArgs e) => new MercadoPagoSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnCutClick(object sender, RoutedEventArgs e) => new CutSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnOptionsClick(object sender, RoutedEventArgs e) => new StoreOptionsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnUsersClick(object sender, RoutedEventArgs e) => new UserAdministrationWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnPrinterClick(object sender, RoutedEventArgs e) => new PrinterSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnScannerClick(object sender, RoutedEventArgs e) => new BarcodeScannerSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnTicketClick(object sender, RoutedEventArgs e) => new TicketSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnCashDrawerClick(object sender, RoutedEventArgs e) => new CashDrawerSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnScaleClick(object sender, RoutedEventArgs e) => new ScaleSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnSystemDetailsClick(object sender, RoutedEventArgs e) => new SystemDetailsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnDiagnosticClick(object sender, RoutedEventArgs e) => new DiagnosticWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnBackupClick(object sender, RoutedEventArgs e) => new BackupWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnImportClick(object sender, RoutedEventArgs e) => new ProductImportWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnLicenseClick(object sender, RoutedEventArgs e) => new LicenseWindow { Owner = Window.GetWindow(this) }.ShowDialog();
-    private void OnAutomaticStartClick(object sender, RoutedEventArgs e) => new AutomaticStartSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+    private async void OnStoreClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Modificar los datos de la tienda", () => new StoreSettingsWindow());
+    private async void OnFoliosClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Modificar los folios", () => new SaleFolioSettingsWindow());
+    private async void OnMeasureClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Modificar unidades de medida", () => new MeasureSettingsWindow());
+    private async void OnCurrencyClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Modificar el símbolo de moneda", () => new CurrencySettingsWindow());
+    private async void OnPaymentMethodsClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar formas de pago", () => new PaymentMethodSettingsWindow());
+    private async void OnMercadoPagoClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar Mercado Pago Point", () => new MercadoPagoSettingsWindow());
+    private async void OnCutClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar cortes de caja", () => new CutSettingsWindow());
+    private async void OnOptionsClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Modificar opciones habilitadas", () => new StoreOptionsWindow());
+    private async void OnUsersClick(object sender, RoutedEventArgs e) => await OpenAsync("ManageUsers", "Administrar cajeros y permisos", () => new UserAdministrationWindow());
+    private async void OnPrinterClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigurePrinters", "Configurar impresoras", () => new PrinterSettingsWindow());
+    private async void OnScannerClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar lector de códigos", () => new BarcodeScannerSettingsWindow());
+    private async void OnTicketClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar tickets", () => new TicketSettingsWindow());
+    private async void OnCashDrawerClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar cajón de dinero", () => new CashDrawerSettingsWindow());
+    private async void OnScaleClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar báscula", () => new ScaleSettingsWindow());
+    private async void OnSystemDetailsClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Consultar detalles del sistema", () => new SystemDetailsWindow());
+    private async void OnDiagnosticClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Abrir diagnóstico", () => new DiagnosticWindow());
+    private async void OnBackupClick(object sender, RoutedEventArgs e) => await OpenAsync("ImportOrExportData", "Administrar respaldos", () => new BackupWindow());
+    private async void OnImportClick(object sender, RoutedEventArgs e) => await OpenAsync("ImportOrExportData", "Importar productos", () => new ProductImportWindow());
+    private async void OnLicenseClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Administrar la licencia", () => new LicenseWindow());
+    private async void OnAutomaticStartClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar inicio automático", () => new AutomaticStartSettingsWindow());
+
+    private async Task OpenAsync(string permission, string action, Func<Window> createWindow)
+    {
+        var owner = Window.GetWindow(this);
+        if (owner is null) return;
+        await using var authorization = await PermissionAuthorization.RequestAsync(owner, permission, $"{action} requiere autorización.");
+        if (authorization is null)
+        {
+            StatusText.Text = $"No tienes permiso para {PermissionAuthorization.NameFor(permission).ToLowerInvariant()}.";
+            return;
+        }
+        var window = createWindow();
+        window.Owner = owner;
+        window.ShowDialog();
+    }
 
     private void OnPendingClick(object sender, RoutedEventArgs e)
     {

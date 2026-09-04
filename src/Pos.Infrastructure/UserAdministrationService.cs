@@ -24,8 +24,7 @@ public sealed class UserAdministrationService(PosDbContext database, PasswordHas
         nameof(Pos.Domain.Permission.OpenCashDrawer),
         nameof(Pos.Domain.Permission.RecordCashMovements),
         nameof(Pos.Domain.Permission.ViewSalesHistory),
-        nameof(Pos.Domain.Permission.OpenShift),
-        nameof(Pos.Domain.Permission.CloseShift)
+        nameof(Pos.Domain.Permission.OpenShift)
     ];
 
     private static readonly string[] AllPermissions = Enum.GetNames<Pos.Domain.Permission>();
@@ -124,7 +123,7 @@ public sealed class UserAdministrationService(PosDbContext database, PasswordHas
 
     private async Task ReplacePermissionsAsync(Guid userId, IEnumerable<string> permissions, CancellationToken cancellationToken)
     {
-        var current = await database.Permissions.Where(item => item.UserId == userId).ToListAsync(cancellationToken);
+        var current = await database.Permissions.IgnoreQueryFilters().Where(item => item.UserId == userId).ToListAsync(cancellationToken);
         database.Permissions.RemoveRange(current);
         database.Permissions.AddRange(permissions.Distinct(StringComparer.Ordinal).Select(code => new PermissionRecord { Id = Guid.NewGuid(), UserId = userId, Code = code }));
     }

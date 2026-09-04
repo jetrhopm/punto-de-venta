@@ -29,7 +29,7 @@ public partial class CashWindow : Window
         InitializeComponent();
         _total = decimal.Round(total, 2);
         CustomerId = selectedCustomerId;
-        CreditButton.IsEnabled = SessionContext.IsAdministrator || SessionContext.HasPermission("SellOnCredit");
+        CreditButton.IsEnabled = true;
         _controlsReady = true;
         TotalText.Text = $"Total: ${_total:0.00}";
         ItemsText.Text = $"Artículos: {totalItems:0.###}";
@@ -127,11 +127,8 @@ public partial class CashWindow : Window
             MessageText.Text = "El pago a crédito está desactivado en la configuración.";
             return;
         }
-        if (!SessionContext.IsAdministrator && !SessionContext.HasPermission("SellOnCredit"))
-        {
-            MessageText.Text = "No tienes permiso para cobrar a crédito.";
-            return;
-        }
+        if (!SessionContext.HasPermission("SellOnCredit"))
+            MessageText.Text = "Se solicitará autorización al confirmar el cobro a crédito.";
         if (CustomerId is null)
         {
             var customers = new CustomerWindow(true) { Owner = this };

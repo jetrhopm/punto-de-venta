@@ -79,7 +79,11 @@ public partial class SalesHistoryWindow : UserControl
 
     private async void OnCancelClick(object sender, RoutedEventArgs e)
     {
-        if (_selected is null || !SessionContext.HasPermission("CancelSales")) { MessageBox.Show("No tienes permiso para cancelar ventas o no has seleccionado una venta.", "Historial", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+        if (_selected is null) { MessageBox.Show("Selecciona una venta antes de cancelarla.", "Historial", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+        var owner = Window.GetWindow(this);
+        if (owner is null) return;
+        await using var authorization = await PermissionAuthorization.RequestAsync(owner, "CancelSales", "Cancelar una venta confirmada requiere autorización.");
+        if (authorization is null) return;
         var window = new CancelSaleWindow { Owner = Window.GetWindow(this) };
         if (window.ShowDialog() != true) return;
         try
@@ -91,16 +95,23 @@ public partial class SalesHistoryWindow : UserControl
         catch (Exception exception) { MessageBox.Show(exception.Message, "No se pudo cancelar", MessageBoxButton.OK, MessageBoxImage.Error); }
     }
 
-    private void OnReturnClick(object sender, RoutedEventArgs e)
+    private async void OnReturnClick(object sender, RoutedEventArgs e)
     {
-        if (_selected is null || !SessionContext.HasPermission("ProcessReturns")) { MessageBox.Show("No tienes permiso para procesar devoluciones o no has seleccionado una venta.", "Historial", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-        new ReturnSaleWindow(_selected.SaleId) { Owner = Window.GetWindow(this) }.ShowDialog();
+        if (_selected is null) { MessageBox.Show("Selecciona una venta antes de procesar la devolución.", "Historial", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+        var owner = Window.GetWindow(this);
+        if (owner is null) return;
+        await using var authorization = await PermissionAuthorization.RequestAsync(owner, "ProcessReturns", "Procesar una devolución requiere autorización.");
+        if (authorization is null) return;
+        new ReturnSaleWindow(_selected.SaleId) { Owner = owner }.ShowDialog();
     }
 
     private async void OnPrintClick(object sender, RoutedEventArgs e)
     {
         if (_selected is null) return;
-        if (!SessionContext.HasPermission("ReprintTickets")) { MessageBox.Show("No tienes permiso para reimprimir tickets.", "Permiso requerido", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+        var owner = Window.GetWindow(this);
+        if (owner is null) return;
+        await using var authorization = await PermissionAuthorization.RequestAsync(owner, "ReprintTickets", "Reimprimir un ticket requiere autorización.");
+        if (authorization is null) return;
         try
         {
             using var response = await Client.GetAsync($"/api/sales/{_selected.SaleId}/ticket.pdf");

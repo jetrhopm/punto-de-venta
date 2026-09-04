@@ -769,6 +769,17 @@ app.MapPost("/api/auth/login", async (LoginCommand command, AuthenticationServic
     var result = await authentication.LoginAsync(command, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
+app.MapPost("/api/auth/temporary-permission", async (HttpRequest request, TemporaryPermissionAuthorizationCommand command, AuthenticationService authentication, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    var result = await authentication.GrantTemporaryPermissionAsync(token, command, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapDelete("/api/auth/temporary-permission/{grantId:guid}", async (Guid grantId, HttpRequest request, AuthenticationService authentication, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    return await authentication.RevokeTemporaryPermissionAsync(token, grantId, cancellationToken) ? Results.NoContent() : Results.NotFound();
+});
 app.MapGet("/api/auth/active-users", async (PosDbContext database, CancellationToken cancellationToken) =>
 {
     var users = await database.Users.AsNoTracking()

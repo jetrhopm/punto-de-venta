@@ -1,6 +1,8 @@
 # Changelog
 
 ## Sin liberar
+- Se prepara la versión 2.2.8: los permisos denegados pueden autorizarse de forma temporal con la contraseña de un administrador o usuario que tenga el permiso; el acceso expira y se revoca al salir de la acción.
+- El corte de caja permanece visible para todos los cajeros, pero exige el permiso `Cerrar turno y realizar corte` o una autorización temporal antes de ejecutarse.
 - Se prepara la versión 2.2.7: se rediseña la administración de usuarios, se agregan creación y edición separadas, y el nuevo cajero recibe permisos operativos seguros por defecto.
 - Se publica la versión 2.2.6: al abrir varios tickets se conservan hasta que el cajero los descarte explícitamente; antes de crear el siguiente ticket se guarda el actual.
 - Se publica la versión 2.2.5: se corrige el descarte de tickets para eliminar siempre el ticket seleccionado y conservar los demás tickets en atención.

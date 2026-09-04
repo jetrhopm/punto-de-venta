@@ -29,7 +29,7 @@ public sealed class UserAdministrationIntegrationTests
             Assert.NotNull(cashier);
             Assert.False(cashier.IsAdministrator);
             Assert.Equal(
-                ["CancelSaleLines", "CloseShift", "OpenCashDrawer", "OpenShift", "RecordCashMovements", "ReprintTickets", "Sell", "UseCommonProduct", "ViewProducts", "ViewSalesHistory"],
+                ["CancelSaleLines", "OpenCashDrawer", "OpenShift", "RecordCashMovements", "ReprintTickets", "Sell", "UseCommonProduct", "ViewProducts", "ViewSalesHistory"],
                 cashier.Permissions.OrderBy(item => item));
 
             var promoted = await service.UpdateAsync(token, cashier.Id, new UpdateUserCommand(cashier.UserName, cashier.DisplayName, true, null), CancellationToken.None);
@@ -41,6 +41,46 @@ public sealed class UserAdministrationIntegrationTests
         {
             var userIds = await database.Users.Where(item => item.Id == administrator.Id || item.NormalizedUserName.EndsWith(suffix)).Select(item => item.Id).ToListAsync();
             database.Permissions.RemoveRange(database.Permissions.Where(item => userIds.Contains(item.UserId)));
+            database.Sessions.RemoveRange(database.Sessions.Where(item => userIds.Contains(item.UserId)));
+            database.Users.RemoveRange(database.Users.Where(item => userIds.Contains(item.Id)));
+            await database.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
+    public async Task GrantsAndRevokesOneTemporaryPermissionForTheCurrentCashier()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var actorToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var hasher = new PasswordHasher<UserRecord>();
+        var administrator = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = ("ADMIN_AUTH_" + suffix).ToUpperInvariant(), DisplayName = "Administrador autorizador", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        administrator.PasswordHash = hasher.HashPassword(administrator, "clave-admin");
+        var cashier = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = ("CAJERO_AUTH_" + suffix).ToUpperInvariant(), DisplayName = "Cajero autorizado", IsAdministrator = false, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        cashier.PasswordHash = hasher.HashPassword(cashier, "clave-cajero");
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = cashier.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(actorToken))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        database.AddRange(administrator, cashier, session);
+        await database.SaveChangesAsync();
+
+        try
+        {
+            var authentication = new AuthenticationService(database, hasher);
+            var grant = await authentication.GrantTemporaryPermissionAsync(actorToken, new TemporaryPermissionAuthorizationCommand(administrator.NormalizedUserName, "clave-admin", "CloseShift"), CancellationToken.None);
+
+            Assert.NotNull(grant);
+            Assert.NotNull(grant.GrantId);
+            Assert.True(grant.ExpiresAtUtc > DateTimeOffset.UtcNow);
+            Assert.True(await database.Permissions.AnyAsync(item => item.UserId == cashier.Id && item.Code == "CloseShift"));
+
+            Assert.True(await authentication.RevokeTemporaryPermissionAsync(actorToken, grant.GrantId!.Value, CancellationToken.None));
+            Assert.False(await database.Permissions.IgnoreQueryFilters().AnyAsync(item => item.UserId == cashier.Id && item.Code == "CloseShift"));
+        }
+        finally
+        {
+            var userIds = new[] { administrator.Id, cashier.Id };
+            database.Permissions.RemoveRange(database.Permissions.IgnoreQueryFilters().Where(item => userIds.Contains(item.UserId)));
             database.Sessions.RemoveRange(database.Sessions.Where(item => userIds.Contains(item.UserId)));
             database.Users.RemoveRange(database.Users.Where(item => userIds.Contains(item.Id)));
             await database.SaveChangesAsync();

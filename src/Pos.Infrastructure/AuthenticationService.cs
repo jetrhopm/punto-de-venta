@@ -7,6 +7,8 @@ namespace Pos.Infrastructure;
 
 public sealed record LoginCommand(string UserName, string Password);
 public sealed record LoginResult(Guid SessionId, string AccessToken, Guid UserId, string DisplayName, bool IsAdministrator, DateTimeOffset ExpiresAtUtc, IReadOnlyList<string> Permissions);
+public sealed record TemporaryPermissionAuthorizationCommand(string UserName, string Password, string Permission);
+public sealed record TemporaryPermissionAuthorizationResult(Guid? GrantId, DateTimeOffset ExpiresAtUtc, string AuthorizedBy);
 
 public sealed class AuthenticationService(PosDbContext database, PasswordHasher<UserRecord> passwordHasher)
 {
@@ -25,6 +27,71 @@ public sealed class AuthenticationService(PosDbContext database, PasswordHasher<
             ? Enum.GetNames<Pos.Domain.Permission>()
             : await database.Permissions.Where(item => item.UserId == user.Id).Select(item => item.Code).ToListAsync(cancellationToken);
         return new LoginResult(session.Id, accessToken, user.Id, user.DisplayName, user.IsAdministrator, session.ExpiresAtUtc, permissions);
+    }
+
+    public async Task<TemporaryPermissionAuthorizationResult?> GrantTemporaryPermissionAsync(
+        string actorToken,
+        TemporaryPermissionAuthorizationCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (!Enum.TryParse<Pos.Domain.Permission>(command.Permission, ignoreCase: false, out _) ||
+            string.IsNullOrWhiteSpace(command.UserName) || string.IsNullOrEmpty(command.Password)) return null;
+
+        var actor = await GetActiveSessionUserAsync(actorToken, cancellationToken);
+        if (actor is null) return null;
+
+        var normalized = InitialSetupService.NormalizeUserName(command.UserName);
+        var approver = await database.Users.SingleOrDefaultAsync(item => item.NormalizedUserName == normalized && item.IsActive, cancellationToken);
+        if (approver is null || passwordHasher.VerifyHashedPassword(approver, approver.PasswordHash, command.Password) == PasswordVerificationResult.Failed) return null;
+
+        var approverCanAuthorize = approver.IsAdministrator || await database.Permissions
+            .IgnoreQueryFilters()
+            .AnyAsync(item => item.UserId == approver.Id && item.Code == command.Permission && item.ExpiresAtUtc == null, cancellationToken);
+        if (!approverCanAuthorize) return null;
+
+        var current = await database.Permissions.IgnoreQueryFilters()
+            .SingleOrDefaultAsync(item => item.UserId == actor.Id && item.Code == command.Permission, cancellationToken);
+        if (current is { ExpiresAtUtc: null }) return new TemporaryPermissionAuthorizationResult(null, DateTimeOffset.UtcNow, approver.DisplayName);
+
+        var expiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(2);
+        if (current is null)
+        {
+            current = new PermissionRecord
+            {
+                Id = Guid.NewGuid(),
+                UserId = actor.Id,
+                Code = command.Permission,
+                GrantedByUserId = approver.Id,
+                ExpiresAtUtc = expiresAtUtc
+            };
+            database.Permissions.Add(current);
+        }
+        else
+        {
+            current.GrantedByUserId = approver.Id;
+            current.ExpiresAtUtc = expiresAtUtc;
+        }
+
+        await database.SaveChangesAsync(cancellationToken);
+        return new TemporaryPermissionAuthorizationResult(current.Id, expiresAtUtc, approver.DisplayName);
+    }
+
+    public async Task<bool> RevokeTemporaryPermissionAsync(string actorToken, Guid grantId, CancellationToken cancellationToken)
+    {
+        var actor = await GetActiveSessionUserAsync(actorToken, cancellationToken);
+        if (actor is null) return false;
+        var grant = await database.Permissions.IgnoreQueryFilters().SingleOrDefaultAsync(item => item.Id == grantId && item.UserId == actor.Id && item.ExpiresAtUtc != null, cancellationToken);
+        if (grant is null) return false;
+        database.Permissions.Remove(grant);
+        await database.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    private async Task<UserRecord?> GetActiveSessionUserAsync(string token, CancellationToken cancellationToken)
+    {
+        var hash = Hash(token ?? string.Empty);
+        var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
+        return session is null ? null : await database.Users.AsNoTracking().SingleOrDefaultAsync(item => item.Id == session.UserId && item.IsActive, cancellationToken);
     }
 
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));

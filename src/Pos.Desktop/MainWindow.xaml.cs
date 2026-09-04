@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private bool _discardInProgress;
     private bool _exitConfirmed;
     private bool _exitDialogOpen;
+    private TemporaryPermissionLease? _modulePermissionLease;
     public MainWindow()
     {
         InitializeComponent();
@@ -74,42 +75,66 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnNavigateClick(object sender, RoutedEventArgs e)
+    private async void OnNavigateClick(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: string section })
+        if (sender is Button { Tag: string section }) await OpenSectionAsync(section);
+    }
+
+    private async Task OpenSectionAsync(string section)
+    {
+        if (section == "Ventas") { ShowSalesWorkspace(); return; }
+
+        ReleaseModulePermission();
+        var requiredPermission = PermissionFor(section);
+        TemporaryPermissionLease? lease = null;
+        if (requiredPermission is not null)
         {
-            if (!HasPermissionFor(section)) { StatusText.Text = "No tienes permiso para abrir este modulo."; return; }
-            if (section == "Ventas") { ShowSalesWorkspace(); return; }
+            lease = await PermissionAuthorization.RequestAsync(this, requiredPermission, $"{SectionNameFor(section)} requiere autorización para abrirse.");
+            if (lease is null)
+            {
+                StatusText.Text = $"No tienes permiso para {PermissionAuthorization.NameFor(requiredPermission).ToLowerInvariant()}. Pide al administrador que lo asigne en Configuración > Cajeros y permisos, o que autorice esta acción.";
+                return;
+            }
+        }
+
+        try
+        {
             if (section == "Corte")
             {
                 var module = new CutWindow();
                 module.CloseRequested += (_, _) => ShowSalesWorkspace();
                 module.CloseShiftRequested += async (_, _) => await CloseShiftFromDialogAsync(openNewShift: true);
-                ShowEmbeddedModule(module, "Corte", "Consulta cortes sin cerrar los tickets en atención.");
+                ShowEmbeddedModule(module, "Corte", "Consulta cortes sin cerrar los tickets en atención.", lease);
+                lease = null;
                 return;
             }
-            if (section == "Productos") { ShowEmbeddedModule(new ProductCatalogWindow(), "Productos", "Administra el catálogo sin cerrar los tickets en atención."); return; }
-            if (section == "Inventario") { OpenInventory(); return; }
-            if (section == "Clientes") { OpenCustomers(); return; }
-            if (section == "Creditos") { OpenCustomers(creditMode: true); return; }
-            if (section == "Compras") { ShowEmbeddedModule(new PurchaseWindow(), "Compras", "Registra compras sin cerrar los tickets en atención."); return; }
-            if (section == "Reportes") { ShowEmbeddedModule(new ReportsWindow(), "Reportes", "Consulta ventas y análisis sin cerrar los tickets en atención."); return; }
-            if (section == "Historial") { ShowEmbeddedModule(new SalesHistoryWindow(), "Historial", "Consulta ventas anteriores sin cerrar los tickets en atención."); return; }
-            if (section == "Facturas") { ShowEmbeddedModule(new InvoicePlaceholderView(), "Facturas", "El módulo CFDI permanece deshabilitado hasta completar su validación fiscal."); return; }
+            if (section == "Productos") { ShowEmbeddedModule(new ProductCatalogWindow(), "Productos", "Administra el catálogo sin cerrar los tickets en atención.", lease); lease = null; return; }
+            if (section == "Inventario") { OpenInventory(lease); lease = null; return; }
+            if (section == "Clientes") { OpenCustomers(false, lease); lease = null; return; }
+            if (section == "Creditos") { OpenCustomers(true, lease); lease = null; return; }
+            if (section == "Compras") { ShowEmbeddedModule(new PurchaseWindow(), "Compras", "Registra compras sin cerrar los tickets en atención.", lease); lease = null; return; }
+            if (section == "Reportes") { ShowEmbeddedModule(new ReportsWindow(), "Reportes", "Consulta ventas y análisis sin cerrar los tickets en atención.", lease); lease = null; return; }
+            if (section == "Historial") { ShowEmbeddedModule(new SalesHistoryWindow(), "Historial", "Consulta ventas anteriores sin cerrar los tickets en atención.", lease); lease = null; return; }
+            if (section == "Facturas") { ShowEmbeddedModule(new InvoicePlaceholderView(), "Facturas", "El módulo CFDI permanece deshabilitado hasta completar su validación fiscal.", lease); lease = null; return; }
             if (section == "Promociones") { var window = new PromotionWindow { Owner = this }; window.ShowDialog(); return; }
-            if (section == "Configuracion") { ShowEmbeddedModule(new ConfigurationWindow(), "Configuración", "Administra JetVenta sin cerrar los tickets en atención."); return; }
+            if (section == "Configuracion") { ShowEmbeddedModule(new ConfigurationWindow(), "Configuración", "Administra JetVenta sin cerrar los tickets en atención.", lease); lease = null; return; }
             if (section == "Kits") { var window = new KitWindow { Owner = this }; window.ShowDialog(); return; }
             NavigateTo(section);
         }
+        finally
+        {
+            if (lease is not null) await lease.DisposeAsync();
+        }
     }
 
-    private void OnPairingCodeClick(object sender, RoutedEventArgs e)
+    private async void OnPairingCodeClick(object sender, RoutedEventArgs e)
     {
-        if (!SessionContext.IsAdministrator) { StatusText.Text = "Solo un administrador puede generar codigos de caja."; return; }
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "ConfigureStore", "Generar un código para emparejar una caja requiere autorización.");
+        if (authorization is null) return;
         new PairingCodeWindow { Owner = this }.ShowDialog();
     }
 
-    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    private async void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         var section = e.Key switch
         {
@@ -122,12 +147,7 @@ public partial class MainWindow : Window
 
         if (section is not null)
         {
-            if (!HasPermissionFor(section)) { StatusText.Text = "No tienes permiso para abrir este modulo."; e.Handled = true; return; }
-            if (section == "Clientes") { OpenCustomers(); e.Handled = true; return; }
-            if (section == "Creditos") { OpenCustomers(creditMode: true); e.Handled = true; return; }
-            if (section == "Ventas") { ShowSalesWorkspace(); e.Handled = true; return; }
-            if (section == "Productos") { ShowEmbeddedModule(new ProductCatalogWindow(), "Productos", "Administra el catálogo sin cerrar los tickets en atención."); e.Handled = true; return; }
-            if (section == "Inventario") { OpenInventory(); e.Handled = true; return; }
+            await OpenSectionAsync(section);
             e.Handled = true;
             return;
         }
@@ -199,15 +219,15 @@ public partial class MainWindow : Window
 
     private async void OnFindCustomerClick(object sender, RoutedEventArgs e) => await SelectCustomerForActiveTicketAsync();
     private async void OnSelectCustomerClick(object sender, RoutedEventArgs e) => await SelectCustomerForActiveTicketAsync();
-    private void OnTicketHistoryClick(object sender, RoutedEventArgs e)
+    private async void OnTicketHistoryClick(object sender, RoutedEventArgs e)
     {
-        if (!SessionContext.HasPermission("ViewSalesHistory")) { StatusText.Text = "No tienes permiso para consultar el historial de tickets."; return; }
-        ShowEmbeddedModule(new SalesHistoryWindow(false), "Historial", "Consulta tickets anteriores sin cerrar los tickets en atención.");
+        await OpenSectionAsync("Historial");
     }
 
     private async void OnPrintLastTicketClick(object sender, RoutedEventArgs e)
     {
-        if (!SessionContext.HasPermission("ReprintTickets")) { StatusText.Text = "No tienes permiso para imprimir copias de tickets."; return; }
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "ReprintTickets", "Reimprimir el último ticket requiere autorización.");
+        if (authorization is null) return;
         try
         {
             var saleId = _lastSaleId;
@@ -229,7 +249,8 @@ public partial class MainWindow : Window
     private async Task SelectCustomerForActiveTicketAsync()
     {
         if (_activeTicket is null) return;
-        if (!SessionContext.HasPermission("ManageCustomersAndCredit")) { StatusText.Text = "No tienes permiso para consultar clientes."; return; }
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "ManageCustomersAndCredit", "Seleccionar un cliente para la venta requiere autorización.");
+        if (authorization is null) return;
         var window = new CustomerWindow(true) { Owner = this };
         if (window.ShowDialog() != true || window.SelectedCustomerId is null) return;
         _activeTicket.SetCustomer(window.SelectedCustomerId.Value, window.SelectedCustomerName ?? "Cliente");
@@ -249,8 +270,12 @@ public partial class MainWindow : Window
     private void OnInsertCommonProductClick(object sender, RoutedEventArgs e) =>
         ShowPendingFeature("Producto varios");
 
-    private void OnCommonProductClick(object sender, RoutedEventArgs e) =>
-        StatusText.Text = SessionContext.HasPermission("UseCommonProduct") ? "Producto común disponible al registrar un código no encontrado." : "No tienes permiso para utilizar producto común.";
+    private async void OnCommonProductClick(object sender, RoutedEventArgs e)
+    {
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "UseCommonProduct", "Usar un producto común requiere autorización.");
+        if (authorization is null) return;
+        StatusText.Text = "Producto común disponible al registrar un código no encontrado.";
+    }
 
     private void OnProductLookupClick(object sender, RoutedEventArgs e) =>
         OpenProductLookup();
@@ -270,24 +295,18 @@ public partial class MainWindow : Window
     private void OnDeleteSelectedLineClick(object sender, RoutedEventArgs e) =>
         DeleteSelectedCartLine();
 
-    private void OpenProductLookup()
+    private async void OpenProductLookup()
     {
-        if (!SessionContext.HasPermission("ViewProducts"))
-        {
-            StatusText.Text = "No tienes permiso para consultar productos.";
-            return;
-        }
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "ViewProducts", "Consultar productos requiere autorización.");
+        if (authorization is null) return;
 
         new ProductLookupWindow(ProductSearchTextBox.Text.Trim()) { Owner = this }.ShowDialog();
     }
 
-    private void OpenPriceVerifier()
+    private async void OpenPriceVerifier()
     {
-        if (!SessionContext.HasPermission("ViewProducts"))
-        {
-            StatusText.Text = "No tienes permiso para verificar productos.";
-            return;
-        }
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "ViewProducts", "Verificar precios requiere autorización.");
+        if (authorization is null) return;
 
         new PriceVerifierWindow { Owner = this }.ShowDialog();
     }
@@ -336,11 +355,8 @@ public partial class MainWindow : Window
 
     private async void OnOpenCashDrawerClick(object sender, RoutedEventArgs e)
     {
-        if (!SessionContext.HasPermission("OpenCashDrawer"))
-        {
-            StatusText.Text = "No tienes permiso para abrir el cajón de dinero.";
-            return;
-        }
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "OpenCashDrawer", "Abrir el cajón de dinero requiere autorización.");
+        if (authorization is null) return;
 
         await TryOpenCashDrawerAsync(explainIfDisabled: true);
     }
@@ -349,7 +365,8 @@ public partial class MainWindow : Window
 
     private async Task OpenCashMovementAsync(string? type)
     {
-        if (!SessionContext.HasPermission("RecordCashMovements")) { StatusText.Text = "No tienes permiso para registrar movimientos de efectivo."; return; }
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "RecordCashMovements", "Registrar una entrada o salida de efectivo requiere autorización.");
+        if (authorization is null) return;
         var window = new CashMovementWindow(type) { Owner = this };
         if (window.ShowDialog() != true || window.Amount is null) return;
         try
@@ -379,7 +396,12 @@ public partial class MainWindow : Window
 
     private async Task<bool> CloseShiftFromDialogAsync(bool openNewShift = false)
     {
-        if (!SessionContext.HasPermission("CloseShift")) { StatusText.Text = "No tienes permiso para cerrar turnos."; return false; }
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "CloseShift", "Cerrar el turno y realizar el corte requiere autorización.");
+        if (authorization is null)
+        {
+            StatusText.Text = "No tienes permiso para cerrar turno. Pide al administrador que lo autorice o que active \"Realizar corte del turno propio y ver efectivo esperado\" en Configuración > Cajeros y permisos.";
+            return false;
+        }
         HttpResponseMessage summaryResponse;
         try { summaryResponse = await Client.GetAsync("/api/shifts/summary"); }
         catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableShiftProtected; return false; }
@@ -536,12 +558,8 @@ public partial class MainWindow : Window
 
         var isCommonProduct = window.Decision == MissingProductDecision.CommonProduct;
         var requiredPermission = isCommonProduct ? "UseCommonProduct" : "ManageProducts";
-        if (!SessionContext.HasPermission(requiredPermission))
-        {
-            StatusText.Text = isCommonProduct ? "No tienes permiso para utilizar producto común." : "No tienes permiso para registrar productos desde una venta.";
-            FocusProductInput();
-            return;
-        }
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, requiredPermission, isCommonProduct ? "Agregar un producto común requiere autorización." : "Registrar un producto desde la venta requiere autorización.");
+        if (authorization is null) { FocusProductInput(); return; }
 
         try
         {
@@ -923,9 +941,15 @@ public partial class MainWindow : Window
     {
         var ticket = _activeTicket;
         if (ticket is null || ticket.Lines.Count == 0) { StatusText.Text = "Agrega al menos un producto antes de cobrar."; return; }
+        await using var saleAuthorization = await PermissionAuthorization.RequestAsync(this, "Sell", "Cobrar una venta requiere autorización.");
+        if (saleAuthorization is null) return;
         if (!await PersistActiveTicketAsync()) return;
         var cashWindow = new CashWindow(ticket.Lines.Sum(item => item.Total), ticket.Lines.Sum(item => item.Quantity), ticket.CustomerId, ticket.CustomerName) { Owner = this };
         if (cashWindow.ShowDialog() != true || cashWindow.Received is null) return;
+        await using var creditAuthorization = cashWindow.CreditRequested
+            ? await PermissionAuthorization.RequestAsync(this, "SellOnCredit", "Cobrar una venta a crédito requiere autorización.")
+            : TemporaryPermissionLease.NotRequired;
+        if (cashWindow.CreditRequested && creditAuthorization is null) return;
         try
         {
             var pointAmount = cashWindow.PaymentMethod == "Card" ? ticket.Lines.Sum(item => item.Total) : cashWindow.PaymentMethod == "Mixed" ? cashWindow.CardAmount : 0m;
@@ -969,7 +993,8 @@ public partial class MainWindow : Window
 
     private async void OnCancelLastSaleClick(object sender, RoutedEventArgs e)
     {
-        if (!SessionContext.HasPermission("CancelSales")) { StatusText.Text = "No tienes permiso para cancelar ventas."; return; }
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "CancelSales", "Cancelar una venta confirmada requiere autorización.");
+        if (authorization is null) return;
         if (_lastSaleId is null) { StatusText.Text = "No hay una venta reciente para cancelar."; return; }
         var window = new CancelSaleWindow { Owner = this };
         if (window.ShowDialog() != true) return;
@@ -982,17 +1007,21 @@ public partial class MainWindow : Window
         catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; }
     }
 
-    private void OnReturnLastSaleClick(object sender, RoutedEventArgs e)
+    private async void OnReturnLastSaleClick(object sender, RoutedEventArgs e)
     {
-        if (!SessionContext.HasPermission("ProcessReturns")) { StatusText.Text = "No tienes permiso para procesar devoluciones."; return; }
+        var authorization = await PermissionAuthorization.RequestAsync(this, "ProcessReturns", "Procesar una devolución requiere autorización.");
+        if (authorization is null) return;
         if (_lastSaleId is null)
         {
             StatusText.Text = "Selecciona la venta que deseas devolver desde el historial.";
-            ShowEmbeddedModule(new SalesHistoryWindow(), "Historial", "Selecciona una venta para procesar una devolución.");
+            ShowEmbeddedModule(new SalesHistoryWindow(), "Historial", "Selecciona una venta para procesar una devolución.", authorization);
             return;
         }
-        var window = new ReturnSaleWindow(_lastSaleId.Value) { Owner = this };
-        window.ShowDialog();
+        await using (authorization)
+        {
+            var window = new ReturnSaleWindow(_lastSaleId.Value) { Owner = this };
+            window.ShowDialog();
+        }
     }
 
     private static async Task SaveTicketPdfAsync(Guid saleId)
@@ -1196,6 +1225,7 @@ public partial class MainWindow : Window
 
     private void ShowSalesWorkspace()
     {
+        ReleaseModulePermission();
         ModuleWorkspace.Content = null;
         ModuleWorkspace.Visibility = Visibility.Collapsed;
         SalesWorkspace.Visibility = Visibility.Visible;
@@ -1206,8 +1236,10 @@ public partial class MainWindow : Window
         FocusProductInput();
     }
 
-    private void ShowEmbeddedModule(UserControl module, string section, string detail)
+    private void ShowEmbeddedModule(UserControl module, string section, string detail, TemporaryPermissionLease? authorization = null)
     {
+        ReleaseModulePermission();
+        _modulePermissionLease = authorization;
         SalesWorkspace.Visibility = Visibility.Collapsed;
         ModuleWorkspace.Content = module;
         ModuleWorkspace.Visibility = Visibility.Visible;
@@ -1215,20 +1247,20 @@ public partial class MainWindow : Window
         StatusText.Text = $"{section} abierto. Los tickets en atención siguen guardados.";
     }
 
-    private void OpenCustomers(bool creditMode = false)
+    private void OpenCustomers(bool creditMode = false, TemporaryPermissionLease? authorization = null)
     {
         var section = creditMode ? "Créditos" : "Clientes";
         var detail = creditMode
             ? "Consulta créditos y registra abonos sin cerrar los tickets en atención."
             : "Administra clientes sin cerrar los tickets en atención.";
-        ShowEmbeddedModule(new CustomerModule(creditMode), section, detail);
+        ShowEmbeddedModule(new CustomerModule(creditMode), section, detail, authorization);
     }
 
-    private void OpenInventory()
+    private void OpenInventory(TemporaryPermissionLease? authorization = null)
     {
         var module = new InventoryWindow();
         module.CloseRequested += (_, _) => ShowSalesWorkspace();
-        ShowEmbeddedModule(module, "Inventario", "Consulta y ajusta inventario sin cerrar los tickets en atención.");
+        ShowEmbeddedModule(module, "Inventario", "Consulta y ajusta inventario sin cerrar los tickets en atención.", authorization);
     }
 
     private void ShowPendingFeature(string feature)
@@ -1238,30 +1270,41 @@ public partial class MainWindow : Window
         FocusProductInput();
     }
 
-    private bool HasPermissionFor(string section) => section switch
+    private void ReleaseModulePermission()
     {
-        "Ventas" => SessionContext.HasPermission("Sell"),
-        "Creditos" => SessionContext.HasPermission("ManageCustomersAndCredit"),
-        "Clientes" => SessionContext.HasPermission("ManageCustomersAndCredit"),
-        "Productos" => SessionContext.HasPermission("ViewProducts"),
-        "Inventario" => SessionContext.HasPermission("ViewInventory"),
-        "Corte" => SessionContext.HasPermission("CloseShift"),
-        "Configuracion" => SessionContext.HasPermission("ConfigureStore"),
-        "Compras" => SessionContext.HasPermission("ManageSuppliersAndPurchases"),
-        "Facturas" => true,
-        "Reportes" => SessionContext.HasPermission("ViewReports"),
-        "Historial" => SessionContext.HasPermission("ViewSalesHistory"),
-        "Promociones" => SessionContext.HasPermission("ManageProducts"),
-        "Kits" => SessionContext.HasPermission("ManageProducts"),
-        _ => false
+        var authorization = _modulePermissionLease;
+        _modulePermissionLease = null;
+        if (authorization is not null) _ = authorization.DisposeAsync();
+    }
+
+    private static string? PermissionFor(string section) => section switch
+    {
+        "Ventas" => "Sell",
+        "Creditos" or "Clientes" => "ManageCustomersAndCredit",
+        "Productos" => "ViewProducts",
+        "Inventario" => "ViewInventory",
+        "Corte" => "CloseShift",
+        "Configuracion" => "ConfigureStore",
+        "Compras" => "ManageSuppliersAndPurchases",
+        "Reportes" => "ViewReports",
+        "Historial" => "ViewSalesHistory",
+        "Promociones" or "Kits" => "ManageProducts",
+        _ => null
+    };
+
+    private static string SectionNameFor(string section) => section switch
+    {
+        "Creditos" => "Créditos",
+        "Configuracion" => "Configuración",
+        _ => section
     };
 
     private void ApplyNavigationPermissions()
     {
-        OpenCashDrawerButton.IsEnabled = SessionContext.HasPermission("OpenCashDrawer");
+        OpenCashDrawerButton.IsEnabled = true;
         foreach (var button in FindVisualChildren<Button>(this))
         {
-            if (button.Tag is string section) button.IsEnabled = HasPermissionFor(section);
+            if (button.Tag is string) button.IsEnabled = true;
         }
     }
 
