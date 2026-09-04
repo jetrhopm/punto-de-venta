@@ -6,7 +6,7 @@
     <Grid Margin="28">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <StackPanel Orientation="Horizontal">
-            <Border Width="48" Height="48" Background="{StaticResource PrimarySoftBrush}" CornerRadius="5"><icons:PackIconMaterial Kind="PowerSettingsNew" Width="28" Height="28" Foreground="{StaticResource PrimaryBrush}"/></Border>
+            <Border Width="48" Height="48" Background="{StaticResource PrimarySoftBrush}" CornerRadius="5"><icons:PackIconMaterial Kind="PowerOn" Width="28" Height="28" Foreground="{StaticResource PrimaryBrush}"/></Border>
             <StackPanel Margin="12,1,0,0"><TextBlock Text="Inicio automático" FontSize="22" FontWeight="Bold"/><TextBlock Text="Comportamiento de esta caja al iniciar Windows" Foreground="{StaticResource TextMutedBrush}" Margin="0,3,0,0"/></StackPanel>
         </StackPanel>
         <StackPanel Grid.Row="1" Margin="0,26,0,16">
