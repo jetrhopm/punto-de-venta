@@ -16,12 +16,19 @@ public sealed record TemporaryPermissionAuthorizationAttempt(TemporaryPermission
 
 public sealed class AuthenticationService(PosDbContext database, PasswordHasher<UserRecord> passwordHasher)
 {
+    private static bool IsLocalPermissionBypassEnabled =>
+        string.Equals(Environment.GetEnvironmentVariable("POS_PERMISSION_BYPASS"), "true", StringComparison.OrdinalIgnoreCase);
+
     public async Task<LoginResult?> LoginAsync(LoginCommand command, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(command.UserName) || string.IsNullOrEmpty(command.Password)) return null;
         var normalized = InitialSetupService.NormalizeUserName(command.UserName);
         var user = await database.Users.SingleOrDefaultAsync(item => item.NormalizedUserName == normalized && item.IsActive, cancellationToken);
         if (user is null || passwordHasher.VerifyHashedPassword(user, user.PasswordHash, command.Password) == PasswordVerificationResult.Failed) return null;
+
+        // La API de pruebas necesita que sus servicios también acepten las acciones,
+        // no sólo que el escritorio oculte los cuadros de autorización.
+        if (IsLocalPermissionBypassEnabled) user.IsAdministrator = true;
 
         var staleTemporaryPermissions = await database.Permissions.IgnoreQueryFilters()
             .Where(item => item.UserId == user.Id && item.ExpiresAtUtc != null)
