@@ -68,6 +68,48 @@
             <Setter Property="BorderBrush" Value="{StaticResource SuccessBrush}"/>
             <Setter Property="FontWeight" Value="Bold"/>
         </Style>
+        <Style x:Key="ConfirmButtonStyle" TargetType="Button" BasedOn="{StaticResource SuccessButtonStyle}">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource SuccessHoverBrush}"/>
+                    <Setter Property="BorderBrush" Value="{StaticResource SuccessHoverBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="CancelButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{StaticResource DangerBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#A52F28"/>
+                    <Setter Property="BorderBrush" Value="#A52F28"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="PreviousButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="#FFF4D6"/>
+            <Setter Property="Foreground" Value="#805800"/>
+            <Setter Property="BorderBrush" Value="#E2B84A"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#FCE7AA"/>
+                    <Setter Property="BorderBrush" Value="#C79420"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="NextButtonStyle" TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource PrimaryHoverBrush}"/>
+                    <Setter Property="BorderBrush" Value="{StaticResource PrimaryHoverBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
         <Style x:Key="DangerButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
             <Setter Property="BorderBrush" Value="#E8BBB7"/>

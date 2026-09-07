@@ -124,7 +124,7 @@
                             <Button Click="OnCancelEditorClick" MinWidth="135" Margin="0,0,8,0">
                                 <TextBlock Text="Cancelar (Esc)"/>
                             </Button>
-                            <Button x:Name="SaveButton" Style="{StaticResource PrimaryButtonStyle}" Click="OnSaveClick" IsDefault="True" MinWidth="165">
+                            <Button x:Name="SaveButton" Style="{StaticResource ConfirmButtonStyle}" Click="OnSaveClick" IsDefault="True" MinWidth="165">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                     <icons:PackIconMaterial Kind="ContentSaveOutline" Width="19" Height="19" Margin="0,0,7,0"/>
                                     <TextBlock Text="Guardar (Enter)"/>

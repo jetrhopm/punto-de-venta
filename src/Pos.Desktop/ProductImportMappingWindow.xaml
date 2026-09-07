@@ -72,7 +72,7 @@
                 <Button Width="190" Height="36" HorizontalAlignment="Left" Click="OnAutoDetectClick">Volver a detectar columnas</Button>
                 <TextBlock x:Name="StatusText" Margin="0,7,12,0" Foreground="#B42318" TextWrapping="Wrap"/>
             </StackPanel>
-            <Button Grid.Column="1" Width="120" Height="40" Margin="0,0,8,0" IsCancel="True">Cancelar</Button>
+            <Button Grid.Column="1" Width="120" Height="40" Margin="0,0,8,0" Style="{StaticResource CancelButtonStyle}" IsCancel="True">Cancelar</Button>
             <Button Grid.Column="2" Width="170" Height="40" IsDefault="True" Click="OnApplyClick"
                     Background="#146CB0" Foreground="White" FontWeight="SemiBold">Usar estas columnas</Button>
         </Grid>

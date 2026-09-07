@@ -16,6 +16,6 @@
             <TextBlock Text="Unidad de venta" FontWeight="SemiBold" Margin="0,15,0,5"/><ComboBox x:Name="UnitBox" Height="36" SelectedIndex="0"><ComboBoxItem Content="Pieza"/><ComboBoxItem Content="Kilogramo (granel)" Tag="Kilogramo"/><ComboBoxItem Content="Gramo (granel)" Tag="Gramo"/><ComboBoxItem Content="Litro"/><ComboBoxItem Content="Mililitro"/><ComboBoxItem Content="Metro"/><ComboBoxItem Content="Servicio"/></ComboBox>
             <TextBlock x:Name="MessageText" Foreground="#B42318" Margin="0,12,0,0" TextWrapping="Wrap"/>
         </StackPanel>
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"><Button Width="112" Height="38" Margin="0,0,8,0" IsCancel="True" Click="OnCancelClick">Cancelar</Button><Button Width="168" Height="38" Style="{StaticResource PrimaryButtonStyle}" IsDefault="True" Click="OnAcceptClick">Agregar al ticket</Button></StackPanel>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"><Button Width="112" Height="38" Margin="0,0,8,0" Style="{StaticResource CancelButtonStyle}" IsCancel="True" Click="OnCancelClick">Cancelar</Button><Button Width="168" Height="38" Style="{StaticResource ConfirmButtonStyle}" IsDefault="True" Click="OnAcceptClick">Agregar al ticket</Button></StackPanel>
     </Grid>
 </Window>

@@ -47,6 +47,6 @@
                 </Border>
             </StackPanel>
         </ScrollViewer>
-        <Grid Grid.Row="2"><TextBlock x:Name="StatusText" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,12,0"/><Button Width="170" HorizontalAlignment="Right" Style="{StaticResource PrimaryButtonStyle}" Click="OnSaveClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ContentSaveOutline" Width="18" Height="18" Margin="0,0,7,0"/><TextBlock Text="Guardar cambios"/></StackPanel></Button></Grid>
+        <Grid Grid.Row="2"><TextBlock x:Name="StatusText" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,12,0"/><Button Width="170" HorizontalAlignment="Right" Style="{StaticResource ConfirmButtonStyle}" Click="OnSaveClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ContentSaveOutline" Width="18" Height="18" Margin="0,0,7,0"/><TextBlock Text="Guardar cambios"/></StackPanel></Button></Grid>
     </Grid>
 </Window>

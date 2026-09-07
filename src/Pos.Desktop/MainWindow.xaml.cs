@@ -46,7 +46,33 @@ public partial class MainWindow : Window
     public void ShowLicenseReminder(string message)
     {
         _licenseReminder = message;
+        LicenseDemoText.Text = message;
+        LicenseDemoBanner.Visibility = Visibility.Visible;
         StatusText.Text = message;
+    }
+
+    private async void OnOpenLicenseClick(object sender, RoutedEventArgs e)
+    {
+        var window = new LicenseWindow { Owner = this };
+        window.ShowDialog();
+        try
+        {
+            var status = await Client.GetFromJsonAsync<LicenseStatusResponse>("/api/license/status");
+            if (status?.IsActive == true && !string.Equals(status.State, "trial", StringComparison.OrdinalIgnoreCase))
+            {
+                _licenseReminder = null;
+                LicenseDemoBanner.Visibility = Visibility.Collapsed;
+                StatusText.Text = "Licencia activa para este equipo.";
+            }
+            else if (status is not null)
+            {
+                ShowLicenseReminder(status.Message);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
+        }
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -951,6 +977,7 @@ public partial class MainWindow : Window
     private sealed record SaleDraftLineResponse(Guid ProductId, string Code, string Description, decimal UnitPrice, decimal Stock, decimal Quantity);
     private sealed record PromotionPriceQuote(Guid ProductId, decimal BaseUnitPrice, decimal UnitPrice, decimal Quantity, decimal Total, decimal DiscountTotal, bool PromotionApplied);
     private sealed record SaleResponse(Guid SaleId, decimal Total, decimal Change, bool Existing);
+    private sealed record LicenseStatusResponse(bool IsActive, string State, string Message);
     private sealed record StoreOptionsResponse(bool InventoryEnabled, string InventoryCostMethod, bool CreditSalesEnabled, bool CommonProductsEnabled, bool AutoPriceWithProfit, decimal DefaultProfitPercent, bool RoundSaleAmounts, string RoundingMode, string OccasionalNotice, int OccasionalNoticeEverySales);
     private sealed record RegisterResponse(Guid Id, string Name);
     private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);

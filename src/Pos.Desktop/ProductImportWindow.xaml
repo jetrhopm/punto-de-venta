@@ -82,8 +82,8 @@
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <Button Width="135" Height="34" Click="OnSelectAllClick" Background="#1B7E62" Foreground="White">Seleccionar todos</Button>
             <Button Grid.Column="1" Width="135" Height="34" Margin="8,0,14,0" Click="OnOmitErrorsClick" Background="#B54708" Foreground="White">Omitir con error</Button>
-            <Button Grid.Column="2" x:Name="PreviousPageButton" Width="105" Height="34" Click="OnPreviousPageClick" Background="#526577" Foreground="White">Anterior</Button>
-            <Button Grid.Column="3" x:Name="NextPageButton" Width="105" Height="34" Margin="8,0,0,0" Click="OnNextPageClick" Background="#526577" Foreground="White">Siguiente</Button>
+            <Button Style="{StaticResource PreviousButtonStyle}" Grid.Column="2" x:Name="PreviousPageButton" Width="105" Height="34" Click="OnPreviousPageClick" Background="#526577" Foreground="White">Anterior</Button>
+            <Button Style="{StaticResource NextButtonStyle}" Grid.Column="3" x:Name="NextPageButton" Width="105" Height="34" Margin="8,0,0,0" Click="OnNextPageClick" Background="#526577" Foreground="White">Siguiente</Button>
             <TextBlock Grid.Column="4" x:Name="PageInfoText" VerticalAlignment="Center" Margin="14,0,0,0" Foreground="#526577"/>
             <TextBlock Grid.Column="5" Text="Marca solo los productos que deseas importar" VerticalAlignment="Center" Foreground="#526577"/>
         </Grid>

@@ -28,6 +28,6 @@
                 <TextBlock x:Name="StatusText" Margin="2,14,0,0" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
             </StackPanel>
         </ScrollViewer>
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"><Button Width="170" Margin="0,0,8,0" Click="OnTestClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="Scale" Width="18" Height="18" Margin="0,0,7,0"/><TextBlock Text="Probar lectura"/></StackPanel></Button><Button Style="{StaticResource PrimaryButtonStyle}" Width="170" Click="OnSaveClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ContentSaveOutline" Width="18" Height="18" Margin="0,0,7,0"/><TextBlock Text="Guardar"/></StackPanel></Button></StackPanel>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"><Button Width="170" Margin="0,0,8,0" Click="OnTestClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="Scale" Width="18" Height="18" Margin="0,0,7,0"/><TextBlock Text="Probar lectura"/></StackPanel></Button><Button Style="{StaticResource ConfirmButtonStyle}" Width="170" Click="OnSaveClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ContentSaveOutline" Width="18" Height="18" Margin="0,0,7,0"/><TextBlock Text="Guardar"/></StackPanel></Button></StackPanel>
     </Grid>
 </Window>

@@ -7,6 +7,6 @@
             <Button Grid.Column="2" Margin="8,18,0,0" Click="OnAddClick">Agregar componente</Button>
         </Grid>
         <ListView Grid.Row="2" x:Name="ComponentsList"><ListView.View><GridView><GridViewColumn Header="Componente" DisplayMemberBinding="{Binding Display}" Width="480"/><GridViewColumn Header="Cantidad" DisplayMemberBinding="{Binding Quantity}" Width="100"/></GridView></ListView.View></ListView>
-        <DockPanel Grid.Row="3" Margin="0,14,0,0"><TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="#526577"/><Button DockPanel.Dock="Right" Click="OnSaveClick">Guardar kit</Button></DockPanel>
+        <DockPanel Grid.Row="3" Margin="0,14,0,0"><TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="#526577"/><Button DockPanel.Dock="Right" Style="{StaticResource ConfirmButtonStyle}" Click="OnSaveClick">Guardar kit</Button></DockPanel>
     </Grid>
 </Window>

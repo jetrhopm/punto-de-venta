@@ -6,6 +6,6 @@
             <TextBlock Text="Definir siguiente folio" FontWeight="SemiBold"/><TextBox x:Name="NextFolioBox" Margin="0,6,0,8" FontSize="18"/>
             <TextBlock Text="Solo se puede avanzar el consecutivo. JetVenta no permite reutilizar ni bajar folios que ya fueron reservados." TextWrapping="Wrap" Foreground="{StaticResource TextMutedBrush}"/>
         </StackPanel></ScrollViewer>
-        <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,0,14,0"/><Button Grid.Column="1" Style="{StaticResource PrimaryButtonStyle}" Width="190" Click="OnSaveClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ContentSaveOutline" Width="19" Height="19" Margin="0,0,7,0"/><TextBlock Text="Guardar siguiente folio"/></StackPanel></Button></Grid>
+        <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,0,14,0"/><Button Grid.Column="1" Style="{StaticResource ConfirmButtonStyle}" Width="190" Click="OnSaveClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ContentSaveOutline" Width="19" Height="19" Margin="0,0,7,0"/><TextBlock Text="Guardar siguiente folio"/></StackPanel></Button></Grid>
     </Grid>
 </Window>

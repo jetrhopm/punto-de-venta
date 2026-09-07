@@ -14,8 +14,8 @@
         <TextBox Grid.Row="2" x:Name="QuantityBox" Height="42" FontSize="19" Padding="11,6"/>
         <TextBlock Grid.Row="3" x:Name="MessageText" Margin="0,9,0,0" Foreground="#B42318" TextWrapping="Wrap"/>
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Width="112" Height="38" Margin="0,0,8,0" IsCancel="True" Click="OnCancelClick">Cancelar</Button>
-            <Button Width="128" Height="38" Style="{StaticResource PrimaryButtonStyle}" IsDefault="True" Click="OnAcceptClick">Aceptar</Button>
+            <Button Width="112" Height="38" Margin="0,0,8,0" Style="{StaticResource CancelButtonStyle}" IsCancel="True" Click="OnCancelClick">Cancelar</Button>
+            <Button Width="128" Height="38" Style="{StaticResource ConfirmButtonStyle}" IsDefault="True" Click="OnAcceptClick">Aceptar</Button>
         </StackPanel>
     </Grid>
 </Window>

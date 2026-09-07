@@ -48,7 +48,7 @@
     </Window.Resources>
 
     <Grid Background="{StaticResource AppBackgroundBrush}">
-        <Grid.RowDefinitions><RowDefinition Height="76"/><RowDefinition Height="*"/><RowDefinition Height="34"/></Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="76"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="34"/></Grid.RowDefinitions>
 
         <Border Grid.Row="0" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1">
             <Grid Margin="16,0">
@@ -97,7 +97,17 @@
             </Grid>
         </Border>
 
-        <Grid x:Name="SalesWorkspace" Grid.Row="1" Margin="14,12">
+        <Border x:Name="LicenseDemoBanner" Grid.Row="1" Margin="14,10,14,0" Padding="13,9"
+                Background="#FFF7E2" BorderBrush="#E9C770" BorderThickness="1" CornerRadius="5" Visibility="Collapsed">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <icons:PackIconMaterial Kind="ClockAlertOutline" Width="21" Height="21" Margin="0,1,10,0" Foreground="#A96300"/>
+                <StackPanel Grid.Column="1"><TextBlock Text="Periodo de demostración" FontWeight="Bold" Foreground="#5C4A14"/><TextBlock x:Name="LicenseDemoText" Margin="0,1,0,0" FontSize="12" Foreground="#5C4A14" TextWrapping="Wrap"/></StackPanel>
+                <Button Grid.Column="2" Margin="12,0,0,0" Padding="12,6" MinHeight="32" Style="{StaticResource NextButtonStyle}" Click="OnOpenLicenseClick">Activar licencia</Button>
+            </Grid>
+        </Border>
+
+        <Grid x:Name="SalesWorkspace" Grid.Row="2" Margin="14,12">
             <Grid.ColumnDefinitions><ColumnDefinition Width="132"/><ColumnDefinition Width="*"/><ColumnDefinition Width="310"/></Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0">
@@ -228,9 +238,9 @@
             </Border>
         </Grid>
 
-        <ContentControl x:Name="ModuleWorkspace" Grid.Row="1" Margin="14,12" Visibility="Collapsed" />
+        <ContentControl x:Name="ModuleWorkspace" Grid.Row="2" Margin="14,12" Visibility="Collapsed" />
 
-        <Border Grid.Row="2" Background="#17384E" Padding="14,0">
+        <Border Grid.Row="3" Background="#17384E" Padding="14,0">
             <DockPanel>
                 <StackPanel Orientation="Horizontal"><Ellipse Width="8" Height="8" Fill="#50D890" Margin="0,0,8,0"/><TextBlock x:Name="StatusText" Text="Listo." Foreground="White" VerticalAlignment="Center"/></StackPanel>
                 <TextBlock DockPanel.Dock="Right" x:Name="RegisterStatusText" Text="Caja: sin configurar" Foreground="#DDEAF2" VerticalAlignment="Center"/>

@@ -90,7 +90,7 @@
                 <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="3,0,20,0"/>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <Button Width="195" Click="OnTestClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="PrinterOutline" Width="19" Height="19" Margin="0,0,8,0"/><TextBlock Text="Imprimir ticket de prueba"/></StackPanel></Button>
-                    <Button Style="{StaticResource PrimaryButtonStyle}" Width="185" Click="OnSaveClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ContentSaveOutline" Width="19" Height="19" Margin="0,0,8,0"/><TextBlock Text="Guardar configuración"/></StackPanel></Button>
+                    <Button Style="{StaticResource ConfirmButtonStyle}" Width="185" Click="OnSaveClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ContentSaveOutline" Width="19" Height="19" Margin="0,0,8,0"/><TextBlock Text="Guardar configuración"/></StackPanel></Button>
                 </StackPanel>
             </Grid>
         </Border>

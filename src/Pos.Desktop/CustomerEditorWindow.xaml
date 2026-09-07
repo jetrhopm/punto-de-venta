@@ -27,8 +27,8 @@
         <DockPanel Grid.Row="2" Margin="0,24,0,0">
             <TextBlock Text="Esc: cancelar" VerticalAlignment="Center" Foreground="{StaticResource TextMutedBrush}"/>
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                <Button IsCancel="True" MinWidth="118" Margin="0,0,8,0">Cancelar</Button>
-                <Button x:Name="SaveButton" Style="{StaticResource PrimaryButtonStyle}" IsDefault="True" Click="OnSaveClick" MinWidth="142"><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><icons:PackIconMaterial Kind="ContentSaveOutline" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock x:Name="SaveButtonText" Text="Crear cliente"/></StackPanel></Button>
+                <Button Style="{StaticResource CancelButtonStyle}" IsCancel="True" MinWidth="118" Margin="0,0,8,0">Cancelar</Button>
+                <Button x:Name="SaveButton" Style="{StaticResource ConfirmButtonStyle}" IsDefault="True" Click="OnSaveClick" MinWidth="142"><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><icons:PackIconMaterial Kind="ContentSaveOutline" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock x:Name="SaveButtonText" Text="Crear cliente"/></StackPanel></Button>
             </StackPanel>
         </DockPanel>
     </Grid>
