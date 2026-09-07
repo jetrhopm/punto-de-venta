@@ -54,6 +54,10 @@ public partial class DiagnosticWindow : Window
             SalesText.Text = report.CompletedSaleCount.ToString("N0");
             BackupText.Text = report.LatestBackup ?? "Sin respaldo";
             CheckedText.Text = report.CheckedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm");
+            PrintQueueInfoText.Text = report.ResidualPrintDocumentCount == 0
+                ? "No hay documentos técnicos residuales. Los trabajos pendientes de impresión nunca se eliminan desde aquí."
+                : $"Hay {report.ResidualPrintDocumentCount:N0} documento(s) técnico(s) ya generado(s) o impreso(s). Limpiar sólo borra este historial; las ventas, tickets e inventario permanecen intactos.";
+            ClearTechnicalDocumentsButton.IsEnabled = report.ResidualPrintDocumentCount > 0;
             _reportText = BuildReportText(report, _checks);
             StatusText.Text = _checks.Any(item => item.Status == "Problema")
                 ? "Se encontraron problemas. Atiende primero las filas marcadas como Problema."
@@ -67,8 +71,46 @@ public partial class DiagnosticWindow : Window
             SalesText.Text = "-";
             BackupText.Text = "-";
             CheckedText.Text = DateTime.Now.ToString("dd/MM/yyyy HH:mm");
+            PrintQueueInfoText.Text = "No se pudo consultar la cola de impresión mientras JetVenta no responda.";
+            ClearTechnicalDocumentsButton.IsEnabled = false;
             _reportText = $"JETVENTA - DIAGNÓSTICO{Environment.NewLine}{exception.Message}";
             StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
+        }
+    }
+
+    private async void OnClearTechnicalDocumentsClick(object sender, RoutedEventArgs e)
+    {
+        var confirmation = MessageBox.Show(
+            "Se eliminará únicamente el historial técnico de documentos ya generados o impresos. No se eliminarán ventas, tickets, inventario ni trabajos pendientes de impresión.\n\n¿Deseas continuar?",
+            "Limpiar historial técnico", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (confirmation != MessageBoxResult.Yes) return;
+
+        ClearTechnicalDocumentsButton.IsEnabled = false;
+        StatusText.Text = "Limpiando el historial técnico de impresión...";
+        var cleaned = false;
+        try
+        {
+            using var response = await ApiClient.Client.DeleteAsync("api/diagnostics/technical-print-documents");
+            if (!response.IsSuccessStatusCode)
+            {
+                StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo limpiar el historial técnico de impresión.");
+                return;
+            }
+            var result = await response.Content.ReadFromJsonAsync<ClearTechnicalDocumentsResult>();
+            var message = result is null || result.DeletedCount == 0
+                ? "No había documentos técnicos por limpiar."
+                : $"Se limpiaron {result.DeletedCount:N0} documento(s) técnico(s). Las ventas y tickets no se modificaron.";
+            cleaned = true;
+            await RefreshAsync();
+            StatusText.Text = message;
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo limpiar el historial técnico de impresión");
+        }
+        finally
+        {
+            if (!cleaned) ClearTechnicalDocumentsButton.IsEnabled = true;
         }
     }
 
@@ -130,5 +172,6 @@ public partial class DiagnosticWindow : Window
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
     private sealed record DiagnosticCheck(string Name, string Status, string Detail, string Action);
-    private sealed record DiagnosticApiReport(DateTimeOffset CheckedAtUtc, string ApiVersion, List<DiagnosticCheck> Checks, int ProductCount, int UserCount, int CustomerCount, int SupplierCount, int CompletedSaleCount, int OpenTicketCount, int PendingPrintJobCount, int BackupCount, string? LatestBackup, string? LatestBackupSha256, long? FreeBytes);
+    private sealed record DiagnosticApiReport(DateTimeOffset CheckedAtUtc, string ApiVersion, List<DiagnosticCheck> Checks, int ProductCount, int UserCount, int CustomerCount, int SupplierCount, int CompletedSaleCount, int OpenTicketCount, int PendingPrintJobCount, int ResidualPrintDocumentCount, int BackupCount, string? LatestBackup, string? LatestBackupSha256, long? FreeBytes);
+    private sealed record ClearTechnicalDocumentsResult(int DeletedCount);
 }

@@ -211,6 +211,12 @@ app.MapGet("/api/diagnostics", async (HttpRequest request, SystemDiagnosticsServ
         return Results.Problem("No se pudo generar el diagnóstico. Revisa la conexión y vuelve a intentarlo.", statusCode: StatusCodes.Status503ServiceUnavailable);
     }
 });
+app.MapDelete("/api/diagnostics/technical-print-documents", async (HttpRequest request, SystemDiagnosticsService diagnostics, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    var result = await diagnostics.ClearTechnicalPrintDocumentsAsync(token, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
 
 app.MapGet("/api/lan/info", () => Results.Ok(new
 {

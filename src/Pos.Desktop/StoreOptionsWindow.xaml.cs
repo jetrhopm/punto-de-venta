@@ -53,8 +53,8 @@ public partial class StoreOptionsWindow : Window
         try
         {
             using var response = await ApiClient.Client.PutAsJsonAsync("/api/store-options", command);
-            if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
-            StatusText.Text = "Opciones guardadas correctamente.";
+            if (!response.IsSuccessStatusCode) { StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudieron guardar las opciones de la tienda."); return; }
+            ConfigurationFeedback.ShowSavedAndClose(this, "Opciones habilitadas", "Las opciones seleccionadas se aplicarán a las siguientes ventas y productos.");
         }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron guardar las opciones"); }
     }

@@ -66,9 +66,9 @@ public partial class TicketSettingsWindow : Window
                 address = AddressBox.Text,
                 phone = PhoneBox.Text
             });
-            if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
+            if (!response.IsSuccessStatusCode) { StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo guardar el diseño del ticket."); return; }
             ApiClient.SetPrinterTicketWidth(widthMm);
-            StatusText.Text = "Diseño del ticket guardado. Las próximas ventas usarán estos datos.";
+            ConfigurationFeedback.ShowSavedAndClose(this, "Diseño del ticket", "Las próximas ventas usarán los datos y el ancho configurados.");
         }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar"); }
     }

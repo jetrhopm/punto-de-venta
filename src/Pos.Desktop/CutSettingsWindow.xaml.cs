@@ -26,7 +26,16 @@ public partial class CutSettingsWindow : Window
     {
         if (!decimal.TryParse(CashLimitTextBox.Text, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out var limit) && !decimal.TryParse(CashLimitTextBox.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out limit)) { StatusText.Text = "Escribe un límite de efectivo válido."; return; }
         var command = new { requireCashCountOnClose = CountAndAdjustOption.IsChecked == true, autoAdjustCashDifference = AutoAdjustBox.IsChecked == true, cashLimitEnabled = CashLimitEnabledBox.IsChecked == true, cashLimit = limit, cashLimitMessage = CashLimitMessageTextBox.Text };
-        try { using var response = await ApiClient.Client.PutAsJsonAsync("api/cut-settings", command); StatusText.Text = response.IsSuccessStatusCode ? "Configuración de corte guardada correctamente." : await response.Content.ReadAsStringAsync(); }
+        try
+        {
+            using var response = await ApiClient.Client.PutAsJsonAsync("api/cut-settings", command);
+            if (!response.IsSuccessStatusCode)
+            {
+                StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo guardar la configuración de corte. Revisa los valores e inténtalo de nuevo.");
+                return;
+            }
+            ConfigurationFeedback.ShowSavedAndClose(this, "Corte de caja", "Las reglas se usarán en los próximos cierres de turno.");
+        }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar la configuración"); }
     }
     private sealed record CutSettings(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, decimal CashLimit, string CashLimitMessage);

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se publica la versión 2.3.7: corte y configuraciones muestran validaciones claras; Diagnóstico separa y limpia sólo historial técnico de impresión sin modificar ventas.
 - Se publica la versión 2.3.6: JetVenta mantiene visible el aviso de demostración en la ventana principal hasta activar una licencia. Se unifican botones de confirmar, cancelar, anterior y siguiente, y las autorizaciones temporales distinguen visualmente contraseña incorrecta, cuenta sin permiso y errores de conexión.
 - Se publica la versión 2.3.5: el total redondeado se muestra antes de cobrar y el ticket distingue subtotal, ajuste de redondeo y total final. Las partidas permiten editar cantidad, incluso decimales, y los artículos comunes tienen un flujo temporal independiente sin inventario.
 - Se publica la versión 2.3.4: el inicio de sesión y la autorización temporal muestran siempre los usuarios activos para elegirlos; ya no es necesario ni posible escribir el nombre de usuario. Sólo se captura la contraseña de la cuenta elegida.

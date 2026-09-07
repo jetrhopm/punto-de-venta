@@ -17,10 +17,13 @@ public sealed record DiagnosticReport(
     int CompletedSaleCount,
     int OpenTicketCount,
     int PendingPrintJobCount,
+    int ResidualPrintDocumentCount,
     int BackupCount,
     string? LatestBackup,
     string? LatestBackupSha256,
     long? FreeBytes);
+
+public sealed record ClearTechnicalPrintDocumentsResult(int DeletedCount);
 
 public sealed class SystemDiagnosticsService(PosDbContext database)
 {
@@ -36,11 +39,12 @@ public sealed class SystemDiagnosticsService(PosDbContext database)
         var completedSaleCount = 0;
         var openTicketCount = 0;
         var pendingPrintJobCount = 0;
+        var residualPrintDocumentCount = 0;
 
         if (!await database.Database.CanConnectAsync(cancellationToken))
         {
             checks.Add(new("Base de datos", "Problema", "PostgreSQL no acepta conexiones en este momento.", "Usa Reparar servicios desde la ventana de conexión."));
-            return await BuildReportAsync(checks, apiVersion, productCount, userCount, customerCount, supplierCount, completedSaleCount, openTicketCount, pendingPrintJobCount, cancellationToken);
+            return await BuildReportAsync(checks, apiVersion, productCount, userCount, customerCount, supplierCount, completedSaleCount, openTicketCount, pendingPrintJobCount, residualPrintDocumentCount, cancellationToken);
         }
 
         checks.Add(new("PostgreSQL", "Correcto", "La base de datos acepta conexiones.", ""));
@@ -64,6 +68,7 @@ public sealed class SystemDiagnosticsService(PosDbContext database)
             completedSaleCount = await database.Sales.CountAsync(item => item.Status == "Completed", cancellationToken);
             openTicketCount = await database.SaleDrafts.CountAsync(item => item.Status == "Open" && item.Lines.Any(), cancellationToken);
             pendingPrintJobCount = await database.PrintJobs.CountAsync(item => item.PrintRequested && (item.Status == "Pending" || item.Status == "Processing"), cancellationToken);
+            residualPrintDocumentCount = await database.PrintJobs.CountAsync(item => item.Status == "Generated" || item.Status == "Printed", cancellationToken);
 
             checks.Add(openTicketCount == 0
                 ? new("Tickets pendientes", "Correcto", "No hay tickets abiertos pendientes de recuperar.", "")
@@ -71,6 +76,9 @@ public sealed class SystemDiagnosticsService(PosDbContext database)
             checks.Add(pendingPrintJobCount == 0
                 ? new("Cola de impresión", "Correcto", "No hay trabajos de impresión pendientes.", "")
                 : new("Cola de impresión", "Aviso", $"Hay {pendingPrintJobCount} trabajo(s) pendiente(s).", "Revisa la impresora y reimprime solo si es necesario."));
+            checks.Add(residualPrintDocumentCount == 0
+                ? new("Documentos técnicos", "Correcto", "No hay historial técnico de impresión para limpiar.", "")
+                : new("Documentos técnicos", "Aviso", $"Hay {residualPrintDocumentCount} comprobante(s) ya generado(s) o impreso(s) en el historial técnico.", "Puedes limpiarlos desde Diagnóstico; no se eliminarán ventas, tickets ni inventario."));
         }
         catch (Exception)
         {
@@ -102,16 +110,26 @@ public sealed class SystemDiagnosticsService(PosDbContext database)
             completedSaleCount,
             openTicketCount,
             pendingPrintJobCount,
+            residualPrintDocumentCount,
             backup.Count,
             backup.FileName,
             backup.Sha256,
             freeBytes);
     }
 
-    private static async Task<DiagnosticReport> BuildReportAsync(List<DiagnosticCheckResult> checks, string apiVersion, int productCount, int userCount, int customerCount, int supplierCount, int completedSaleCount, int openTicketCount, int pendingPrintJobCount, CancellationToken cancellationToken)
+    public async Task<ClearTechnicalPrintDocumentsResult?> ClearTechnicalPrintDocumentsAsync(string token, CancellationToken cancellationToken)
+    {
+        if (!await AuthorizedAsync(token, cancellationToken)) return null;
+        var deleted = await database.PrintJobs
+            .Where(item => item.Status == "Generated" || item.Status == "Printed")
+            .ExecuteDeleteAsync(cancellationToken);
+        return new ClearTechnicalPrintDocumentsResult(deleted);
+    }
+
+    private static async Task<DiagnosticReport> BuildReportAsync(List<DiagnosticCheckResult> checks, string apiVersion, int productCount, int userCount, int customerCount, int supplierCount, int completedSaleCount, int openTicketCount, int pendingPrintJobCount, int residualPrintDocumentCount, CancellationToken cancellationToken)
     {
         var backup = await InspectLatestBackupAsync(cancellationToken);
-        return new DiagnosticReport(DateTimeOffset.UtcNow, apiVersion, checks, productCount, userCount, customerCount, supplierCount, completedSaleCount, openTicketCount, pendingPrintJobCount, backup.Count, backup.FileName, backup.Sha256, GetFreeBytes());
+        return new DiagnosticReport(DateTimeOffset.UtcNow, apiVersion, checks, productCount, userCount, customerCount, supplierCount, completedSaleCount, openTicketCount, pendingPrintJobCount, residualPrintDocumentCount, backup.Count, backup.FileName, backup.Sha256, GetFreeBytes());
     }
 
     private static async Task<(int Count, string? FileName, string? Sha256, bool Verified)> InspectLatestBackupAsync(CancellationToken cancellationToken)
