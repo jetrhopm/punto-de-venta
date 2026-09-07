@@ -15,24 +15,24 @@
                 <icons:PackIconMaterial Kind="ClockAlertOutline" Width="29" Height="29" Foreground="{StaticResource WarningBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <StackPanel Margin="12,0,0,0">
-                <TextBlock Text="Hay un turno abierto" FontSize="22" FontWeight="Bold" Foreground="{StaticResource TextBrush}"/>
-                <TextBlock Text="Elige cómo quieres terminar esta sesión." Foreground="{StaticResource TextMutedBrush}" Margin="0,4,0,0"/>
+                <TextBlock x:Name="HeadingText" Text="Hay un turno abierto" FontSize="22" FontWeight="Bold" Foreground="{StaticResource TextBrush}"/>
+                <TextBlock x:Name="DescriptionText" Text="Elige cómo quieres terminar esta sesión." Foreground="{StaticResource TextMutedBrush}" Margin="0,4,0,0"/>
             </StackPanel>
         </StackPanel>
         <StackPanel Grid.Row="1" Margin="0,20,0,0">
-            <Button Height="54" Margin="0,0,0,10" Style="{StaticResource SuccessButtonStyle}" Click="OnCloseShiftAndSignOutClick">
+            <Button x:Name="CloseShiftAndSignOutButton" Height="54" Margin="0,0,0,10" Style="{StaticResource SuccessButtonStyle}" Click="OnCloseShiftAndSignOutClick">
                 <StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ClipboardCheckOutline" Width="20" Height="20" Margin="0,0,8,0"/><TextBlock Text="Cerrar turno, realizar corte y volver al inicio de sesión"/></StackPanel>
             </Button>
-            <Button Height="54" Margin="0,0,0,10" Background="#D97706" Foreground="White" FontWeight="Bold" Click="OnCloseShiftAndExitClick" ToolTip="Cierra el turno, realiza el corte y cierra JetVenta por completo">
+            <Button x:Name="CloseShiftAndExitButton" Height="54" Margin="0,0,0,10" Background="#D97706" Foreground="White" FontWeight="Bold" Click="OnCloseShiftAndExitClick" ToolTip="Cierra el turno, realiza el corte y cierra JetVenta por completo">
                 <StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="LogoutVariant" Width="20" Height="20" Margin="0,0,8,0"/><TextBlock Text="Cerrar turno, realizar corte y salir de JetVenta"/></StackPanel>
             </Button>
-            <Button Height="54" Margin="0,0,0,10" Click="OnLeaveOpenAndExitClick">
+            <Button x:Name="LeaveOpenAndExitButton" Height="54" Margin="0,0,0,10" Click="OnLeaveOpenAndExitClick">
                 <StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="LogoutVariant" Width="20" Height="20" Margin="0,0,8,0"/><TextBlock Text="Dejar turno abierto y salir de JetVenta"/></StackPanel>
             </Button>
             <Button Height="54" Click="OnCancelClick">
                 <StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="CloseCircleOutline" Width="20" Height="20" Margin="0,0,8,0"/><TextBlock Text="Cancelar"/></StackPanel>
             </Button>
         </StackPanel>
-        <TextBlock Grid.Row="2" Text="Volver al inicio de sesión conserva JetVenta abierto, pero cierra por completo la sesión actual. Dejar el turno abierto no realiza corte." Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+        <TextBlock x:Name="FooterText" Grid.Row="2" Text="Volver al inicio de sesión conserva JetVenta abierto, pero cierra por completo la sesión actual. Dejar el turno abierto no realiza corte." Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
     </Grid>
 </Window>

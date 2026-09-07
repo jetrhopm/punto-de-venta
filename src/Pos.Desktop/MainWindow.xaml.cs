@@ -32,12 +32,16 @@ public partial class MainWindow : Window
     private decimal _displayedSaleTotal;
     private string? _salesBlockedReason;
     private TemporaryPermissionLease? _modulePermissionLease;
+    private bool _salesInitializationComplete;
+    private bool _salesInitializationInProgress;
     public MainWindow()
     {
         InitializeComponent();
         CashierNameText.Text = string.IsNullOrWhiteSpace(SessionContext.DisplayName) ? "Usuario" : SessionContext.DisplayName.Trim();
         TicketTabs.ItemsSource = _tickets;
         CartList.ItemsSource = _emptyCart;
+        // No se permiten acciones de venta hasta recuperar o crear el ticket del turno.
+        SalesWorkspace.IsEnabled = false;
         Loaded += (_, _) => ApplyNavigationPermissions();
         Closing += OnClosing;
         PreviewTextInput += OnPreviewTextInput;
@@ -53,6 +57,8 @@ public partial class MainWindow : Window
     {
         ApiClient.ApplySession(SessionContext.AccessToken);
         BarcodeScannerService.StartConfiguredProfile();
+        _salesInitializationInProgress = true;
+        _salesInitializationComplete = false;
         try
         {
             using var response = await Client.GetAsync("/api/setup/status");
@@ -65,8 +71,8 @@ public partial class MainWindow : Window
                 StoreNameText.Text = storeName;
                 RegisterStatusText.Text = "Caja: configuracion inicial completada";
                 StatusText.Text = "API y base de datos locales conectadas.";
-                await EnsureShiftOpenAfterLoginAsync();
-                FocusProductInput();
+                _salesInitializationComplete = await EnsureShiftOpenAfterLoginAsync();
+                if (_salesInitializationComplete) FocusProductInput();
             }
             else
             {
@@ -78,6 +84,10 @@ public partial class MainWindow : Window
         {
             StoreNameText.Text = "API local no disponible";
             StatusText.Text = ConnectionHelp.ApiUnavailable;
+        }
+        finally
+        {
+            _salesInitializationInProgress = false;
         }
     }
 
@@ -1073,17 +1083,35 @@ public partial class MainWindow : Window
 
     private async void OnNewTicketClick(object sender, RoutedEventArgs e)
     {
-        var readiness = await EnsureShiftForNewTicketAsync();
-        if (!readiness.Ready || readiness.OpenedNow) return;
+        if (_salesInitializationInProgress || !_salesInitializationComplete)
+        {
+            StatusText.Text = "La caja se está preparando. Espera a que se recupere o cree el ticket inicial.";
+            return;
+        }
+
+        if (_activeTicket is null)
+        {
+            _salesInitializationComplete = await LoadSaleDraftsAsync();
+            return;
+        }
+
         await CreateNewTicketAsync();
     }
 
-    private async Task LoadSaleDraftsAsync()
+    private async Task<bool> LoadSaleDraftsAsync()
     {
         try
         {
-            var drafts = await Client.GetFromJsonAsync<List<SaleDraftResponse>>("/api/sale-drafts") ?? [];
+            using var response = await Client.GetAsync("/api/sale-drafts");
+            if (!response.IsSuccessStatusCode)
+            {
+                await HandleTicketAccessFailureAsync(response);
+                return false;
+            }
+
+            var drafts = await response.Content.ReadFromJsonAsync<List<SaleDraftResponse>>() ?? [];
             _tickets.Clear();
+            _activeTicket = null;
             foreach (var draft in drafts)
             {
                 _tickets.Add(ToTicket(draft));
@@ -1091,8 +1119,7 @@ public partial class MainWindow : Window
 
             if (_tickets.Count == 0)
             {
-                await CreateNewTicketAsync();
-                return;
+                return await CreateNewTicketAsync(saveCurrentTicket: false);
             }
 
             TicketTabs.SelectedIndex = 0;
@@ -1100,23 +1127,25 @@ public partial class MainWindow : Window
             StatusText.Text = _tickets.Count == 1
                 ? "Ticket en atención recuperado."
                 : $"{_tickets.Count} tickets en atención recuperados.";
+            return true;
         }
         catch (HttpRequestException)
         {
             StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
+            return false;
         }
     }
 
-    private async Task CreateNewTicketAsync(bool saveCurrentTicket = true)
+    private async Task<bool> CreateNewTicketAsync(bool saveCurrentTicket = true)
     {
-        if (!EnsureSalesAvailable()) return;
+        if (!EnsureSalesAvailable()) return false;
         if (saveCurrentTicket
             && _activeTicket is { Lines.Count: > 0 } activeTicket
             && _tickets.Contains(activeTicket)
             && !await PersistActiveTicketAsync())
         {
             StatusText.Text = "No se pudo guardar el ticket actual. Revisa la conexión antes de abrir otro.";
-            return;
+            return false;
         }
 
         try
@@ -1125,14 +1154,14 @@ public partial class MainWindow : Window
             if (!response.IsSuccessStatusCode)
             {
                 await HandleTicketAccessFailureAsync(response);
-                return;
+                return false;
             }
 
             var draft = await response.Content.ReadFromJsonAsync<SaleDraftResponse>();
             if (draft is null)
             {
                 StatusText.Text = "El servidor no devolvió el nuevo ticket.";
-                return;
+                return false;
             }
 
             var ticket = ToTicket(draft);
@@ -1140,10 +1169,12 @@ public partial class MainWindow : Window
             TicketTabs.SelectedItem = ticket;
             ActivateTicket(ticket);
             StatusText.Text = $"{ticket.Title} listo para atender.";
+            return true;
         }
         catch (HttpRequestException)
         {
             StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
+            return false;
         }
     }
 
@@ -1427,7 +1458,7 @@ public partial class MainWindow : Window
         await RequestExitAsync();
     }
 
-    private async Task EnsureShiftOpenAfterLoginAsync()
+    private async Task<bool> EnsureShiftOpenAfterLoginAsync()
     {
         var currentShift = await GetCurrentShiftAsync();
         if (currentShift is not null)
@@ -1437,8 +1468,7 @@ public partial class MainWindow : Window
             window.ShowAlreadyOpen(currentShift.InitialCash, currentShift.OpenedAtUtc);
             window.ShowDialog();
             StatusText.Text = "Caja abierta. Puedes continuar vendiendo.";
-            await LoadSaleDraftsAsync();
-            return;
+            return await LoadSaleDraftsAsync();
         }
 
         var register = await GetActiveRegisterAsync();
@@ -1447,16 +1477,17 @@ public partial class MainWindow : Window
             _salesBlockedReason = "No hay una caja activa configurada. Pide a un administrador revisar Configuración > Datos de la tienda.";
             SalesWorkspace.IsEnabled = false;
             StatusText.Text = _salesBlockedReason;
-            return;
+            return false;
         }
         if (!string.IsNullOrWhiteSpace(register.OpenShiftUserName))
         {
             BlockSalesForOtherUser(register);
-            return;
+            return false;
         }
 
         StatusText.Text = "No hay turno abierto. Captura el fondo inicial para empezar.";
-        if (await OpenShiftFromDialogAsync()) await LoadSaleDraftsAsync();
+        if (!await OpenShiftFromDialogAsync()) return false;
+        return await LoadSaleDraftsAsync();
     }
 
     private async Task<bool?> HasOpenShiftAsync()
@@ -1512,7 +1543,7 @@ public partial class MainWindow : Window
 
     private void BlockSalesWithoutOpenShift()
     {
-        _salesBlockedReason = "No hay un turno abierto. Para vender, abre la caja con el fondo inicial. Pulsa F6 o Nuevo ticket para abrir turno.";
+        _salesBlockedReason = "No hay un turno abierto. Para vender, abre la caja con el fondo inicial desde el inicio de sesión.";
         SalesWorkspace.IsEnabled = true;
         StatusText.Text = _salesBlockedReason;
     }
@@ -1531,35 +1562,6 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(_salesBlockedReason)) return true;
         StatusText.Text = _salesBlockedReason;
         return false;
-    }
-
-    private async Task<(bool Ready, bool OpenedNow)> EnsureShiftForNewTicketAsync()
-    {
-        var currentShift = await GetCurrentShiftAsync();
-        if (currentShift is not null)
-        {
-            EnableSales();
-            return (true, false);
-        }
-
-        var register = await GetActiveRegisterAsync();
-        if (register is null)
-        {
-            _salesBlockedReason = "No hay una caja activa configurada. Pide a un administrador revisar Configuración > Datos de la tienda.";
-            SalesWorkspace.IsEnabled = false;
-            StatusText.Text = _salesBlockedReason;
-            return (false, false);
-        }
-        if (!string.IsNullOrWhiteSpace(register.OpenShiftUserName))
-        {
-            BlockSalesForOtherUser(register);
-            return (false, false);
-        }
-
-        BlockSalesWithoutOpenShift();
-        if (!await OpenShiftFromDialogAsync()) return (false, false);
-        await LoadSaleDraftsAsync();
-        return (_activeTicket is not null, true);
     }
 
     private async Task HandleTicketAccessFailureAsync(HttpResponseMessage response)
@@ -1625,6 +1627,16 @@ public partial class MainWindow : Window
                         CompleteSignOut();
                         return;
                     }
+                }
+            }
+            else
+            {
+                var register = await GetActiveRegisterAsync();
+                if (!string.IsNullOrWhiteSpace(register?.OpenShiftUserName))
+                {
+                    var decisionWindow = new ExitShiftWindow { Owner = this };
+                    decisionWindow.ConfigureForOtherUser(register.Name, register.OpenShiftUserName!);
+                    if (decisionWindow.ShowDialog() != true || decisionWindow.Decision != ExitShiftDecision.LeaveOpenAndExit) return;
                 }
             }
             await EndSessionAsync();

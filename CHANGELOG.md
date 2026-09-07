@@ -1,9 +1,7 @@
 # Changelog
 
 ## Sin liberar
-- Se prepara la versión 2.6.4: la creación, recuperación y guardado de tickets distinguen sesión vencida, permiso de ventas y turno cerrado. Un administrador no necesita una asignación adicional para vender; cuando no hay turno, F6/Nuevo ticket vuelve a solicitar el fondo inicial en vez de dejar Ventas bloqueado con un error de permisos.
-- Se prepara la versión 2.6.3: cuando no hay turno abierto, F6/Nuevo ticket pide el fondo inicial para abrir caja antes de crear el ticket; ya no deja la venta en una pantalla sin ticket ni turno.
-- Se prepara la versión 2.6.2: se restablece el flujo de salida con tres decisiones: cerrar turno y volver al login, cerrar turno y salir, o dejar turno abierto y salir. Así no se cambia de cajero accidentalmente frente a una caja abierta.
+- Se prepara la versión 2.6.3: el inicio de ventas ahora espera a recuperar o crear el ticket inicial antes de habilitar F6 y el registro de productos. F6 ya no solicita un fondo inicial ni intenta abrir caja. Cuando otro usuario dejó abierta la única caja, la salida muestra una decisión explícita para salir sin alterar su turno, en vez de cerrar JetVenta de inmediato.
 - Se prepara la versión 2.6.1: se reforzó el relevo de ventanas para que la opción explícita de volver al login no termine JetVenta al cerrar la ventana principal.
 - Se prepara la versión 2.6.0: se completa el bloque de catálogo, inventario, mayoreo, baja lógica y atajos de venta posterior a las pruebas de usuario.
 - Se prepara la versión 2.5.6: Venta solicita cantidad antes de agregar productos a granel, muestra su unidad en cada partida y permite corregir la cantidad con Enter o doble clic sin perder el ticket.

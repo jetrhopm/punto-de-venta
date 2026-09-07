@@ -19,6 +19,16 @@ public partial class ExitShiftWindow : Window
         InitializeComponent();
     }
 
+    public void ConfigureForOtherUser(string registerName, string userName)
+    {
+        HeadingText.Text = "La caja está abierta por otro usuario";
+        DescriptionText.Text = $"{userName} mantiene abierta la caja {registerName}.";
+        CloseShiftAndSignOutButton.Visibility = Visibility.Collapsed;
+        CloseShiftAndExitButton.Visibility = Visibility.Collapsed;
+        LeaveOpenAndExitButton.Content = "Salir sin modificar el turno de caja";
+        FooterText.Text = "Solo el usuario que abrió el turno puede continuar ventas o realizar el corte. Puedes salir sin alterar el efectivo.";
+    }
+
     private void OnCloseShiftAndExitClick(object sender, RoutedEventArgs e)
     {
         Decision = ExitShiftDecision.CloseShiftAndExit;
