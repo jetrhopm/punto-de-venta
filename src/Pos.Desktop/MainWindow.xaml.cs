@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private Guid? _lastSaleId;
     private readonly ObservableCollection<TicketTabView> _tickets = [];
     private readonly ObservableCollection<CartLineView> _emptyCart = [];
+    private readonly HashSet<Guid> _commonProductIdsFromMissingFlow = [];
     private readonly SemaphoreSlim _draftSaveLock = new(1, 1);
     private TicketTabView? _activeTicket;
     private bool _discardInProgress;
@@ -762,6 +763,8 @@ public partial class MainWindow : Window
             if (product is null) throw new InvalidOperationException("El servidor no devolvió el artículo temporal.");
             if (addDirectlyToTicket)
             {
+                product = product with { IsCommonProduct = true };
+                _commonProductIdsFromMissingFlow.Add(product.Id);
                 await AddTemporaryProductToCartAsync(product, quantity);
             }
             else
@@ -844,7 +847,11 @@ public partial class MainWindow : Window
         }
 
         var quantity = requestedQuantity ?? 1m;
-        if (!skipBulkQuantityPrompt && !product.IsCommonProduct && requestedQuantity is null && IsBulkUnit(product.UnitOfMeasure))
+        if (!skipBulkQuantityPrompt &&
+            !product.IsCommonProduct &&
+            !_commonProductIdsFromMissingFlow.Contains(product.Id) &&
+            requestedQuantity is null &&
+            IsBulkUnit(product.UnitOfMeasure))
         {
             var window = new SaleQuantityWindow(product.Description, product.UnitOfMeasure, 1m) { Owner = this };
             if (window.ShowDialog() != true || window.Quantity is null) { FocusProductInput(); return; }
