@@ -2,7 +2,11 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Reflection;
+using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using MahApps.Metro.IconPacks;
@@ -20,14 +24,18 @@ public partial class LoginWindow : Window
     private static readonly Brush ErrorStatusBorder = new SolidColorBrush(Color.FromRgb(232, 187, 183));
     private static HttpClient Client => ApiClient.Client;
     private bool _isBusy;
+    private bool _applyingUserSelection;
+    private bool _openLicenseAfterLogin;
     private string? _licenseReminder;
     private List<LoginUserOption> _users = [];
+    private ICollectionView? _userView;
 
     public LoginWindow()
     {
         InitializeComponent();
         ServerText.Text = $"Conexión: {ApiClient.BaseUrl}";
         VersionText.Text = $"Versión {GetApplicationVersion()}";
+        UserComboBox.AddHandler(TextBoxBase.TextChangedEvent, new TextChangedEventHandler(OnUserTextChanged));
         Loaded += OnLoaded;
         Activated += (_, _) => UpdateCapsLockWarning();
     }
@@ -50,6 +58,7 @@ public partial class LoginWindow : Window
         if (configured)
         {
             await LoadActiveUsersAsync();
+            await LoadStartupLicenseStatusAsync();
             SetStatus("JetVenta está listo. Elige tu usuario e ingresa tu contraseña.", StatusKind.Success);
             if (UserComboBox.SelectedItem is null) UserComboBox.Focus();
             else PasswordBox.Focus();
@@ -60,8 +69,34 @@ public partial class LoginWindow : Window
 
     private void OnUserSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        if (UserComboBox.SelectedItem is not LoginUserOption selectedUser) return;
-        UserComboBox.Text = selectedUser.UserName.ToLowerInvariant();
+        ApplySelectedUser();
+    }
+
+    private void OnUserDropDownClosed(object sender, EventArgs e) => ApplySelectedUser();
+
+    private void OnUserTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_applyingUserSelection) return;
+        _userView?.Refresh();
+        if (UserComboBox.IsKeyboardFocusWithin && _userView?.Cast<object>().Any() == true)
+        {
+            UserComboBox.IsDropDownOpen = true;
+        }
+    }
+
+    private void ApplySelectedUser()
+    {
+        if (_applyingUserSelection || UserComboBox.SelectedItem is not LoginUserOption selectedUser) return;
+        _applyingUserSelection = true;
+        try
+        {
+            UserComboBox.Text = selectedUser.UserName;
+            UserComboBox.IsDropDownOpen = false;
+        }
+        finally
+        {
+            _applyingUserSelection = false;
+        }
         PasswordBox.Focus();
     }
 
@@ -70,13 +105,50 @@ public partial class LoginWindow : Window
         try
         {
             _users = await Client.GetFromJsonAsync<List<LoginUserOption>>("api/auth/active-users") ?? [];
-            UserComboBox.ItemsSource = _users;
+            _userView = CollectionViewSource.GetDefaultView(_users);
+            _userView.Filter = item => item is LoginUserOption user &&
+                (string.IsNullOrWhiteSpace(UserComboBox.Text) ||
+                 user.UserName.Contains(UserComboBox.Text.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                 user.DisplayName.Contains(UserComboBox.Text.Trim(), StringComparison.OrdinalIgnoreCase));
+            UserComboBox.ItemsSource = _userView;
             UserComboBox.SelectedItem = _users.FirstOrDefault();
+            ApplySelectedUser();
         }
         catch (HttpRequestException)
         {
             _users = [];
             SetStatus(UnavailableMessage, StatusKind.Error);
+        }
+    }
+
+    private async Task LoadStartupLicenseStatusAsync()
+    {
+        try
+        {
+            var status = await Client.GetFromJsonAsync<LicenseStartupStatus>("api/license/startup-status");
+            if (status is null) return;
+
+            var trial = string.Equals(status.State, "trial", StringComparison.OrdinalIgnoreCase);
+            if (status.IsActive && !trial)
+            {
+                LicenseReminderBorder.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            LicenseReminderBorder.Visibility = Visibility.Visible;
+            LicenseReminderText.Text = trial
+                ? status.Message
+                : $"{status.Message} Inicia sesión con una cuenta autorizada para cargar una licencia.jv.";
+            LicenseReminderBorder.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(trial ? "#FFF7E2" : "#FDEBEA"));
+            LicenseReminderBorder.BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(trial ? "#E9C770" : "#E8BBB7"));
+            LicenseReminderIcon.Kind = trial ? PackIconMaterialKind.ClockAlertOutline : PackIconMaterialKind.License;
+            LicenseReminderIcon.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(trial ? "#A96300" : "#B42318"));
+            ActivateLicenseButton.Content = trial ? "Activar licencia" : "Activar ahora";
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            // La comprobación normal de inicio ya informa la falta de API.
+            LicenseReminderBorder.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -94,6 +166,25 @@ public partial class LoginWindow : Window
     }
 
     private void OnPairClick(object sender, RoutedEventArgs e) => new JoinServerWindow { Owner = this }.ShowDialog();
+
+    private void OnActivateLicenseClick(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(UserComboBox.Text))
+        {
+            SetStatus("Selecciona un usuario autorizado para activar la licencia.", StatusKind.Information);
+            UserComboBox.Focus();
+            return;
+        }
+        if (string.IsNullOrEmpty(PasswordBox.Password))
+        {
+            SetStatus("Escribe la contraseña del usuario autorizado para abrir la activación.", StatusKind.Information);
+            PasswordBox.Focus();
+            return;
+        }
+
+        _openLicenseAfterLogin = true;
+        OnLoginClick(sender, e);
+    }
 
     private async void OnLoginClick(object sender, RoutedEventArgs e)
     {
@@ -187,18 +278,16 @@ public partial class LoginWindow : Window
         try
         {
             var status = await Client.GetFromJsonAsync<LicenseStatus>("api/license/status");
-            if (status?.IsActive == true)
+            if (status?.IsActive != true || _openLicenseAfterLogin)
             {
-                _licenseReminder = string.Equals(status.State, "trial", StringComparison.OrdinalIgnoreCase) ? status.Message : null;
-                return true;
+                var license = new LicenseWindow { Owner = this };
+                license.ShowDialog();
+                status = await Client.GetFromJsonAsync<LicenseStatus>("api/license/status");
             }
-
-            var license = new LicenseWindow { Owner = this };
-            license.ShowDialog();
-            status = await Client.GetFromJsonAsync<LicenseStatus>("api/license/status");
             if (status?.IsActive == true)
             {
                 _licenseReminder = string.Equals(status.State, "trial", StringComparison.OrdinalIgnoreCase) ? status.Message : null;
+                _openLicenseAfterLogin = false;
                 return true;
             }
 
@@ -325,6 +414,7 @@ public partial class LoginWindow : Window
     {
         public string DisplayText => $"{DisplayName} ({UserName.ToLowerInvariant()})";
     }
+    private sealed record LicenseStartupStatus(bool IsActive, string State, string Message, DateTimeOffset? ExpiresAtUtc);
     private sealed record LicenseStatus(bool IsActive, string State, string Message, string MachineFingerprint, string RequestCode, string? LicenseId, DateTimeOffset? ExpiresAtUtc, string? StoreName);
     private sealed record LoginResponse(Guid SessionId, string AccessToken, Guid UserId, string DisplayName, bool IsAdministrator, DateTimeOffset ExpiresAtUtc, List<string> Permissions);
 }

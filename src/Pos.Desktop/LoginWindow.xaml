@@ -101,6 +101,7 @@
                               StaysOpenOnEdit="True"
                               DisplayMemberPath="DisplayText"
                               SelectionChanged="OnUserSelectionChanged"
+                              DropDownClosed="OnUserDropDownClosed"
                               automation:AutomationProperties.Name="Usuario"
                               ToolTip="Elige un usuario o escribe su nombre"/>
                 </Grid>
@@ -171,6 +172,28 @@
                                      IsIndeterminate="True"
                                      Foreground="{StaticResource PrimaryBrush}"/>
                     </StackPanel>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="5" x:Name="LicenseReminderBorder"
+                    Margin="0,12,0,0" Padding="12,10"
+                    Background="#FFF7E2" BorderBrush="#E9C770" BorderThickness="1" CornerRadius="5"
+                    Visibility="Collapsed">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <icons:PackIconMaterial x:Name="LicenseReminderIcon"
+                                            Kind="ClockAlertOutline" Width="20" Height="20"
+                                            Margin="0,1,10,0" Foreground="#A96300"/>
+                    <TextBlock Grid.Column="1" x:Name="LicenseReminderText"
+                               FontSize="12" Foreground="#5C4A14" TextWrapping="Wrap"
+                               VerticalAlignment="Center"/>
+                    <Button Grid.Column="2" x:Name="ActivateLicenseButton"
+                            Margin="12,0,0,0" Padding="12,6" MinHeight="32"
+                            Click="OnActivateLicenseClick">Activar licencia</Button>
                 </Grid>
             </Border>
 

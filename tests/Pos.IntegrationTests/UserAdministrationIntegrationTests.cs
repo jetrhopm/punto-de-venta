@@ -69,6 +69,20 @@ public sealed class UserAdministrationIntegrationTests
         try
         {
             var authentication = new AuthenticationService(database, hasher);
+            var invalidCredentials = await authentication.GrantTemporaryPermissionDetailedAsync(
+                actorToken,
+                new TemporaryPermissionAuthorizationCommand(administrator.NormalizedUserName, "clave-incorrecta", "CloseShift"),
+                CancellationToken.None);
+            Assert.Null(invalidCredentials.Authorization);
+            Assert.Equal("invalid_credentials", invalidCredentials.FailureCode);
+
+            var missingPermission = await authentication.GrantTemporaryPermissionDetailedAsync(
+                actorToken,
+                new TemporaryPermissionAuthorizationCommand(cashier.NormalizedUserName, "clave-cajero", "CloseShift"),
+                CancellationToken.None);
+            Assert.Null(missingPermission.Authorization);
+            Assert.Equal("permission_missing", missingPermission.FailureCode);
+
             var grant = await authentication.GrantTemporaryPermissionAsync(actorToken, new TemporaryPermissionAuthorizationCommand(administrator.NormalizedUserName, "clave-admin", "CloseShift"), CancellationToken.None);
 
             Assert.NotNull(grant);

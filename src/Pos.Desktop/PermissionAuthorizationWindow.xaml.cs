@@ -30,7 +30,7 @@ public partial class PermissionAuthorizationWindow : Window
         }
         catch (Exception exception)
         {
-            StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron consultar los usuarios activos");
+            ShowStatus(ConnectionHelp.FromException(exception, "No se pudieron consultar los usuarios activos"));
         }
     }
 
@@ -48,12 +48,12 @@ public partial class PermissionAuthorizationWindow : Window
     {
         if (UserComboBox.SelectedItem is not ActiveUser user)
         {
-            StatusText.Text = "Selecciona el usuario que autoriza esta acción.";
+            ShowStatus("Selecciona el usuario que autoriza esta acción.");
             return;
         }
         if (string.IsNullOrEmpty(PasswordBox.Password))
         {
-            StatusText.Text = "Escribe la contraseña del usuario que autoriza.";
+            ShowStatus("Escribe la contraseña del usuario que autoriza.");
             PasswordBox.Focus();
             return;
         }
@@ -63,9 +63,18 @@ public partial class PermissionAuthorizationWindow : Window
             using var response = await ApiClient.Client.PostAsJsonAsync("api/auth/temporary-permission", new { userName = user.UserName, password = PasswordBox.Password, permission = _permission });
             if (!response.IsSuccessStatusCode)
             {
-                StatusText.Text = "La cuenta o contraseña no son válidas, o esa cuenta no tiene el permiso requerido.";
-                PasswordBox.SelectAll();
-                PasswordBox.Focus();
+                var failure = await response.Content.ReadFromJsonAsync<AuthorizationFailure>();
+                var message = failure?.Message ?? "No se pudo validar la autorización solicitada.";
+                ShowStatus(message, string.Equals(failure?.Code, "permission_missing", StringComparison.OrdinalIgnoreCase));
+                if (string.Equals(failure?.Code, "permission_missing", StringComparison.OrdinalIgnoreCase))
+                {
+                    UserComboBox.Focus();
+                }
+                else
+                {
+                    PasswordBox.SelectAll();
+                    PasswordBox.Focus();
+                }
                 return;
             }
 
@@ -75,8 +84,19 @@ public partial class PermissionAuthorizationWindow : Window
         }
         catch (Exception exception)
         {
-            StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo validar la autorización");
+            ShowStatus(ConnectionHelp.FromException(exception, "No se pudo validar la autorización"));
         }
+    }
+
+    private void ShowStatus(string message, bool warning = false)
+    {
+        StatusBorder.Visibility = Visibility.Visible;
+        StatusBorder.Background = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(warning ? "#FFF7E2" : "#FDEBEA"));
+        StatusBorder.BorderBrush = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(warning ? "#E9C770" : "#E8BBB7"));
+        StatusIcon.Kind = warning ? MahApps.Metro.IconPacks.PackIconMaterialKind.AlertOutline : MahApps.Metro.IconPacks.PackIconMaterialKind.AlertCircleOutline;
+        StatusIcon.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(warning ? "#A96300" : "#B42318"));
+        StatusText.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(warning ? "#6B5200" : "#8D2E27"));
+        StatusText.Text = message;
     }
 
     private void OnCancelClick(object sender, RoutedEventArgs e) => DialogResult = false;
@@ -88,4 +108,5 @@ public partial class PermissionAuthorizationWindow : Window
     }
 
     public sealed record TemporaryAuthorizationResponse(Guid? GrantId, DateTimeOffset ExpiresAtUtc, string AuthorizedBy);
+    private sealed record AuthorizationFailure(string? Code, string? Message);
 }

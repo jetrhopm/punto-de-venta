@@ -60,6 +60,7 @@ public partial class StartupWindow : Window
 
         try
         {
+            var recoveredServices = false;
             SetStatus("Revisando datos de la tienda...", 10, "Revisando", "Pendiente", "Pendiente");
             var available = await CheckApiAsync();
 
@@ -68,6 +69,7 @@ public partial class StartupWindow : Window
                 SetStatus(IsLocalApi() ? "JetVenta esta intentando iniciar sus servicios locales..." : "JetVenta esta intentando conectar con el servidor configurado...", 25, "Preparando", "Recuperando", "Pendiente");
                 await TryStartLocalServicesAsync(forceRepair);
                 available = await WaitForApiAsync();
+                recoveredServices = available;
             }
 
             if (!available)
@@ -84,6 +86,7 @@ public partial class StartupWindow : Window
                 SetStatus("La base de datos no responde. JetVenta intentara recuperar sus servicios...", 78, "Revisando", "Recuperando", "Pendiente");
                 await TryStartLocalServicesAsync(forceRepair);
                 available = await WaitForApiAsync();
+                recoveredServices = recoveredServices || available;
                 setup = available ? await ReadSetupStatusAsync() : null;
                 if (setup is null)
                 {
@@ -94,6 +97,12 @@ public partial class StartupWindow : Window
             }
             if (!string.IsNullOrWhiteSpace(setup?.StoreName)) StoreNameText.Text = setup.StoreName;
             StoreStatusText.Text = setup?.Configured == true ? "Lista" : "Por configurar";
+
+            if (recoveredServices)
+            {
+                SetStatus("Los servicios de JetVenta volvieron a responder. Continuando con el inicio...", 92, "Listo", "Recuperado", StoreStatusText.Text);
+                await Task.Delay(650);
+            }
 
             SetStatus("Todo listo. Abriendo inicio de sesion...", 100, "Listo", "Listo", StoreStatusText.Text);
             await Task.Delay(450);

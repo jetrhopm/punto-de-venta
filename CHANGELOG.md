@@ -1,6 +1,10 @@
 # Changelog
 
 ## Sin liberar
+- Se publica la versión 2.3.3: el inicio de sesión muestra el estado de la demo antes de entrar, permite abrir la activación con credenciales válidas y conserva el aviso de demo al abrir ventas.
+- El selector de usuario ahora aplica la cuenta elegida de forma explícita y filtra las cuentas activas mientras se escribe.
+- Las autorizaciones temporales distinguen una contraseña incorrecta, una sesión vencida y una cuenta sin el permiso requerido.
+- Al recuperar una API local durante el arranque, JetVenta confirma visualmente que los servicios volvieron a responder.
 - Se prepara la versión 2.3.2: F10 abre una sola búsqueda de productos por vez; el resultado se puede recorrer con flechas y agregar a la venta con Enter o doble clic.
 - Se prepara la versión 2.3.1: la configuración inicial permite personalizar tienda, giro, administrador, contraseña, caja, moneda y unidad desde la primera instalación; los giros con acentos ya no son rechazados por la API y cualquier validación se muestra de forma clara.
 - El periodo de prueba comercial cambia de 30 minutos a 30 días y mantiene la detección de retrocesos del reloj.

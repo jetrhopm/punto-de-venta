@@ -28,6 +28,7 @@ public partial class MainWindow : Window
     private bool _exitDialogOpen;
     private bool _openingProductLookup;
     private TemporaryPermissionLease? _modulePermissionLease;
+    private string? _licenseReminder;
     public MainWindow()
     {
         InitializeComponent();
@@ -42,6 +43,7 @@ public partial class MainWindow : Window
 
     public void ShowLicenseReminder(string message)
     {
+        _licenseReminder = message;
         StatusText.Text = message;
     }
 
@@ -60,7 +62,7 @@ public partial class MainWindow : Window
                 var storeName = document.RootElement.GetProperty("storeName").GetString();
                 StoreNameText.Text = storeName;
                 RegisterStatusText.Text = "Caja: configuracion inicial completada";
-                StatusText.Text = "API y base de datos locales conectadas.";
+                StatusText.Text = _licenseReminder ?? "API y base de datos locales conectadas.";
                 await EnsureShiftOpenAfterLoginAsync();
                 FocusProductInput();
             }

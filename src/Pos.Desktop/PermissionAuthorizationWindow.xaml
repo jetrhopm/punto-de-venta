@@ -38,7 +38,15 @@
             <TextBlock Text="Contraseña" FontWeight="SemiBold" Margin="0,0,0,6"/>
             <PasswordBox x:Name="PasswordBox" Height="36" Padding="10,6"/>
         </StackPanel>
-        <TextBlock x:Name="StatusText" Grid.Row="4" Margin="0,12,0,0" Foreground="#B42318" TextWrapping="Wrap"/>
+        <Border x:Name="StatusBorder" Grid.Row="4" Margin="0,12,0,0" Padding="11,9"
+                Background="#FDEBEA" BorderBrush="#E8BBB7" BorderThickness="1" CornerRadius="4"
+                Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal">
+                <icons:PackIconMaterial x:Name="StatusIcon" Kind="AlertCircleOutline" Width="19" Height="19"
+                                        Margin="0,1,9,0" Foreground="#B42318"/>
+                <TextBlock x:Name="StatusText" Foreground="#8D2E27" TextWrapping="Wrap" VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
         <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Width="120" Height="38" Margin="0,0,8,0" IsCancel="True" Click="OnCancelClick">Cancelar (Esc)</Button>
             <Button Width="190" Height="38" Style="{StaticResource PrimaryButtonStyle}" IsDefault="True" Click="OnAuthorizeClick">Autorizar temporalmente</Button>

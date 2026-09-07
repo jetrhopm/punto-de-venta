@@ -20,6 +20,12 @@ public sealed record LicenseStatusResult(
     DateTimeOffset? ExpiresAtUtc,
     string? StoreName);
 
+public sealed record LicenseStartupStatusResult(
+    bool IsActive,
+    string State,
+    string Message,
+    DateTimeOffset? ExpiresAtUtc);
+
 public sealed record ImportLicenseCommand(string Content);
 
 public sealed record TrialClockResult(bool IsActive, string State, DateTimeOffset LastSeenAtUtc, DateTimeOffset ExpiresAtUtc);
@@ -60,6 +66,12 @@ public sealed class LicenseService(PosDbContext database)
         {
             return GetRuntimeStatusCore();
         }
+    }
+
+    public LicenseStartupStatusResult GetStartupStatus()
+    {
+        var status = GetRuntimeStatus();
+        return new LicenseStartupStatusResult(status.IsActive, status.State, status.Message, status.ExpiresAtUtc);
     }
 
     private static LicenseStatusResult GetRuntimeStatusCore()

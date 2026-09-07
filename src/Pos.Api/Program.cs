@@ -184,6 +184,7 @@ app.MapGet("/api/license/status", async (HttpRequest request, LicenseService lic
     var result = await licenses.GetAsync(token, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
+app.MapGet("/api/license/startup-status", (LicenseService licenses) => Results.Ok(licenses.GetStartupStatus()));
 app.MapPost("/api/license/import", async (HttpRequest request, ImportLicenseCommand command, LicenseService licenses, CancellationToken cancellationToken) =>
 {
     try
@@ -797,8 +798,16 @@ app.MapPost("/api/auth/login", async (LoginCommand command, AuthenticationServic
 app.MapPost("/api/auth/temporary-permission", async (HttpRequest request, TemporaryPermissionAuthorizationCommand command, AuthenticationService authentication, CancellationToken cancellationToken) =>
 {
     var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
-    var result = await authentication.GrantTemporaryPermissionAsync(token, command, cancellationToken);
-    return result is null ? Results.Unauthorized() : Results.Ok(result);
+    var attempt = await authentication.GrantTemporaryPermissionDetailedAsync(token, command, cancellationToken);
+    if (attempt.Authorization is not null) return Results.Ok(attempt.Authorization);
+
+    var statusCode = attempt.FailureCode switch
+    {
+        "invalid_credentials" => StatusCodes.Status400BadRequest,
+        "permission_missing" => StatusCodes.Status403Forbidden,
+        _ => StatusCodes.Status401Unauthorized
+    };
+    return Results.Json(new { code = attempt.FailureCode, message = attempt.FailureMessage }, statusCode: statusCode);
 });
 app.MapDelete("/api/auth/session", async (HttpRequest request, AuthenticationService authentication, CancellationToken cancellationToken) =>
 {

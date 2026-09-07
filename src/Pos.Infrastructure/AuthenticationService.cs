@@ -9,6 +9,10 @@ public sealed record LoginCommand(string UserName, string Password);
 public sealed record LoginResult(Guid SessionId, string AccessToken, Guid UserId, string DisplayName, bool IsAdministrator, DateTimeOffset ExpiresAtUtc, IReadOnlyList<string> Permissions);
 public sealed record TemporaryPermissionAuthorizationCommand(string UserName, string Password, string Permission);
 public sealed record TemporaryPermissionAuthorizationResult(Guid? GrantId, DateTimeOffset ExpiresAtUtc, string AuthorizedBy);
+public sealed record TemporaryPermissionAuthorizationAttempt(
+    TemporaryPermissionAuthorizationResult? Authorization,
+    string? FailureCode,
+    string? FailureMessage);
 
 public sealed class AuthenticationService(PosDbContext database, PasswordHasher<UserRecord> passwordHasher)
 {
@@ -56,24 +60,48 @@ public sealed class AuthenticationService(PosDbContext database, PasswordHasher<
         TemporaryPermissionAuthorizationCommand command,
         CancellationToken cancellationToken)
     {
+        var attempt = await GrantTemporaryPermissionDetailedAsync(actorToken, command, cancellationToken);
+        return attempt.Authorization;
+    }
+
+    public async Task<TemporaryPermissionAuthorizationAttempt> GrantTemporaryPermissionDetailedAsync(
+        string actorToken,
+        TemporaryPermissionAuthorizationCommand command,
+        CancellationToken cancellationToken)
+    {
         if (!Enum.TryParse<Pos.Domain.Permission>(command.Permission, ignoreCase: false, out _) ||
-            string.IsNullOrWhiteSpace(command.UserName) || string.IsNullOrEmpty(command.Password)) return null;
+            string.IsNullOrWhiteSpace(command.UserName) || string.IsNullOrEmpty(command.Password))
+        {
+            return Failed("invalid_request", "La autorización solicitada no es válida.");
+        }
 
         var actor = await GetActiveSessionUserAsync(actorToken, cancellationToken);
-        if (actor is null) return null;
+        if (actor is null)
+        {
+            return Failed("session_invalid", "La sesión actual ya no es válida. Inicia sesión de nuevo antes de solicitar autorización.");
+        }
 
         var normalized = InitialSetupService.NormalizeUserName(command.UserName);
         var approver = await database.Users.SingleOrDefaultAsync(item => item.NormalizedUserName == normalized && item.IsActive, cancellationToken);
-        if (approver is null || passwordHasher.VerifyHashedPassword(approver, approver.PasswordHash, command.Password) == PasswordVerificationResult.Failed) return null;
+        if (approver is null || passwordHasher.VerifyHashedPassword(approver, approver.PasswordHash, command.Password) == PasswordVerificationResult.Failed)
+        {
+            return Failed("invalid_credentials", "El usuario que autoriza no existe, está desactivado o la contraseña es incorrecta.");
+        }
 
         var approverCanAuthorize = approver.IsAdministrator || await database.Permissions
             .IgnoreQueryFilters()
             .AnyAsync(item => item.UserId == approver.Id && item.Code == command.Permission && item.ExpiresAtUtc == null, cancellationToken);
-        if (!approverCanAuthorize) return null;
+        if (!approverCanAuthorize)
+        {
+            return Failed("permission_missing", "El usuario elegido no tiene el permiso requerido para autorizar esta acción.");
+        }
 
         var current = await database.Permissions.IgnoreQueryFilters()
             .SingleOrDefaultAsync(item => item.UserId == actor.Id && item.Code == command.Permission, cancellationToken);
-        if (current is { ExpiresAtUtc: null }) return new TemporaryPermissionAuthorizationResult(null, DateTimeOffset.UtcNow, approver.DisplayName);
+        if (current is { ExpiresAtUtc: null })
+        {
+            return Succeeded(new TemporaryPermissionAuthorizationResult(null, DateTimeOffset.UtcNow, approver.DisplayName));
+        }
 
         // El permiso cubre el tiempo de contar efectivo y se revoca al terminar la acción.
         // La expiración es únicamente el respaldo de seguridad si el cliente pierde conexión.
@@ -97,8 +125,14 @@ public sealed class AuthenticationService(PosDbContext database, PasswordHasher<
         }
 
         await database.SaveChangesAsync(cancellationToken);
-        return new TemporaryPermissionAuthorizationResult(current.Id, expiresAtUtc, approver.DisplayName);
+        return Succeeded(new TemporaryPermissionAuthorizationResult(current.Id, expiresAtUtc, approver.DisplayName));
     }
+
+    private static TemporaryPermissionAuthorizationAttempt Succeeded(TemporaryPermissionAuthorizationResult authorization) =>
+        new(authorization, null, null);
+
+    private static TemporaryPermissionAuthorizationAttempt Failed(string code, string message) =>
+        new(null, code, message);
 
     public async Task<bool> RevokeTemporaryPermissionAsync(string actorToken, Guid grantId, CancellationToken cancellationToken)
     {
