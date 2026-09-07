@@ -97,27 +97,39 @@ public partial class ReportsWindow : UserControl
 
     private void RenderDashboard(SalesDashboardResult dashboard)
     {
+        var dailySales = dashboard.DailySales ?? [];
+        var payments = dashboard.Payments ?? [];
+        var departments = dashboard.Departments ?? [];
+
         TotalSalesText.Text = dashboard.TotalSales.ToString("C2", CultureInfo.CurrentCulture);
         SalesCountText.Text = $"{dashboard.SalesCount:N0} venta(s) confirmada(s)";
         AverageSaleText.Text = dashboard.AverageSale.ToString("C2", CultureInfo.CurrentCulture);
         ProfitText.Text = dashboard.EstimatedGrossProfit.ToString("C2", CultureInfo.CurrentCulture);
         MarginText.Text = $"{dashboard.MarginPercent:N2}%";
 
-        var maxDaily = Math.Max(dashboard.DailySales.MaxBy(item => item.Total)?.Total ?? 0m, 1m);
-        DailySalesChart.ItemsSource = dashboard.DailySales.Select(item => new DailySalesView(item, maxDaily)).ToList();
-        DailyEmptyText.Visibility = dashboard.DailySales.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        var maxDaily = Math.Max(dailySales.MaxBy(item => item.Total)?.Total ?? 0m, 1m);
+        DailySalesChart.ItemsSource = dailySales.Select(item => new DailySalesView(item, maxDaily)).ToList();
+        DailyEmptyText.Visibility = dailySales.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
-        var maxPayment = Math.Max(dashboard.Payments.MaxBy(item => item.Total)?.Total ?? 0m, 1m);
-        PaymentChart.ItemsSource = dashboard.Payments.Select(item => new PaymentView(item, maxPayment)).ToList();
-        PaymentEmptyText.Visibility = dashboard.Payments.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        var maxPayment = Math.Max(payments.MaxBy(item => item.Total)?.Total ?? 0m, 1m);
+        PaymentChart.ItemsSource = payments.Select(item => new PaymentView(item, maxPayment)).ToList();
+        PaymentEmptyText.Visibility = payments.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
-        var maxDepartmentSales = Math.Max(dashboard.Departments.MaxBy(item => item.Total)?.Total ?? 0m, 1m);
-        var maxDepartmentProfit = Math.Max(dashboard.Departments.Select(item => Math.Max(item.EstimatedProfit, 0m)).DefaultIfEmpty(0m).Max(), 1m);
-        DepartmentSalesChart.ItemsSource = dashboard.Departments.Select(item => new DepartmentView(item, maxDepartmentSales, maxDepartmentProfit)).ToList();
-        DepartmentProfitChart.ItemsSource = dashboard.Departments.Select(item => new DepartmentView(item, maxDepartmentSales, maxDepartmentProfit)).ToList();
-        var noDepartments = dashboard.Departments.Count == 0;
+        var maxDepartmentSales = Math.Max(departments.MaxBy(item => item.Total)?.Total ?? 0m, 1m);
+        var maxDepartmentProfit = Math.Max(departments.Select(item => Math.Max(item.EstimatedProfit, 0m)).DefaultIfEmpty(0m).Max(), 1m);
+        DepartmentSalesChart.ItemsSource = departments.Select(item => new DepartmentView(item, maxDepartmentSales, maxDepartmentProfit)).ToList();
+        DepartmentProfitChart.ItemsSource = departments.Select(item => new DepartmentView(item, maxDepartmentSales, maxDepartmentProfit)).ToList();
+        var noDepartments = departments.Count == 0;
         DepartmentEmptyText.Visibility = noDepartments ? Visibility.Visible : Visibility.Collapsed;
         ProfitDepartmentEmptyText.Visibility = noDepartments ? Visibility.Visible : Visibility.Collapsed;
+
+        var paymentSlices = CreatePaymentSlices(payments);
+        var departmentSlices = CreateDepartmentSlices(departments);
+        PaymentPieChart.Slices = paymentSlices;
+        PaymentPieLegend.ItemsSource = paymentSlices;
+        DepartmentPieChart.Slices = departmentSlices;
+        DepartmentPieLegend.ItemsSource = departmentSlices;
+        PieChartsEmptyText.Visibility = paymentSlices.Count == 0 && departmentSlices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void RenderAnalysis(SalesAnalysisResult? analysis)
@@ -131,12 +143,68 @@ public partial class ReportsWindow : UserControl
             return;
         }
 
-        var maxSold = Math.Max(analysis.BestSellers.MaxBy(item => item.QuantitySold)?.QuantitySold ?? 0m, 1m);
-        BestSellersList.ItemsSource = analysis.BestSellers.Select(item => new ProductAnalysisView(item, maxSold)).ToList();
-        RestockList.ItemsSource = analysis.RestockNeeded.Select(item => new ProductAnalysisView(item, maxSold)).ToList();
-        LowMovementList.ItemsSource = analysis.LowMovement.Select(item => new ProductAnalysisView(item, maxSold)).ToList();
-        NoMovementList.ItemsSource = analysis.NoMovement.Select(item => new ProductAnalysisView(item, maxSold)).ToList();
+        var bestSellers = analysis.BestSellers ?? [];
+        var restockNeeded = analysis.RestockNeeded ?? [];
+        var lowMovement = analysis.LowMovement ?? [];
+        var noMovement = analysis.NoMovement ?? [];
+        var maxSold = Math.Max(bestSellers.MaxBy(item => item.QuantitySold)?.QuantitySold ?? 0m, 1m);
+        BestSellersList.ItemsSource = bestSellers.Select(item => new ProductAnalysisView(item, maxSold)).ToList();
+        RestockList.ItemsSource = restockNeeded.Select(item => new ProductAnalysisView(item, maxSold)).ToList();
+        LowMovementList.ItemsSource = lowMovement.Select(item => new ProductAnalysisView(item, maxSold)).ToList();
+        NoMovementList.ItemsSource = noMovement.Select(item => new ProductAnalysisView(item, maxSold)).ToList();
     }
+
+    private static List<PieSlice> CreatePaymentSlices(IReadOnlyList<PaymentDashboardRow> rows)
+    {
+        var positiveRows = rows.Where(item => item.Total > 0m).ToList();
+        var total = positiveRows.Sum(item => item.Total);
+        return total <= 0m
+            ? []
+            : positiveRows.Select(item => new PieSlice(
+                PaymentLabel(item.Method),
+                item.Total,
+                PaymentBrush(item.Method))
+            {
+                PercentageText = $"{item.Total / total * 100m:0.#}%",
+                TotalText = item.Total.ToString("C2", CultureInfo.CurrentCulture)
+            }).ToList();
+    }
+
+    private static List<PieSlice> CreateDepartmentSlices(IReadOnlyList<DepartmentDashboardRow> rows)
+    {
+        var positiveRows = rows.Where(item => item.Total > 0m).ToList();
+        var total = positiveRows.Sum(item => item.Total);
+        return total <= 0m
+            ? []
+            : positiveRows.Select((item, index) => new PieSlice(
+                string.IsNullOrWhiteSpace(item.Department) ? "Sin departamento" : item.Department,
+                item.Total,
+                DepartmentBrush(index))
+            {
+                PercentageText = $"{item.Total / total * 100m:0.#}%",
+                TotalText = item.Total.ToString("C2", CultureInfo.CurrentCulture)
+            }).ToList();
+    }
+
+    private static string PaymentLabel(string method) => method switch
+    {
+        "Cash" => "Efectivo",
+        "Card" => "Tarjeta",
+        "Transfer" => "Transferencia",
+        "Credit" => "Crédito",
+        _ => method
+    };
+
+    private static string PaymentBrush(string method) => method switch
+    {
+        "Cash" => "#16834A",
+        "Card" => "#156EA8",
+        "Transfer" => "#2B8C7F",
+        "Credit" => "#A96300",
+        _ => "#7C5799"
+    };
+
+    private static string DepartmentBrush(int index) => new[] { "#7C5799", "#156EA8", "#2B8C7F", "#A96300", "#16834A", "#C33B32" }[index % 6];
 
     private async void OnExportClick(object sender, RoutedEventArgs e)
     {

@@ -1,7 +1,198 @@
-<UserControl x:Class="Pos.Desktop.PurchaseWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Grid Margin="20"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <StackPanel><TextBlock Text="Recibir compra" FontSize="22" FontWeight="SemiBold" Foreground="#17324D"/><TextBlock Text="El proveedor es opcional. Usa “Sin proveedor” para una compra directa." Margin="0,4,0,4" Foreground="#526577"/><TextBlock Text="Proveedor (opcional)"/><ComboBox x:Name="SupplierComboBox" Margin="0,4,0,8" Height="34" DisplayMemberPath="DisplayText"/><StackPanel Orientation="Horizontal"><StackPanel Width="470"><TextBlock Text="Nuevo proveedor"/><TextBox x:Name="NewSupplierTextBox" Height="32"/></StackPanel><Button Margin="8,18,0,0" Click="OnCreateSupplierClick">Crear proveedor</Button></StackPanel></StackPanel>
-        <StackPanel Grid.Row="1" Margin="0,16,0,12"><TextBlock Text="Buscar producto"/><TextBlock Text="Escanea el código o escribe código/descripción y pulsa Enter. El lector USB tipo teclado funciona sin instalar controladores." Margin="0,3,0,5" Foreground="#526577"/><TextBox x:Name="SearchTextBox" Height="34" TextChanged="OnSearchChanged" KeyDown="OnSearchKeyDown"/><ListBox x:Name="ResultsList" Height="130" Margin="0,6,0,10" DisplayMemberPath="DisplayText" MouseDoubleClick="OnProductSelected" Visibility="Collapsed"/><Border Background="#F3F8FC" BorderBrush="#D7E6F0" BorderThickness="1" Padding="10"><StackPanel><TextBlock Text="Producto seleccionado" FontWeight="SemiBold"/><TextBlock x:Name="SelectedProductText" Text="Selecciona un producto." Foreground="#526577" Margin="0,4,0,0"/><TextBlock x:Name="SelectedProductInfoText" Text="" Foreground="#526577" Margin="0,3,0,0"/></StackPanel></Border><Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,6,0"><TextBlock Text="Cantidad recibida"/><TextBox x:Name="QuantityTextBox" Height="34"/></StackPanel><StackPanel Grid.Column="1" Margin="6,0"><TextBlock Text="Costo unitario"/><TextBox x:Name="UnitCostTextBox" Height="34" TextChanged="OnPricingChanged"/></StackPanel><StackPanel Grid.Column="2" Margin="6,0"><TextBlock Text="Nuevo precio de venta"/><TextBox x:Name="SalePriceTextBox" Height="34" TextChanged="OnPricingChanged"/></StackPanel><StackPanel Grid.Column="3" Margin="6,0,0,0"><TextBlock Text="Margen calculado"/><TextBox x:Name="ProfitPercentTextBox" Height="34" IsReadOnly="True" Background="#F3F8FC"/></StackPanel></Grid></StackPanel>
-        <StackPanel Grid.Row="2"><Button Height="38" Background="#146CB0" Foreground="White" FontWeight="Bold" Click="OnReceiveClick">Recibir compra</Button><TextBlock x:Name="MessageText" Margin="0,10,0,0" Foreground="#B42318" TextWrapping="Wrap"/></StackPanel>
-    </Grid>
+<UserControl x:Class="Pos.Desktop.PurchaseWindow"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
+             Background="{StaticResource AppBackgroundBrush}">
+    <UserControl.Resources>
+        <Style x:Key="PurchaseSection" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="7"/>
+            <Setter Property="Padding" Value="18"/>
+            <Setter Property="Margin" Value="0,0,0,14"/>
+        </Style>
+        <Style x:Key="PurchaseLabel" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        </Style>
+        <Style x:Key="PurchaseField" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Margin" Value="0,6,0,0"/>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="24,20,24,24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="0,0,0,18">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal">
+                    <Border Width="52" Height="52" Background="#E4F2EC" CornerRadius="8">
+                        <icons:PackIconMaterial Kind="CartOutline" Width="30" Height="30" Foreground="#238A68" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel Margin="14,1,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="Compras" FontSize="26" FontWeight="Bold" Foreground="#17324D"/>
+                        <TextBlock Text="Recibe mercancía y actualiza el inventario de tu tienda" Foreground="#637589" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+                <Border Grid.Column="1" Background="#EAF3F8" BorderBrush="#C9DCE8" BorderThickness="1" CornerRadius="16" Padding="12,7" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <icons:PackIconMaterial Kind="InformationOutline" Width="17" Height="17" Foreground="{StaticResource PrimaryBrush}" Margin="0,0,6,0"/>
+                        <TextBlock Text="La compra aumenta existencias" Foreground="#31566D" FontSize="12" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Border Grid.Row="1" Style="{StaticResource PurchaseSection}" Background="#F7FBFD">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal">
+                        <icons:PackIconMaterial Kind="AccountGroupOutline" Width="22" Height="22" Foreground="#376A9A" VerticalAlignment="Center" Margin="0,0,9,0"/>
+                        <StackPanel>
+                            <TextBlock Text="Proveedor" FontSize="17" FontWeight="SemiBold" Foreground="#17324D"/>
+                            <TextBlock Text="Opcional. Usa Sin proveedor para una compra directa." Foreground="#637589" FontSize="12" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <Grid Grid.Row="1" Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,12,0">
+                            <TextBlock Text="Proveedor seleccionado" Style="{StaticResource PurchaseLabel}"/>
+                            <ComboBox x:Name="SupplierComboBox" Height="38" Margin="0,6,0,0" DisplayMemberPath="DisplayText"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                            <TextBlock Text="Registrar nuevo proveedor" Style="{StaticResource PurchaseLabel}"/>
+                            <TextBox x:Name="NewSupplierTextBox" Style="{StaticResource PurchaseField}" ToolTip="Escribe el nombre del nuevo proveedor"/>
+                        </StackPanel>
+                        <Button Grid.Column="2" Style="{StaticResource PrimaryButtonStyle}" Margin="0,22,0,0" Click="OnCreateSupplierClick">
+                            <StackPanel Orientation="Horizontal">
+                                <icons:PackIconMaterial Kind="AccountPlusOutline" Width="18" Height="18" Margin="0,0,7,0"/>
+                                <TextBlock Text="Crear proveedor"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="2" Style="{StaticResource PurchaseSection}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal">
+                        <icons:PackIconMaterial Kind="BarcodeScan" Width="22" Height="22" Foreground="#156EA8" VerticalAlignment="Center" Margin="0,0,9,0"/>
+                        <StackPanel>
+                            <TextBlock Text="Producto recibido" FontSize="17" FontWeight="SemiBold" Foreground="#17324D"/>
+                            <TextBlock Text="Escanea el código o escribe una descripción y pulsa Enter para seleccionar." Foreground="#637589" FontSize="12" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <Grid Grid.Row="1" Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="SearchTextBox" Style="{StaticResource PurchaseField}" Margin="0" TextChanged="OnSearchChanged" KeyDown="OnSearchKeyDown" ToolTip="Código de barras o descripción. El lector USB tipo teclado no requiere controladores."/>
+                        <Border Grid.Column="1" Background="#EAF3F8" BorderBrush="#C9DCE8" BorderThickness="1" CornerRadius="5" Margin="10,0,0,0" Padding="12,0">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <icons:PackIconMaterial Kind="KeyboardReturn" Width="17" Height="17" Foreground="#376A9A" Margin="0,0,6,0"/>
+                                <TextBlock Text="Enter selecciona" Foreground="#31566D" FontSize="12" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <ListBox Grid.Row="2" x:Name="ResultsList" Height="125" Margin="0,8,0,0" DisplayMemberPath="DisplayText" MouseDoubleClick="OnProductSelected" Visibility="Collapsed"/>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="3" Style="{StaticResource PurchaseSection}" Background="#F8FBFC">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal">
+                        <icons:PackIconMaterial Kind="PackageVariantClosed" Width="22" Height="22" Foreground="#A96300" VerticalAlignment="Center" Margin="0,0,9,0"/>
+                        <TextBlock Text="Resumen del producto" FontSize="17" FontWeight="SemiBold" Foreground="#17324D" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Border Grid.Row="1" Background="White" BorderBrush="#D7E6F0" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,12,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="Producto seleccionado" Style="{StaticResource PurchaseLabel}" FontSize="12" Foreground="#637589"/>
+                                <TextBlock x:Name="SelectedProductText" Text="Selecciona un producto para comenzar." FontSize="16" FontWeight="SemiBold" Foreground="#17324D" Margin="0,4,0,0"/>
+                                <TextBlock x:Name="SelectedProductInfoText" Text="" Foreground="#637589" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <Border Grid.Column="1" Background="#FFF4D6" BorderBrush="#E2B84A" BorderThickness="1" CornerRadius="14" Padding="11,5" VerticalAlignment="Center">
+                                <TextBlock Text="Pendiente de recibir" Foreground="#805800" FontSize="12"/>
+                            </Border>
+                        </Grid>
+                    </Border>
+                    <Grid Grid.Row="2" Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.1*"/>
+                            <ColumnDefinition Width="1*"/>
+                            <ColumnDefinition Width="1*"/>
+                            <ColumnDefinition Width="1*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,8,0">
+                            <TextBlock Text="Cantidad recibida" Style="{StaticResource PurchaseLabel}"/>
+                            <TextBox x:Name="QuantityTextBox" Style="{StaticResource PurchaseField}" ToolTip="Cantidad que entrará al inventario"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="8,0">
+                            <TextBlock Text="Costo unitario" Style="{StaticResource PurchaseLabel}"/>
+                            <TextBox x:Name="UnitCostTextBox" Style="{StaticResource PurchaseField}" TextChanged="OnPricingChanged" ToolTip="Costo de compra por unidad"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Margin="8,0">
+                            <TextBlock Text="Nuevo precio de venta" Style="{StaticResource PurchaseLabel}"/>
+                            <TextBox x:Name="SalePriceTextBox" Style="{StaticResource PurchaseField}" TextChanged="OnPricingChanged" ToolTip="Precio de venta que tomará el producto"/>
+                        </StackPanel>
+                        <Border Grid.Column="3" Background="#EAF6EF" BorderBrush="#C6E2D0" BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="8,0,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Margen calculado" FontSize="12" Foreground="#39745B"/>
+                                <TextBox x:Name="ProfitPercentTextBox" Height="38" Margin="0,6,0,0" IsReadOnly="True" Background="Transparent" BorderThickness="0" Foreground="#1D6D4B" FontSize="16" FontWeight="Bold" Padding="0,5"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="4" Margin="0,2,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Background="#EAF3F8" BorderBrush="#C9DCE8" BorderThickness="1" CornerRadius="6" Padding="12,9" VerticalAlignment="Center">
+                    <TextBlock x:Name="MessageText" Foreground="#31566D" TextWrapping="Wrap" MaxWidth="700"/>
+                </Border>
+                <Button Grid.Column="1" Style="{StaticResource ConfirmButtonStyle}" Height="46" MinWidth="190" Margin="14,0,0,0" Click="OnReceiveClick">
+                    <StackPanel Orientation="Horizontal">
+                        <icons:PackIconMaterial Kind="PackageDown" Width="20" Height="20" Margin="0,0,8,0"/>
+                        <TextBlock Text="Recibir compra" FontWeight="Bold"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Grid>
+    </ScrollViewer>
 </UserControl>

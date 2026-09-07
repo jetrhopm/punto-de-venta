@@ -1,6 +1,8 @@
 # Changelog
 
 ## Sin liberar
+- Se prepara la versión 2.5.5: Reportes incorpora una vista de gráficas de pastel para formas de pago y departamentos, con leyendas, porcentajes, colores consistentes y estados vacíos sin error. Las consultas y cálculos existentes se conservan.
+- Se prepara la versión 2.5.4: se rediseña la vista de Compras con secciones visuales para proveedor, búsqueda, producto seleccionado y recepción; se conservan los flujos de lector, Enter, actualización de costo, precio y margen.
 - Se prepara la versión 2.5.3: el redondeo se refresca al volver a ventas y antes de cobrar; la vista muestra subtotal, ajuste y total a cobrar; los tickets conservan e imprimen el subtotal previo al redondeo.
 - Se prepara la versión 2.5.2: se corrige la apertura del diálogo de productos cuando WPF dispara los eventos de cálculo antes de terminar de inicializar sus controles.
 - Se prepara la versión 2.5.1: F3 abre alta y edición en un cuadro de diálogo separado; el doble clic edita el producto seleccionado conservando su identificador; F4 acepta Enter desde el lector y prioriza el código de barras exacto frente a coincidencias parciales.
