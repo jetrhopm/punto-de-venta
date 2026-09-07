@@ -53,12 +53,20 @@
         <Border Grid.Row="0" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1">
             <Grid Margin="16,0">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="210"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Image Source="/Assets/jetventa-icon.png" Width="44" Height="44" Margin="0,0,11,0"/>
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="JetVenta" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextBrush}"/>
-                        <TextBlock x:Name="StoreNameText" Text="Conectando..." FontSize="12" Foreground="{StaticResource TextMutedBrush}" TextTrimming="CharacterEllipsis" MaxWidth="165"/>
-                    </StackPanel>
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <Image Source="/Assets/jetventa-banner.png"
+                           Width="150" Height="50"
+                           Stretch="Uniform"
+                           RenderOptions.BitmapScalingMode="HighQuality"
+                           UseLayoutRounding="True"
+                           SnapsToDevicePixels="True"/>
+                    <TextBlock x:Name="StoreNameText"
+                               Text="Conectando..."
+                               FontSize="12"
+                               Foreground="{StaticResource TextMutedBrush}"
+                               TextTrimming="CharacterEllipsis"
+                               MaxWidth="195"
+                               HorizontalAlignment="Center"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">

@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO.Compression;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
@@ -13,6 +14,9 @@ namespace Pos.Setup;
 public sealed class InstallerForm : Form
 {
     private const string ProductTitle = "JetVenta";
+    private const string LicenseFileExtensionKey = @"SOFTWARE\Classes\.jv";
+    private const string LicenseFileTypeKey = @"SOFTWARE\Classes\JetVenta.LicenseFile";
+    private const string LicenseFileTypeName = "JetVenta.LicenseFile";
     private readonly string _installRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), ProductTitle);
     private readonly string _dataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta");
     private readonly bool _uninstall;
@@ -310,6 +314,7 @@ public sealed class InstallerForm : Form
         SetProgress(84, "Verificando PostgreSQL, base de datos y API...");
         await RunPowerShellAsync(Path.Combine(_installRoot, "install-production.ps1"), string.Empty);
         RegisterInstallation();
+        RegisterLicenseFileType();
         CreateShortcuts();
         ConfigureAutomaticStart(_startWithWindows.Checked);
         SetProgress(100, "Instalación terminada. Ya puedes abrir la configuración inicial.");
@@ -321,6 +326,7 @@ public sealed class InstallerForm : Form
         var script = Path.Combine(_installRoot, "install-production.ps1");
         if (File.Exists(script)) await RunPowerShellAsync(script, "-Uninstall");
         Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PuntoDeVenta", false);
+        UnregisterLicenseFileType();
         DeleteShortcuts();
         ConfigureAutomaticStart(false);
         SetProgress(100, "Desinstalación terminada. Los datos y respaldos se conservaron.");
@@ -584,6 +590,63 @@ public sealed class InstallerForm : Form
         key?.SetValue("ModifyPath", Program.QuoteArgument(Path.Combine(_installRoot, "Setup.exe")));
         key?.SetValue("NoRepair", 0, RegistryValueKind.DWord);
     }
+
+    private void RegisterLicenseFileType()
+    {
+        try
+        {
+            using (var extension = Registry.LocalMachine.CreateSubKey(LicenseFileExtensionKey))
+            {
+                extension?.SetValue(string.Empty, LicenseFileTypeName);
+                extension?.SetValue("Content Type", "application/vnd.jetventa.license");
+                extension?.SetValue("PerceivedType", "document");
+            }
+
+            using (var fileType = Registry.LocalMachine.CreateSubKey(LicenseFileTypeKey))
+            {
+                fileType?.SetValue(string.Empty, "Licencia de JetVenta");
+                fileType?.SetValue("FriendlyTypeName", "Licencia de JetVenta");
+            }
+
+            using var icon = Registry.LocalMachine.CreateSubKey($@"{LicenseFileTypeKey}\DefaultIcon");
+            icon?.SetValue(string.Empty, $"\"{Path.Combine(_installRoot, "client", "license-file.ico")}\",0");
+            NotifyFileAssociationsChanged();
+            Log("Extensión .jv registrada con el icono de licencia de JetVenta.");
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            Log($"No se pudo registrar el icono de archivos .jv: {exception.Message}");
+        }
+    }
+
+    private void UnregisterLicenseFileType()
+    {
+        try
+        {
+            var removeExtension = false;
+            using (var extension = Registry.LocalMachine.OpenSubKey(LicenseFileExtensionKey))
+            {
+                removeExtension = string.Equals(extension?.GetValue(string.Empty)?.ToString(), LicenseFileTypeName, StringComparison.Ordinal);
+            }
+
+            if (removeExtension)
+            {
+                Registry.LocalMachine.DeleteSubKeyTree(LicenseFileExtensionKey, false);
+            }
+
+            Registry.LocalMachine.DeleteSubKeyTree(LicenseFileTypeKey, false);
+            NotifyFileAssociationsChanged();
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            Log($"No se pudo retirar el icono de archivos .jv: {exception.Message}");
+        }
+    }
+
+    private static void NotifyFileAssociationsChanged() => SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero);
+
+    [DllImport("shell32.dll")]
+    private static extern void SHChangeNotify(uint eventId, uint flags, IntPtr item1, IntPtr item2);
 
     private void CreateShortcuts()
     {

@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private bool _discardInProgress;
     private bool _exitConfirmed;
     private bool _exitDialogOpen;
+    private bool _openingProductLookup;
     private TemporaryPermissionLease? _modulePermissionLease;
     public MainWindow()
     {
@@ -140,7 +141,8 @@ public partial class MainWindow : Window
 
     private async void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        var section = e.Key switch
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        var section = key switch
         {
             Key.F1 => "Ventas",
             Key.F2 => "Creditos",
@@ -176,9 +178,9 @@ public partial class MainWindow : Window
             OnNewTicketClick(sender, e);
             e.Handled = true;
         }
-        else if (e.Key == Key.F10)
+        else if (key == Key.F10)
         {
-            OpenProductLookup();
+            await OpenProductLookupAsync();
             e.Handled = true;
         }
         else if (e.Key == Key.F9)
@@ -281,8 +283,8 @@ public partial class MainWindow : Window
         StatusText.Text = "Producto común disponible al registrar un código no encontrado.";
     }
 
-    private void OnProductLookupClick(object sender, RoutedEventArgs e) =>
-        OpenProductLookup();
+    private async void OnProductLookupClick(object sender, RoutedEventArgs e) =>
+        await OpenProductLookupAsync();
 
     private void OnPriceVerifierClick(object sender, RoutedEventArgs e) =>
         OpenPriceVerifier();
@@ -299,12 +301,25 @@ public partial class MainWindow : Window
     private void OnDeleteSelectedLineClick(object sender, RoutedEventArgs e) =>
         DeleteSelectedCartLine();
 
-    private async void OpenProductLookup()
+    private async Task OpenProductLookupAsync()
     {
-        await using var authorization = await PermissionAuthorization.RequestAsync(this, "ViewProducts", "Consultar productos requiere autorización.");
-        if (authorization is null) return;
+        if (_openingProductLookup) return;
+        _openingProductLookup = true;
+        try
+        {
+            await using var authorization = await PermissionAuthorization.RequestAsync(this, "ViewProducts", "Consultar productos requiere autorización.");
+            if (authorization is null) return;
 
-        new ProductLookupWindow(ProductSearchTextBox.Text.Trim()) { Owner = this }.ShowDialog();
+            var lookup = new ProductLookupWindow(ProductSearchTextBox.Text.Trim()) { Owner = this };
+            if (lookup.ShowDialog() != true || lookup.SelectedProduct is null) return;
+
+            var product = lookup.SelectedProduct;
+            await AddProductToCartAsync(new ProductSearchResult(product.Id, product.Code, product.Description, product.Price, product.Stock));
+        }
+        finally
+        {
+            _openingProductLookup = false;
+        }
     }
 
     private async void OpenPriceVerifier()

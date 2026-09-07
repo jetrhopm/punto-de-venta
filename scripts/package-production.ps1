@@ -34,5 +34,6 @@ $restoreScriptText = [IO.File]::ReadAllText($restoreScript, [Text.Encoding]::UTF
 [IO.File]::WriteAllText($restoreScript, $restoreScriptText, [Text.UTF8Encoding]::new($true))
 Copy-Item (Join-Path $root '.tools\vc_redist.x64.exe') (Join-Path $output 'vc_redist.x64.exe') -Force
 Copy-Item (Join-Path $root 'src\Pos.Desktop\Assets\Icons\app.ico') (Join-Path $output 'client\app.ico') -Force
+Copy-Item (Join-Path $root 'src\Pos.Desktop\Assets\Icons\license-file.ico') (Join-Path $output 'client\license-file.ico') -Force
 Write-Host "Publicacion de produccion preparada en $output"
 Write-Host 'Paquete de produccion preparado para el instalador autocontenido.'

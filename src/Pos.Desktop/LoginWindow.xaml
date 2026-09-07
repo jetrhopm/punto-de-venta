@@ -22,10 +22,13 @@
                 </Grid.RowDefinitions>
 
                 <StackPanel VerticalAlignment="Center">
-                    <Image Source="/Pos.Desktop;component/Assets/jetventa-icon.png"
+                    <Image Source="/Pos.Desktop;component/Assets/logo.png"
                            Width="224" Height="224"
                            Stretch="Uniform"
-                           HorizontalAlignment="Center"/>
+                           HorizontalAlignment="Center"
+                           RenderOptions.BitmapScalingMode="HighQuality"
+                           UseLayoutRounding="True"
+                           SnapsToDevicePixels="True"/>
                     <TextBlock Text="PUNTO DE VENTA"
                                Margin="0,18,0,0"
                                HorizontalAlignment="Center"

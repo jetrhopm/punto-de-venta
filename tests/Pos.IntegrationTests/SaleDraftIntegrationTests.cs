@@ -8,6 +8,12 @@ namespace Pos.IntegrationTests;
 public sealed class SaleDraftIntegrationTests
 {
     [Fact]
+    public void CommercialTrialDurationIsThirtyDays()
+    {
+        Assert.Equal(TimeSpan.FromDays(30), TrialClockPolicy.DefaultDuration);
+    }
+
+    [Fact]
     public void TrialClockDoesNotAllowReturningToDemoAfterItExpired()
     {
         var started = new DateTimeOffset(2026, 8, 25, 12, 0, 0, TimeSpan.Zero);

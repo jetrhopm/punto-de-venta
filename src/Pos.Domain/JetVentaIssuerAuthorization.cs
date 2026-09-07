@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Pos.Domain;
 
@@ -31,7 +32,9 @@ public static class JetVentaIssuerAuthorization
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true
+        WriteIndented = true,
+        MaxDepth = 8,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
 
     public static string CreateEnrollmentRequestCode(string machineFingerprint, string encryptionPublicKey)
@@ -141,7 +144,7 @@ public static class JetVentaIssuerAuthorization
         if (request is null || request.Version != ProtocolVersion || !string.Equals(request.Product, JetVentaLicensing.Product, StringComparison.Ordinal)) { error = "La solicitud no corresponde a JetVenta."; return false; }
         if (!Guid.TryParse(request.RequestId, out _)) { error = "La solicitud no tiene un identificador válido."; return false; }
         if (string.IsNullOrWhiteSpace(request.MachineFingerprint) || request.MachineFingerprint.Length > 256) { error = "La solicitud no contiene una huella de equipo válida."; return false; }
-        if (!IsValidBase64(request.EncryptionPublicKey, 8 * 1024)) { error = "La solicitud no contiene una llave de cifrado válida."; return false; }
+        if (!IsValidEnrollmentPublicKey(request.EncryptionPublicKey)) { error = "La solicitud no contiene una llave RSA de 3072 bits válida."; return false; }
         return true;
     }
 
@@ -151,8 +154,27 @@ public static class JetVentaIssuerAuthorization
         if (package is null || package.Version != ProtocolVersion || !string.Equals(package.Product, JetVentaLicensing.Product, StringComparison.Ordinal)) { error = "El archivo no corresponde a JetVenta."; return false; }
         if (!Guid.TryParse(package.RequestId, out _)) { error = "El archivo no tiene un identificador válido."; return false; }
         if (string.IsNullOrWhiteSpace(package.MachineFingerprint) || package.MachineFingerprint.Length > 256) { error = "El archivo no contiene una huella de equipo válida."; return false; }
-        if (!IsValidBase64(package.EncryptedIssuerKey, 16 * 1024) || !IsValidBase64(package.Signature, 1024)) { error = "El archivo de autorización está incompleto."; return false; }
+        if (!IsValidBase64(package.EncryptedIssuerKey, 16 * 1024) || !HasDecodedLength(package.Signature, 64)) { error = "El archivo de autorización está incompleto."; return false; }
         return true;
+    }
+
+    private static bool IsValidEnrollmentPublicKey(string? value)
+    {
+        if (!IsValidBase64(value, 8 * 1024)) return false;
+        try
+        {
+            using var rsa = RSA.Create();
+            rsa.ImportSubjectPublicKeyInfo(Convert.FromBase64String(value!), out var bytesRead);
+            return bytesRead > 0 && rsa.KeySize >= 3072;
+        }
+        catch (CryptographicException) { return false; }
+    }
+
+    private static bool HasDecodedLength(string? value, int expectedBytes)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 1024) return false;
+        try { return Convert.FromBase64String(value).Length == expectedBytes; }
+        catch (FormatException) { return false; }
     }
 
     private static bool IsValidBase64(string? value, int maximumBytes)

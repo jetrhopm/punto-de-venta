@@ -4,6 +4,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace JetVenta.LicenseIssuer;
 
@@ -34,7 +35,9 @@ internal static class IssuerKeyStore
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true
+        WriteIndented = true,
+        MaxDepth = 8,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
 
     public static bool HasAuthorizedIssuer

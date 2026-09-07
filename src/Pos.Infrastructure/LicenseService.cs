@@ -26,6 +26,8 @@ public sealed record TrialClockResult(bool IsActive, string State, DateTimeOffse
 
 public static class TrialClockPolicy
 {
+    public static TimeSpan DefaultDuration { get; } = TimeSpan.FromDays(30);
+
     public static TrialClockResult Evaluate(DateTimeOffset startedAtUtc, DateTimeOffset lastSeenAtUtc, DateTimeOffset nowUtc, TimeSpan duration)
     {
         var expiresAtUtc = startedAtUtc + duration;
@@ -45,22 +47,31 @@ public sealed class LicenseService(PosDbContext database)
 {
     private static readonly byte[] StorageEntropy = SHA256.HashData(Encoding.UTF8.GetBytes("JetVenta license storage v1"));
     private static readonly byte[] TrialEntropy = SHA256.HashData(Encoding.UTF8.GetBytes("JetVenta trial storage v1"));
+    private static readonly byte[] LicenseClockEntropy = SHA256.HashData(Encoding.UTF8.GetBytes("JetVenta license clock storage v1"));
     private static readonly string LicenseDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "license");
     private static readonly string LicensePath = Path.Combine(LicenseDirectory, "licencia.jv.dpapi");
     private static readonly string TrialPath = Path.Combine(LicenseDirectory, "demo.jv.dpapi");
-
-    // Temporalmente se dejan 30 minutos para probar la expiración sin esperar 30 días.
-    // Antes de una liberación comercial se cambia únicamente a TimeSpan.FromDays(30).
-    private static readonly TimeSpan TrialDuration = TimeSpan.FromMinutes(30);
+    private static readonly string LicenseClockPath = Path.Combine(LicenseDirectory, "licencia-reloj.jv.dpapi");
+    private static readonly object StateLock = new();
 
     public LicenseStatusResult GetRuntimeStatus()
     {
+        lock (StateLock)
+        {
+            return GetRuntimeStatusCore();
+        }
+    }
+
+    private static LicenseStatusResult GetRuntimeStatusCore()
+    {
         var fingerprint = GetMachineFingerprint();
         var request = JetVentaLicensing.CreateRequestCode(fingerprint);
+#if DEBUG
         if (string.Equals(Environment.GetEnvironmentVariable("POS_LICENSE_BYPASS"), "true", StringComparison.OrdinalIgnoreCase))
         {
             return new(true, "development", "Modo de desarrollo: validación de licencia omitida.", fingerprint, request, null, null, null);
         }
+#endif
 
         if (!File.Exists(LicensePath))
         {
@@ -83,9 +94,18 @@ public sealed class LicenseService(PosDbContext database)
             return new(false, "machine_mismatch", "La licencia pertenece a otro equipo. Genera un nuevo archivo de activación.", fingerprint, request, claims.LicenseId, claims.ExpiresAtUtc, claims.StoreName);
         }
 
-        if (claims.ExpiresAtUtc is not null && claims.ExpiresAtUtc <= DateTimeOffset.UtcNow)
+        var now = DateTimeOffset.UtcNow;
+        if (claims.ExpiresAtUtc is not null)
         {
-            return new(false, "expired", "La licencia venció. Solicita una renovación.", fingerprint, request, claims.LicenseId, claims.ExpiresAtUtc, claims.StoreName);
+            if (!ValidateLicenseClock(claims.LicenseId, fingerprint, now, out var clockError))
+            {
+                return new(false, "license_clock_changed", clockError, fingerprint, request, claims.LicenseId, claims.ExpiresAtUtc, claims.StoreName);
+            }
+
+            if (claims.ExpiresAtUtc <= now)
+            {
+                return new(false, "expired", "La licencia venció. Solicita una renovación.", fingerprint, request, claims.LicenseId, claims.ExpiresAtUtc, claims.StoreName);
+            }
         }
 
         return new(true, "active", "Licencia válida para este equipo.", fingerprint, request, claims.LicenseId, claims.ExpiresAtUtc, claims.StoreName);
@@ -113,7 +133,7 @@ public sealed class LicenseService(PosDbContext database)
             return new(false, "trial_machine_mismatch", "La prueba ya fue iniciada en otro equipo. Activa una licencia para continuar.", fingerprint, request, null, null, null);
         }
 
-        var clock = TrialClockPolicy.Evaluate(trial.StartedAtUtc, trial.LastSeenAtUtc, now, TrialDuration);
+        var clock = TrialClockPolicy.Evaluate(trial.StartedAtUtc, trial.LastSeenAtUtc, now, TrialClockPolicy.DefaultDuration);
         if (clock.State == "trial_clock_changed")
         {
             return new(false, "trial_clock_changed", "La fecha u hora del equipo retrocedió después de haber sido registrada. Corrígela o activa una licencia para continuar.", fingerprint, request, null, clock.ExpiresAtUtc, null);
@@ -164,13 +184,55 @@ public sealed class LicenseService(PosDbContext database)
         if (!string.Equals(signedLicense!.License.MachineFingerprint, fingerprint, StringComparison.Ordinal)) throw new ArgumentException("Esta licencia fue creada para otro equipo.");
         if (signedLicense.License.ExpiresAtUtc is not null && signedLicense.License.ExpiresAtUtc <= DateTimeOffset.UtcNow) throw new ArgumentException("Esta licencia ya venció.");
 
-        Directory.CreateDirectory(LicenseDirectory);
-        var bytes = Encoding.UTF8.GetBytes(JetVentaLicensing.Serialize(signedLicense));
-        var protectedBytes = ProtectedData.Protect(bytes, StorageEntropy, DataProtectionScope.LocalMachine);
-        var temporary = LicensePath + ".new";
-        File.WriteAllBytes(temporary, protectedBytes);
-        File.Move(temporary, LicensePath, true);
+        lock (StateLock)
+        {
+            Directory.CreateDirectory(LicenseDirectory);
+            var bytes = Encoding.UTF8.GetBytes(JetVentaLicensing.Serialize(signedLicense));
+            var protectedBytes = ProtectedData.Protect(bytes, StorageEntropy, DataProtectionScope.LocalMachine);
+            var temporary = LicensePath + ".new";
+            File.WriteAllBytes(temporary, protectedBytes);
+            File.Move(temporary, LicensePath, true);
+
+            if (signedLicense.License.ExpiresAtUtc is not null)
+            {
+                if (!TryWriteLicenseClock(new LicenseClockState(1, signedLicense.License.LicenseId, fingerprint, DateTimeOffset.UtcNow), out var clockError))
+                {
+                    throw new ArgumentException(clockError);
+                }
+            }
+            else
+            {
+                try { File.Delete(LicenseClockPath); } catch (IOException) { }
+            }
+        }
         return GetRuntimeStatus();
+    }
+
+    private static bool ValidateLicenseClock(string licenseId, string fingerprint, DateTimeOffset now, out string error)
+    {
+        error = string.Empty;
+        if (!TryReadLicenseClock(out var clock, out error))
+        {
+            if (File.Exists(LicenseClockPath)) return false;
+            return TryWriteLicenseClock(new LicenseClockState(1, licenseId, fingerprint, now), out error);
+        }
+
+        if (!string.Equals(clock!.LicenseId, licenseId, StringComparison.Ordinal) ||
+            !string.Equals(clock.MachineFingerprint, fingerprint, StringComparison.Ordinal))
+        {
+            error = "El control local de vigencia no corresponde a esta licencia. Vuelve a cargar el archivo original.";
+            return false;
+        }
+
+        if (now < clock.LastSeenAtUtc)
+        {
+            error = "La fecha u hora del equipo retrocedió después de validar la licencia. Corrige el reloj para continuar.";
+            return false;
+        }
+
+        // Evita escribir en disco en cada petición de la API sin perder el control de retroceso del reloj.
+        return now - clock.LastSeenAtUtc < TimeSpan.FromMinutes(1) ||
+            TryWriteLicenseClock(clock with { LastSeenAtUtc = now }, out error);
     }
 
     public static string GetMachineFingerprint()
@@ -272,7 +334,51 @@ public sealed class LicenseService(PosDbContext database)
         }
     }
 
+    private static bool TryReadLicenseClock(out LicenseClockState? clock, out string error)
+    {
+        clock = null;
+        error = "No se encontró el control local de vigencia.";
+        if (!File.Exists(LicenseClockPath)) return false;
+
+        try
+        {
+            var bytes = ProtectedData.Unprotect(File.ReadAllBytes(LicenseClockPath), LicenseClockEntropy, DataProtectionScope.LocalMachine);
+            clock = JsonSerializer.Deserialize<LicenseClockState>(bytes);
+            if (clock is null || clock.Version != 1 || !Guid.TryParse(clock.LicenseId, out _) ||
+                string.IsNullOrWhiteSpace(clock.MachineFingerprint) || clock.LastSeenAtUtc == default)
+            {
+                error = "El control local de vigencia de la licencia no es válido.";
+                return false;
+            }
+
+            return true;
+        }
+        catch (CryptographicException) { error = "El control local de vigencia no pudo validarse en este equipo."; return false; }
+        catch (JsonException) { error = "El control local de vigencia está dañado."; return false; }
+        catch (IOException) { error = "No se pudo leer el control local de vigencia."; return false; }
+        catch (UnauthorizedAccessException) { error = "JetVenta no tiene permiso para consultar la vigencia de la licencia."; return false; }
+    }
+
+    private static bool TryWriteLicenseClock(LicenseClockState clock, out string error)
+    {
+        error = "No se pudo guardar el control local de vigencia de la licencia.";
+        try
+        {
+            Directory.CreateDirectory(LicenseDirectory);
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(clock);
+            var protectedBytes = ProtectedData.Protect(bytes, LicenseClockEntropy, DataProtectionScope.LocalMachine);
+            var temporary = LicenseClockPath + ".new";
+            File.WriteAllBytes(temporary, protectedBytes);
+            File.Move(temporary, LicenseClockPath, true);
+            return true;
+        }
+        catch (CryptographicException) { error = "Windows no pudo proteger la vigencia de la licencia."; return false; }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { error = "JetVenta no tiene permiso para guardar la vigencia de la licencia."; return false; }
+    }
+
     private sealed record TrialState(int Version, string MachineFingerprint, DateTimeOffset StartedAtUtc, DateTimeOffset LastSeenAtUtc);
+    private sealed record LicenseClockState(int Version, string LicenseId, string MachineFingerprint, DateTimeOffset LastSeenAtUtc);
 
     private static string GetSystemVolumeSerial()
     {

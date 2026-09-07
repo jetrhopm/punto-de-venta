@@ -9,6 +9,7 @@ namespace Pos.Desktop;
 public partial class ProductLookupWindow : Window
 {
     private CancellationTokenSource? _searchCancellation;
+    public ProductLookupSelection? SelectedProduct { get; private set; }
 
     public ProductLookupWindow(string initialQuery = "")
     {
@@ -19,6 +20,7 @@ public partial class ProductLookupWindow : Window
             SearchBox.Focus();
             SearchBox.SelectAll();
         };
+        Closed += (_, _) => _searchCancellation?.Cancel();
     }
 
     private async void OnSearchChanged(object sender, TextChangedEventArgs e)
@@ -39,6 +41,7 @@ public partial class ProductLookupWindow : Window
             await Task.Delay(180, token);
             var products = await ApiClient.Client.GetFromJsonAsync<List<ProductLookupResult>>($"/api/products/search?q={Uri.EscapeDataString(query)}", token) ?? [];
             ProductsGrid.ItemsSource = products.Select(product => new ProductLookupRow(product)).ToList();
+            ProductsGrid.SelectedIndex = products.Count > 0 ? 0 : -1;
             StatusText.Text = products.Count == 0 ? "No se encontraron productos." : $"{products.Count} producto(s) encontrados.";
         }
         catch (OperationCanceledException) { }
@@ -55,6 +58,50 @@ public partial class ProductLookupWindow : Window
             Close();
             e.Handled = true;
         }
+        else if (e.Key is Key.Down or Key.Up)
+        {
+            if (ProductsGrid.Items.Count > 0)
+            {
+                ProductsGrid.SelectedIndex = e.Key == Key.Down
+                    ? Math.Min(ProductsGrid.SelectedIndex < 0 ? 0 : ProductsGrid.SelectedIndex + 1, ProductsGrid.Items.Count - 1)
+                    : Math.Max(ProductsGrid.SelectedIndex <= 0 ? 0 : ProductsGrid.SelectedIndex - 1, 0);
+                ProductsGrid.Focus();
+            }
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter)
+        {
+            SelectProduct();
+            e.Handled = true;
+        }
+    }
+
+    private void OnProductsGridKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            SelectProduct();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            Close();
+            e.Handled = true;
+        }
+    }
+
+    private void OnProductDoubleClick(object sender, MouseButtonEventArgs e) => SelectProduct();
+
+    private void SelectProduct()
+    {
+        if (ProductsGrid.SelectedItem is not ProductLookupRow row)
+        {
+            StatusText.Text = "Selecciona un producto para agregarlo a la venta.";
+            return;
+        }
+
+        SelectedProduct = new ProductLookupSelection(row.Product.Id, row.Product.Code, row.Product.Description, row.Product.Price, row.Product.Stock);
+        DialogResult = true;
     }
 
     private sealed record ProductLookupResult(Guid Id, string Code, string Description, string? Category, decimal Price, decimal WholesalePrice, decimal WholesaleMinimumQuantity, decimal Stock, string UnitOfMeasure);
@@ -70,3 +117,5 @@ public partial class ProductLookupWindow : Window
         public string StockText => $"{Product.Stock:0.###}";
     }
 }
+
+public sealed record ProductLookupSelection(Guid Id, string Code, string Description, decimal Price, decimal Stock);

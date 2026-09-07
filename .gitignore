@@ -29,6 +29,10 @@ publish/
 *.secret.json
 appsettings.*.Local.json
 *.jv
+*.jvissuer
+*.jvrecovery
+issuer-private-key.bin
+issuer-enrollment-private-key.bin
 
 # Logs
 logs/

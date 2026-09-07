@@ -4,7 +4,7 @@ JetVenta usa activación local firmada. El programa muestra un código de solici
 
 ## Periodo de prueba
 
-Las instalaciones sin `licencia.jv` comienzan automáticamente en modo de prueba y pueden operar con normalidad durante el periodo configurado. En esta etapa de pruebas el periodo dura **30 minutos** para poder validar rápidamente el vencimiento. El código está preparado para la liberación comercial y se cambiará a `TimeSpan.FromDays(30)` antes de distribuir el producto.
+Las instalaciones sin `licencia.jv` comienzan automáticamente en modo de prueba y pueden operar con normalidad durante **30 días**. El inicio, la última hora observada y la huella del equipo se guardan cifrados localmente para impedir que cerrar el programa o retroceder el reloj reinicie el periodo.
 
 JetVenta muestra el tiempo restante al iniciar sesión y en `Configuración > Licencia`. Cuando termina la prueba, la API bloquea las operaciones comerciales y permite consultar la activación para que un administrador cargue una licencia válida. Los respaldos se mantienen disponibles como función de continuidad, sujetos a los permisos administrativos normales.
 
@@ -15,6 +15,9 @@ El estado de la prueba se guarda cifrado con DPAPI en `C:\ProgramData\PuntoDeVen
 - El archivo contiene la huella del equipo, nombre de tienda, identificador, fecha de emisión y, si se seleccionó, fecha de vencimiento.
 - Cada archivo está firmado con ECDSA P-256. JetVenta solo contiene la llave pública y rechaza cualquier archivo alterado o emitido para otro equipo.
 - Tras importarlo, JetVenta almacena la licencia cifrada con DPAPI de Windows en `C:\ProgramData\PuntoDeVenta\license`. Copiar la base de datos no copia una activación funcional hacia otra computadora.
+- Las compilaciones comerciales no contienen el bypass utilizado para ejecutar el entorno Debug. Definir una variable de entorno no desactiva la licencia de una instalación Release.
+- Las licencias con vencimiento conservan un reloj local cifrado; si el reloj de Windows retrocede después de una validación, JetVenta bloquea la operación hasta corregirlo.
+- El instalador registra `.jv` como archivo de licencia y le asigna un icono propio de llave con la identidad de JetVenta. El archivo se activa únicamente desde la pantalla de Licencia, después de verificar firma, equipo y vigencia.
 - La llave privada del emisor vive fuera del repositorio y fuera del instalador. Nunca debe enviarse al cliente, copiarse a carpetas compartidas ni incluirse en respaldos de la tienda.
 - Al desinstalar JetVenta se elimina la activación local. La desinstalación normal sigue conservando base de datos, configuración operativa y respaldos.
 

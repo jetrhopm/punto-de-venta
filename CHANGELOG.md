@@ -1,6 +1,13 @@
 # Changelog
 
 ## Sin liberar
+- Se prepara la versión 2.3.2: F10 abre una sola búsqueda de productos por vez; el resultado se puede recorrer con flechas y agregar a la venta con Enter o doble clic.
+- Se prepara la versión 2.3.1: la configuración inicial permite personalizar tienda, giro, administrador, contraseña, caja, moneda y unidad desde la primera instalación; los giros con acentos ya no son rechazados por la API y cualquier validación se muestra de forma clara.
+- El periodo de prueba comercial cambia de 30 minutos a 30 días y mantiene la detección de retrocesos del reloj.
+- Las compilaciones Release ya no aceptan la variable de desarrollo que omite la licencia; ese comportamiento queda limitado a Debug.
+- Las licencias con vencimiento registran la última hora validada en almacenamiento cifrado para impedir que retroceder el reloj extienda su vigencia.
+- El instalador registra los archivos `.jv` como licencias de JetVenta y les asigna un icono propio de llave sin activarlos automáticamente al abrirlos.
+- Se prepara la versión 2.3.0: la importación de productos permite relacionar manualmente las columnas de archivos CSV y XLSX, revisar ejemplos y omitir productos individuales mediante una casilla antes de confirmar.
 - El cierre de caja exige la autorización temporal concreta emitida para esa acción y la consume al completarse; permisos temporales vencidos, residuales o de otra función no permiten realizar un corte.
 - Se prepara la versión 2.2.9: el cierre de turno distingue una caída real de la API de un fallo puntual, confirma el estado tras respuestas inciertas y registra el error técnico sin dejar el programa bloqueado.
 - Los permisos temporales ya no aparecen como permisos permanentes en Cajeros y permisos; se eliminan al cerrar sesión y se limpian antes de un nuevo inicio de sesión.

@@ -60,7 +60,9 @@ public partial class LoginWindow : Window
 
     private void OnUserSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        if (UserComboBox.SelectedItem is LoginUserOption) PasswordBox.Focus();
+        if (UserComboBox.SelectedItem is not LoginUserOption selectedUser) return;
+        UserComboBox.Text = selectedUser.UserName.ToLowerInvariant();
+        PasswordBox.Focus();
     }
 
     private async Task LoadActiveUsersAsync()
@@ -98,11 +100,14 @@ public partial class LoginWindow : Window
         if (_isBusy) return;
 
         var typedUserName = UserComboBox.Text.Trim();
-        var selectedUser = _users.FirstOrDefault(user => string.Equals(user.UserName, typedUserName, StringComparison.OrdinalIgnoreCase))
-            ?? UserComboBox.SelectedItem as LoginUserOption;
+        var selectedUser = _users.FirstOrDefault(user =>
+            string.Equals(user.UserName, typedUserName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(user.DisplayText, typedUserName, StringComparison.OrdinalIgnoreCase));
         if (selectedUser is null)
         {
-            SetStatus("Elige un usuario de la lista o escribe un usuario válido.", StatusKind.Error);
+            SetStatus(string.IsNullOrWhiteSpace(typedUserName)
+                ? "Escribe o selecciona un usuario para continuar."
+                : "El usuario escrito no existe o está desactivado.", StatusKind.Error);
             UserComboBox.Focus();
             return;
         }

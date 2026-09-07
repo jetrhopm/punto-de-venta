@@ -40,9 +40,32 @@ public sealed class JetVentaLicensingTests
     }
 
     [Fact]
+    public void License_file_rejects_unknown_fields()
+    {
+        const string content = """
+            {"license":{"version":1,"product":"JetVenta","licenseId":"00000000-0000-0000-0000-000000000001","machineFingerprint":"JV1-0123456789ABCDEF01234567","issuedAtUtc":"2026-09-05T12:00:00Z","expiresAtUtc":null,"storeName":"Tienda","unexpected":true},"signature":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="}
+            """;
+
+        var valid = JetVentaLicensing.TryReadLicense(content, out _, out var error);
+
+        Assert.False(valid);
+        Assert.Equal("El archivo de licencia no tiene un formato reconocido.", error);
+    }
+
+    [Fact]
+    public void License_file_rejects_oversized_content()
+    {
+        var valid = JetVentaLicensing.TryReadLicense(new string('A', 16 * 1024 + 1), out _, out var error);
+
+        Assert.False(valid);
+        Assert.Contains("demasiado grande", error);
+    }
+
+    [Fact]
     public void Issuer_enrollment_request_round_trips_without_machine_data_loss()
     {
-        var encryptionPublicKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(512));
+        using var rsa = RSA.Create(3072);
+        var encryptionPublicKey = Convert.ToBase64String(rsa.ExportSubjectPublicKeyInfo());
         var code = JetVentaIssuerAuthorization.CreateEnrollmentRequestCode("ISSUER-DEVICE-0123456789", encryptionPublicKey);
 
         var valid = JetVentaIssuerAuthorization.TryReadEnrollmentRequest(code, out var request, out var error);

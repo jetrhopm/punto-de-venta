@@ -12,10 +12,10 @@
         </Grid.RowDefinitions>
         <StackPanel>
             <TextBlock Text="Buscador de productos" FontSize="24" FontWeight="SemiBold" Foreground="#17324D"/>
-            <TextBlock Text="F10 consulta productos por código, descripción o palabra parcial. No agrega productos a la venta." Foreground="#526577" Margin="0,5,0,0"/>
+            <TextBlock Text="Busca por código, descripción o palabra parcial. Usa las flechas y Enter, o doble clic, para agregar el producto seleccionado." Foreground="#526577" Margin="0,5,0,0"/>
         </StackPanel>
         <TextBox Grid.Row="1" x:Name="SearchBox" Height="40" Margin="0,18,0,10" FontSize="16" Padding="10,5" TextChanged="OnSearchChanged" KeyDown="OnSearchKeyDown" ToolTip="Buscar por código o descripción"/>
-        <DataGrid Grid.Row="2" x:Name="ProductsGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single">
+        <DataGrid Grid.Row="2" x:Name="ProductsGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" MouseDoubleClick="OnProductDoubleClick" KeyDown="OnProductsGridKeyDown">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Código" Binding="{Binding Code}" Width="140"/>
                 <DataGridTextColumn Header="Descripción" Binding="{Binding Description}" Width="2*"/>
