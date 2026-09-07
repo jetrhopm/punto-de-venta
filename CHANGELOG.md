@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se publica la versión 2.4.2: las alertas y confirmaciones de escritorio adoptan el estilo visual de JetVenta sin alterar sus decisiones; Productos F3 marca y explica inmediatamente cuando el máximo de existencia es menor que el mínimo.
 - Se publica la versión 2.4.1: el producto común desde código no encontrado captura cantidad y unidad/granel en el mismo diálogo; precio y cantidad seleccionan el valor completo al enfocarse.
 - Se publica la versión 2.4.0: el catálogo captura existencia inicial, mínimos y máximos; diferencia visualmente menudeo y mayoreo; conserva bajas lógicas e informa errores y guardados con alertas claras.
 - Se publica la versión 2.3.11: la impresión se habilita explícitamente por caja; Compras acepta Enter y lectores de código; producto común temporal deja de abrir un segundo formulario y Compras permite actualizar precio y margen calculado.

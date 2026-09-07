@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace Pos.Desktop;
 
@@ -47,6 +48,8 @@ public partial class ProductCatalogWindow : UserControl
         SortBox.SelectionChanged += OnFilterSelectionChanged;
         DescendingBox.Checked += OnFilterCheckedChanged;
         DescendingBox.Unchecked += OnFilterCheckedChanged;
+        MinimumStockBox.TextChanged += OnStockLimitChanged;
+        MaximumStockBox.TextChanged += OnStockLimitChanged;
     }
 
     private async Task LoadStoreOptionsAsync()
@@ -233,8 +236,8 @@ public partial class ProductCatalogWindow : UserControl
     private bool TryReadForm(out object command)
     {
         command = new { };
-        if (string.IsNullOrWhiteSpace(CodeBox.Text) || string.IsNullOrWhiteSpace(DescriptionBox.Text)) { StatusText.Text = "Código y descripción son obligatorios."; return false; }
-        if (!TryDecimal(CostBox.Text, out var cost) || !TryDecimal(PriceBox.Text, out var price)) { StatusText.Text = "Costo y precio de venta deben ser números válidos."; return false; }
+        if (string.IsNullOrWhiteSpace(CodeBox.Text) || string.IsNullOrWhiteSpace(DescriptionBox.Text)) { ShowProductValidationError("Código y descripción son obligatorios.", CodeBox); return false; }
+        if (!TryDecimal(CostBox.Text, out var cost) || !TryDecimal(PriceBox.Text, out var price)) { ShowProductValidationError("Costo y precio de venta deben ser números válidos.", CostBox); return false; }
         var profit = TryDecimal(ProfitPercentBox.Text, out var parsedProfit) ? parsedProfit : 0m;
         var wholesalePrice = TryDecimal(WholesalePriceBox.Text, out var parsedWholesalePrice) ? parsedWholesalePrice : 0m;
         var wholesaleProfit = TryDecimal(WholesaleProfitPercentBox.Text, out var parsedWholesaleProfit) ? parsedWholesaleProfit : 0m;
@@ -242,13 +245,47 @@ public partial class ProductCatalogWindow : UserControl
         var initialStock = TryDecimal(InitialStockBox.Text, out var parsedInitialStock) ? parsedInitialStock : -1m;
         var minimumStock = TryDecimal(MinimumStockBox.Text, out var parsedMinimumStock) ? parsedMinimumStock : -1m;
         var maximumStock = TryDecimal(MaximumStockBox.Text, out var parsedMaximumStock) ? parsedMaximumStock : -1m;
-        if (cost < 0 || profit < 0 || price < 0 || wholesalePrice < 0 || wholesaleProfit < 0 || wholesaleMinimum < 0 || initialStock < 0 || minimumStock < 0 || maximumStock < 0) { StatusText.Text = "Los importes, existencias y porcentajes no pueden ser negativos."; return false; }
-        if (maximumStock > 0m && maximumStock < minimumStock) { StatusText.Text = "El máximo de existencia debe ser igual o mayor al mínimo."; MaximumStockBox.Focus(); return false; }
-        if (price <= 0m && profit <= 0m) { StatusText.Text = "Indica un precio de venta manual mayor a cero o captura un porcentaje de ganancia."; return false; }
+        if (cost < 0 || profit < 0 || price < 0 || wholesalePrice < 0 || wholesaleProfit < 0 || wholesaleMinimum < 0 || initialStock < 0 || minimumStock < 0 || maximumStock < 0) { ShowProductValidationError("Los importes, existencias y porcentajes no pueden ser negativos.", MinimumStockBox); return false; }
+        if (maximumStock > 0m && maximumStock < minimumStock) { ShowProductValidationError("El máximo de existencia debe ser igual o mayor al mínimo.", MaximumStockBox); return false; }
+        if (price <= 0m && profit <= 0m) { ShowProductValidationError("Indica un precio de venta manual mayor a cero o captura un porcentaje de ganancia.", PriceBox); return false; }
         var unit = UnitBox.SelectedItem?.ToString() ?? "Pieza";
         if (string.Equals(unit, "Granel (unidad configurada)", StringComparison.OrdinalIgnoreCase)) unit = _configuredWeightUnit;
         command = new { code = CodeBox.Text.Trim(), description = DescriptionBox.Text.Trim(), price, cost, profitPercent = profit, wholesalePrice, wholesaleProfitPercent = wholesaleProfit, wholesaleMinimumQuantity = wholesaleMinimum, isKit = IsKitBox.IsChecked == true, unitOfMeasure = unit, departmentId = DepartmentBox.SelectedValue is Guid department && department != Guid.Empty ? department : (Guid?)null, initialStock, minimumStock, maximumStock };
         return true;
+    }
+
+    private void OnStockLimitChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!TryDecimal(MinimumStockBox.Text, out var minimum) || !TryDecimal(MaximumStockBox.Text, out var maximum))
+        {
+            ClearStockLimitWarning();
+            return;
+        }
+
+        if (maximum > 0m && maximum < minimum)
+        {
+            MaximumStockBox.BorderBrush = Brushes.IndianRed;
+            MaximumStockBox.BorderThickness = new Thickness(2);
+            MaximumStockBox.ToolTip = "El máximo debe ser igual o mayor al mínimo.";
+            StatusText.Text = "Revisa inventario: el máximo de existencia es menor que el mínimo.";
+            return;
+        }
+
+        ClearStockLimitWarning();
+    }
+
+    private void ClearStockLimitWarning()
+    {
+        MaximumStockBox.ClearValue(Control.BorderBrushProperty);
+        MaximumStockBox.ClearValue(Control.BorderThicknessProperty);
+        MaximumStockBox.ClearValue(Control.ToolTipProperty);
+    }
+
+    private void ShowProductValidationError(string message, Control control)
+    {
+        StatusText.Text = message;
+        control.Focus();
+        new OperationResultWindow("Revisa el producto", message, OperationResultKind.Warning) { Owner = Window.GetWindow(this) }.ShowDialog();
     }
 
     private void OnDepartmentsClick(object sender, RoutedEventArgs e) { var window = new DepartmentManagerWindow { Owner = Window.GetWindow(this) }; window.Closed += async (_, _) => await LoadDepartmentsAsync(); window.ShowDialog(); }
