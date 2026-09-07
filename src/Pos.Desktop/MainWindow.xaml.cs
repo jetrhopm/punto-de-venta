@@ -844,7 +844,7 @@ public partial class MainWindow : Window
         }
 
         var quantity = requestedQuantity ?? 1m;
-        if (!skipBulkQuantityPrompt && requestedQuantity is null && IsBulkUnit(product.UnitOfMeasure))
+        if (!skipBulkQuantityPrompt && !product.IsCommonProduct && requestedQuantity is null && IsBulkUnit(product.UnitOfMeasure))
         {
             var window = new SaleQuantityWindow(product.Description, product.UnitOfMeasure, 1m) { Owner = this };
             if (window.ShowDialog() != true || window.Quantity is null) { FocusProductInput(); return; }
@@ -1027,7 +1027,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private sealed record ProductSearchResult(Guid Id, string Code, string Description, decimal Price, decimal Stock = 0m, string UnitOfMeasure = "Pieza");
+    private sealed record ProductSearchResult(Guid Id, string Code, string Description, decimal Price, decimal Stock = 0m, string UnitOfMeasure = "Pieza", bool IsCommonProduct = false);
     private sealed record ProductSearchRow(ProductSearchResult Product)
     {
         public string DisplayText => $"{Product.Code} | {Product.Description} | ${Product.Price:0.00}";

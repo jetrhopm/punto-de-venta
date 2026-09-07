@@ -499,7 +499,7 @@ app.MapPost("/api/products/quick-sale", async (HttpRequest request, ProductComma
         : command.Code.Trim();
     var normalized = ProductCatalogService.NormalizeCode(productCode);
     var existing = await database.Products.AsNoTracking().SingleOrDefaultAsync(item => item.NormalizedCode == normalized && item.IsActive, cancellationToken);
-    if (existing is not null) return Results.Ok(new { existing.Id, existing.Code, existing.Description, existing.Price, existing.UnitOfMeasure });
+    if (existing is not null) return Results.Ok(new { existing.Id, existing.Code, existing.Description, existing.Price, existing.UnitOfMeasure, existing.IsCommonProduct });
 
     var product = new ProductRecord
     {
@@ -519,7 +519,7 @@ app.MapPost("/api/products/quick-sale", async (HttpRequest request, ProductComma
     };
     database.Products.Add(product);
     await database.SaveChangesAsync(cancellationToken);
-    return Results.Created($"/api/products/{product.Id}", new { product.Id, product.Code, product.Description, product.Price, product.UnitOfMeasure });
+    return Results.Created($"/api/products/{product.Id}", new { product.Id, product.Code, product.Description, product.Price, product.UnitOfMeasure, product.IsCommonProduct });
 });
 
 app.MapPost("/api/products", async (HttpRequest request, ProductCommand command, ProductCatalogService catalog, CancellationToken cancellationToken) =>

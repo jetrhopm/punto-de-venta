@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se publica la versión 2.4.3: el producto común temporal creado desde un código no encontrado se identifica de extremo a extremo y nunca vuelve a solicitar peso o piezas; los productos de inventario a granel conservan esa captura.
 - Se publica la versión 2.4.2: las alertas y confirmaciones de escritorio adoptan el estilo visual de JetVenta sin alterar sus decisiones; Productos F3 marca y explica inmediatamente cuando el máximo de existencia es menor que el mínimo.
 - Se publica la versión 2.4.1: el producto común desde código no encontrado captura cantidad y unidad/granel en el mismo diálogo; precio y cantidad seleccionan el valor completo al enfocarse.
 - Se publica la versión 2.4.0: el catálogo captura existencia inicial, mínimos y máximos; diferencia visualmente menudeo y mayoreo; conserva bajas lógicas e informa errores y guardados con alertas claras.
