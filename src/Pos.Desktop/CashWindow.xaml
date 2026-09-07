@@ -20,6 +20,6 @@
                 <TextBlock x:Name="MixedCashDueText" Grid.Row="4" Foreground="#526577" TextWrapping="Wrap" />
             </Grid>
         </StackPanel>
-        <StackPanel Grid.Row="4" Margin="0,12,0,0"><TextBlock x:Name="MessageText" Foreground="#B42318" TextWrapping="Wrap" Margin="0,0,0,6" /><Button Height="40" Background="#146CB0" Foreground="White" FontWeight="Bold" Click="OnConfirmClick">Cobrar e imprimir  F1</Button><Button Height="32" Margin="0,6,0,0" Click="OnConfirmWithoutPrintClick">Cobrar sin imprimir  F2</Button><Button x:Name="CreditButton" Height="32" Margin="0,6,0,0" Click="OnCreditClick">Cobrar a crédito  F3</Button><TextBlock Text="Esc: cancelar" HorizontalAlignment="Center" Margin="0,6,0,0" Foreground="#526577" FontSize="11"/></StackPanel>
+        <StackPanel Grid.Row="4" Margin="0,12,0,0"><TextBlock x:Name="MessageText" Foreground="#B42318" TextWrapping="Wrap" Margin="0,0,0,6" /><Button x:Name="ConfirmPrintButton" Height="40" Background="#146CB0" Foreground="White" FontWeight="Bold" Click="OnConfirmClick">Cobrar e imprimir  F1</Button><Button x:Name="ConfirmWithoutPrintButton" Height="32" Margin="0,6,0,0" Click="OnConfirmWithoutPrintClick">Cobrar sin imprimir  F2</Button><Button x:Name="CreditButton" Height="32" Margin="0,6,0,0" Click="OnCreditClick">Cobrar a crédito  F3</Button><TextBlock Text="Esc: cancelar" HorizontalAlignment="Center" Margin="0,6,0,0" Foreground="#526577" FontSize="11"/></StackPanel>
     </Grid>
 </Window>

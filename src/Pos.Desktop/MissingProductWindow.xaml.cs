@@ -52,6 +52,13 @@ public partial class MissingProductWindow : Window
 
     private void OnCommonClick(object sender, RoutedEventArgs e)
     {
+        if (!TryReadValues()) return;
+        if (string.IsNullOrWhiteSpace(ProductDescription))
+        {
+            MessageText.Text = "Escribe una descripción para el producto común.";
+            DescriptionBox.Focus();
+            return;
+        }
         ProductCode = CodeBox.Text.Trim();
         Decision = MissingProductDecision.CommonProduct;
         DialogResult = true;

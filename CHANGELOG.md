@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se publica la versión 2.3.11: la impresión se habilita explícitamente por caja; Compras acepta Enter y lectores de código; producto común temporal deja de abrir un segundo formulario y Compras permite actualizar precio y margen calculado.
 - Se publica la versión 2.3.10: F12 usa la misma acción asíncrona y protegida contra doble ejecución que el botón Cobrar.
 - Se publica la versión 2.3.9: la alerta de caja con turno abierto permite cancelar sin modificar nada o volver directamente al login para cambiar de usuario.
 - Se publica la versión 2.3.8: al intentar abrir una caja ocupada, JetVenta identifica la cuenta que mantiene el turno abierto y explica que debe cerrar corte antes de operar con otra cuenta.

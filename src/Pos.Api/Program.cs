@@ -444,7 +444,7 @@ app.MapGet("/api/products/search", async (string? q, PosDbContext database, Canc
     var products = await database.Products.AsNoTracking()
         .Where(product => product.IsActive && !product.IsTemporary && (product.NormalizedCode.Contains(normalized) || product.Description.ToUpper().Contains(normalized)))
         .OrderBy(product => product.Description).Take(30)
-        .Select(product => new { product.Id, product.Code, product.Description, product.Category, product.Price, product.Cost, product.WholesalePrice, product.WholesaleMinimumQuantity, product.Stock, product.MinimumStock, product.MaximumStock, product.IsKit, product.UnitOfMeasure, product.IsActive })
+        .Select(product => new { product.Id, product.Code, product.Description, product.Category, product.Price, product.Cost, product.ProfitPercent, product.WholesalePrice, product.WholesaleMinimumQuantity, product.Stock, product.MinimumStock, product.MaximumStock, product.IsKit, product.UnitOfMeasure, product.IsActive })
         .ToListAsync(cancellationToken);
     return Results.Ok(products);
 });

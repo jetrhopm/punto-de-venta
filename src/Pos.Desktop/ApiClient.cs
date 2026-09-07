@@ -17,6 +17,8 @@ public static class ApiClient
     public static Guid? StoreId { get; private set; }
     public static Guid? RegisterId { get; private set; }
     public static string? PrinterName { get; private set; }
+    public static bool PrintingEnabled { get; private set; }
+    public static bool IsTicketPrintingAvailable => PrintingEnabled && !string.IsNullOrWhiteSpace(PrinterName);
     public static string PrinterFontFamily { get; private set; } = "Consolas";
     public static double PrinterFontSize { get; private set; } = 9d;
     public static bool UseNormalTotals { get; private set; }
@@ -72,9 +74,10 @@ public static class ApiClient
         SaveSettings(protectedToken);
     }
 
-    public static void SetPrinterProfile(string? printerName, string fontFamily, double fontSize, bool useNormalTotals, int widthMm)
+    public static void SetPrinterProfile(string? printerName, string fontFamily, double fontSize, bool useNormalTotals, int widthMm, bool? printingEnabled = null)
     {
         PrinterName = string.IsNullOrWhiteSpace(printerName) ? null : printerName.Trim();
+        PrintingEnabled = printingEnabled ?? !string.IsNullOrWhiteSpace(PrinterName);
         PrinterFontFamily = string.IsNullOrWhiteSpace(fontFamily) ? "Consolas" : fontFamily.Trim();
         PrinterFontSize = fontSize is >= 6d and <= 24d ? fontSize : 9d;
         UseNormalTotals = useNormalTotals;
@@ -101,7 +104,7 @@ public static class ApiClient
             try { currentToken = JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(SettingsPath))?.DeviceTokenProtected; }
             catch (JsonException) { }
         }
-        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm, BarcodeScanner)));
+        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm, BarcodeScanner, PrintingEnabled)));
     }
 
     private static void Load()
@@ -116,6 +119,7 @@ public static class ApiClient
                     BaseUrl = settings.BaseUrl.TrimEnd('/');
                     DeviceId = settings.DeviceId; StoreId = settings.StoreId; RegisterId = settings.RegisterId;
                     PrinterName = settings.PrinterName;
+                    PrintingEnabled = settings.PrintingEnabled ?? !string.IsNullOrWhiteSpace(settings.PrinterName);
                     PrinterFontFamily = string.IsNullOrWhiteSpace(settings.PrinterFontFamily) ? "Consolas" : settings.PrinterFontFamily;
                     PrinterFontSize = settings.PrinterFontSize is >= 6d and <= 24d ? settings.PrinterFontSize : 9d;
                     UseNormalTotals = settings.UseNormalTotals;
@@ -157,7 +161,8 @@ public static class ApiClient
         double PrinterFontSize = 9d,
         bool UseNormalTotals = false,
         int PrinterTicketWidthMm = 80,
-        BarcodeScannerProfile? BarcodeScanner = null);
+        BarcodeScannerProfile? BarcodeScanner = null,
+        bool? PrintingEnabled = null);
 }
 
 public enum BarcodeScannerMode { Keyboard, Serial, Disabled }

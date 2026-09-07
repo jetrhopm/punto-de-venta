@@ -15,8 +15,10 @@ public partial class PurchaseWindow : UserControl
     private ProductRow? _product;
     public PurchaseWindow()
     {
-        InitializeComponent(); Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", SessionContext.AccessToken); Loaded += async (_, _) => await LoadSuppliersAsync();
+        InitializeComponent(); Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", SessionContext.AccessToken); Loaded += OnLoaded; Unloaded += OnUnloaded;
     }
+    private async void OnLoaded(object sender, RoutedEventArgs e) { BarcodeScannerService.BarcodeScanned += OnBarcodeScanned; await LoadSuppliersAsync(); SearchTextBox.Focus(); }
+    private void OnUnloaded(object sender, RoutedEventArgs e) => BarcodeScannerService.BarcodeScanned -= OnBarcodeScanned;
     private async Task LoadSuppliersAsync()
     {
         try
@@ -40,31 +42,76 @@ public partial class PurchaseWindow : UserControl
     }
     private void OnProductSelected(object sender, MouseButtonEventArgs e)
     {
-        if (ResultsList.SelectedItem is not ProductRow row) return;
+        if (ResultsList.SelectedItem is ProductRow row) SelectProduct(row);
+    }
+    private async void OnSearchKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Down or Key.Up)
+        {
+            if (ResultsList.Items.Count > 0)
+            {
+                ResultsList.SelectedIndex = e.Key == Key.Down
+                    ? Math.Min(ResultsList.SelectedIndex < 0 ? 0 : ResultsList.SelectedIndex + 1, ResultsList.Items.Count - 1)
+                    : Math.Max(ResultsList.SelectedIndex <= 0 ? 0 : ResultsList.SelectedIndex - 1, 0);
+                ResultsList.ScrollIntoView(ResultsList.SelectedItem);
+            }
+            e.Handled = true;
+            return;
+        }
+        if (e.Key != Key.Enter) return;
+        if (ResultsList.SelectedItem is ProductRow row) SelectProduct(row);
+        else await SelectSearchResultAsync(SearchTextBox.Text.Trim());
+        e.Handled = true;
+    }
+    private async Task SelectSearchResultAsync(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return;
+        try
+        {
+            var products = await Client.GetFromJsonAsync<List<ProductResult>>($"/api/products/search?q={Uri.EscapeDataString(query)}") ?? [];
+            var selected = products.FirstOrDefault(item => string.Equals(item.Code, query, StringComparison.OrdinalIgnoreCase))
+                ?? (products.Count == 1 ? products[0] : null);
+            if (selected is not null) SelectProduct(new ProductRow(selected));
+            else { MessageText.Foreground = System.Windows.Media.Brushes.DarkRed; MessageText.Text = products.Count == 0 ? "No se encontró el producto leído." : "Hay varias coincidencias: selecciónala con flechas y Enter."; }
+        }
+        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableRetry; }
+    }
+    private void OnBarcodeScanned(object? sender, string code) => Dispatcher.BeginInvoke(async () => { SearchTextBox.Text = code; await SelectSearchResultAsync(code); });
+    private void SelectProduct(ProductRow row)
+    {
         _product = row;
         SearchTextBox.Text = row.Product.Code;
         SearchTextBox.SelectAll();
         ShowSelectedProduct(row.Product);
         ResultsList.Visibility = Visibility.Collapsed;
         UnitCostTextBox.Text = row.Product.Cost.ToString("0.00", CultureInfo.CurrentCulture);
+        SalePriceTextBox.Text = row.Product.Price.ToString("0.00", CultureInfo.CurrentCulture);
+        UpdateMargin();
         QuantityTextBox.Focus();
         QuantityTextBox.SelectAll();
     }
+    private void OnPricingChanged(object sender, TextChangedEventArgs e) => UpdateMargin();
+    private void UpdateMargin()
+    {
+        if (!TryParse(UnitCostTextBox.Text, out var cost) || !TryParse(SalePriceTextBox.Text, out var price) || cost <= 0m) { ProfitPercentTextBox.Text = string.Empty; return; }
+        ProfitPercentTextBox.Text = (((price - cost) / cost) * 100m).ToString("0.##", CultureInfo.CurrentCulture) + "%";
+    }
     private async void OnReceiveClick(object sender, RoutedEventArgs e)
     {
-        if (_product is null || !TryParse(QuantityTextBox.Text, out var quantity) || !TryParse(UnitCostTextBox.Text, out var cost)) { MessageText.Text = "Selecciona un producto e indica cantidad y costo."; return; }
+        if (_product is null || !TryParse(QuantityTextBox.Text, out var quantity) || !TryParse(UnitCostTextBox.Text, out var cost) || !TryParse(SalePriceTextBox.Text, out var salePrice)) { MessageText.Text = "Selecciona un producto e indica cantidad, costo y precio de venta."; return; }
         var supplierId = (SupplierComboBox.SelectedItem as SupplierResult)?.Id;
         try
         {
-            using var response = await Client.PostAsJsonAsync("/api/purchases/receive", new { operationId = Guid.NewGuid(), supplierId, lines = new[] { new { productId = _product.Product.Id, quantity, unitCost = cost } } });
+            using var response = await Client.PostAsJsonAsync("/api/purchases/receive", new { operationId = Guid.NewGuid(), supplierId, lines = new[] { new { productId = _product.Product.Id, quantity, unitCost = cost, salePrice } } });
             if (!response.IsSuccessStatusCode) { MessageText.Text = await response.Content.ReadAsStringAsync(); return; }
             var updatedStock = _product.Product.Stock + quantity;
-            _product = new ProductRow(_product.Product with { Stock = updatedStock, Cost = cost });
+            _product = new ProductRow(_product.Product with { Stock = updatedStock, Cost = cost, Price = salePrice });
             ShowSelectedProduct(_product.Product);
             ResultsList.Visibility = Visibility.Collapsed;
             QuantityTextBox.Clear();
             MessageText.Foreground = System.Windows.Media.Brushes.DarkGreen;
             MessageText.Text = $"Compra recibida. Existencia actualizada a {updatedStock:0.###} unidades.";
+            new OperationResultWindow("Compra registrada", $"La compra se registró para {_product.Product.Description}. Existencia actual: {updatedStock:0.###} {_product.Product.UnitOfMeasure}.", OperationResultKind.Success) { Owner = Window.GetWindow(this) }.ShowDialog();
         }
         catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableNotConfirmed; }
     }
@@ -79,6 +126,6 @@ public partial class PurchaseWindow : UserControl
         public static SupplierResult None { get; } = new(null, "Sin proveedor", null, null);
         public string DisplayText => Name;
     }
-    private sealed record ProductResult(Guid Id, string Code, string Description, decimal Price, decimal Cost, decimal Stock, string UnitOfMeasure);
+    private sealed record ProductResult(Guid Id, string Code, string Description, decimal Price, decimal Cost, decimal Stock, string UnitOfMeasure, decimal ProfitPercent);
     private sealed record ProductRow(ProductResult Product) { public string DisplayText => $"{Product.Code} | {Product.Description} | Venta ${Product.Price:0.00} | Existencia {Product.Stock:0.###} {Product.UnitOfMeasure}"; }
 }

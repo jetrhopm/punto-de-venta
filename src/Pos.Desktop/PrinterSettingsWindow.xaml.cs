@@ -20,10 +20,12 @@ public partial class PrinterSettingsWindow : Window
         FontBox.Text = ApiClient.PrinterFontFamily;
         FontSizeBox.Text = ApiClient.PrinterFontSize.ToString("0.#", CultureInfo.CurrentCulture);
         NormalTotalsCheck.IsChecked = ApiClient.UseNormalTotals;
+        PrintingEnabledCheck.IsChecked = ApiClient.PrintingEnabled;
         Width58Button.IsChecked = ApiClient.PrinterTicketWidthMm == 58;
         Width80Button.IsChecked = ApiClient.PrinterTicketWidthMm != 58;
         LoadPrinters();
         _loaded = true;
+        PrinterBox.IsEnabled = PrintingEnabledCheck.IsChecked == true;
         UpdatePreview();
     }
 
@@ -52,16 +54,25 @@ public partial class PrinterSettingsWindow : Window
         if (_loaded) UpdatePreview();
     }
 
+    private void OnPrintingEnabledChanged(object sender, RoutedEventArgs e)
+    {
+        if (!_loaded) return;
+        var enabled = PrintingEnabledCheck.IsChecked == true;
+        PrinterBox.IsEnabled = enabled;
+        UpdatePreview();
+    }
+
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
         if (!TryReadProfile(out var printer, out var profile)) return;
-        ApiClient.SetPrinterProfile(printer, profile.FontFamily, profile.FontSize, profile.UseNormalTotals, profile.WidthMm);
+        ApiClient.SetPrinterProfile(printer, profile.FontFamily, profile.FontSize, profile.UseNormalTotals, profile.WidthMm, PrintingEnabledCheck.IsChecked == true);
         ProfileSummaryText.Text = $"{profile.WidthMm} mm · {profile.FontFamily} {profile.FontSize:0.#} pt";
         StatusText.Text = $"Configuración guardada para esta caja: {printer}.";
     }
 
     private void OnTestClick(object sender, RoutedEventArgs e)
     {
+        if (PrintingEnabledCheck.IsChecked != true) { StatusText.Text = "Activa el uso de impresora antes de enviar una prueba."; return; }
         if (!TryReadProfile(out var printer, out var profile)) return;
         try
         {
@@ -83,6 +94,10 @@ public partial class PrinterSettingsWindow : Window
     {
         printer = PrinterBox.SelectedItem as string ?? PrinterBox.Text;
         profile = ReadProfileForPreview();
+        if (PrintingEnabledCheck.IsChecked != true)
+        {
+            return true;
+        }
         if (string.IsNullOrWhiteSpace(printer)) { StatusText.Text = "Selecciona una impresora instalada en Windows."; return false; }
         if (!double.TryParse(FontSizeBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var size) || size is < 6d or > 24d)
         {

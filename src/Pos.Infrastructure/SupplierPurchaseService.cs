@@ -7,7 +7,7 @@ namespace Pos.Infrastructure;
 
 public sealed record SupplierCommand(string Name, string? Phone, string? Email);
 public sealed record SupplierResult(Guid Id, string Name, string? Phone, string? Email);
-public sealed record PurchaseLineCommand(Guid ProductId, decimal Quantity, decimal UnitCost);
+public sealed record PurchaseLineCommand(Guid ProductId, decimal Quantity, decimal UnitCost, decimal? SalePrice = null);
 public sealed record ReceivePurchaseCommand(Guid OperationId, Guid? SupplierId, IReadOnlyList<PurchaseLineCommand> Lines);
 public sealed record ReceivePurchaseResult(Guid PurchaseId, Guid OperationId, decimal Total, bool Existing);
 
@@ -57,9 +57,14 @@ public sealed class SupplierPurchaseService(PosDbContext database)
         var total = 0m;
         foreach (var line in command.Lines)
         {
-            if (line.Quantity <= 0m || line.UnitCost < 0m) throw new ArgumentException("La cantidad debe ser positiva y el costo no puede ser negativo.");
+            if (line.Quantity <= 0m || line.UnitCost < 0m || line.SalePrice is < 0m) throw new ArgumentException("La cantidad debe ser positiva y el costo y precio no pueden ser negativos.");
             var product = products[line.ProductId]; var before = product.Stock; var oldValue = before * product.Cost; var receivedValue = line.Quantity * line.UnitCost; var after = before + line.Quantity;
             product.Cost = after == 0m ? 0m : decimal.Round((oldValue + receivedValue) / after, 2, MidpointRounding.AwayFromZero);
+            if (line.SalePrice is decimal salePrice)
+            {
+                product.Price = decimal.Round(salePrice, 2, MidpointRounding.AwayFromZero);
+                if (product.Cost > 0m) product.ProfitPercent = decimal.Round(((product.Price - product.Cost) / product.Cost) * 100m, 2, MidpointRounding.AwayFromZero);
+            }
             if (store.InventoryEnabled) product.Stock = decimal.Round(after, 3, MidpointRounding.AwayFromZero);
             if (store.AutoPriceWithProfit && product.Price <= 0m) product.Price = decimal.Round(product.Cost * (1m + (product.ProfitPercent > 0m ? product.ProfitPercent : store.DefaultProfitPercent) / 100m), 2, MidpointRounding.AwayFromZero);
             var lineTotal = decimal.Round(receivedValue, 2, MidpointRounding.AwayFromZero); total += lineTotal;

@@ -28,6 +28,8 @@
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <TextBlock Text="Dispositivo" FontSize="17" FontWeight="Bold"/>
+                    <CheckBox x:Name="PrintingEnabledCheck" Content="Usar impresora para tickets" FontWeight="SemiBold" Margin="0,13,0,5" Checked="OnPrintingEnabledChanged" Unchecked="OnPrintingEnabledChanged"/>
+                    <TextBlock Text="Al desactivarla, las ventas se confirman sin imprimir ni mostrar opciones de PDF." Foreground="{StaticResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"/>
                     <TextBlock Text="Impresora" FontWeight="SemiBold" Margin="0,13,0,5"/>
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="48"/></Grid.ColumnDefinitions>

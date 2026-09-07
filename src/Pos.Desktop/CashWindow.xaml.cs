@@ -16,6 +16,7 @@ public partial class CashWindow : Window
     private bool _cardEnabled = true;
     private bool _transferEnabled = true;
     private bool _creditEnabled = true;
+    private readonly bool _printingAvailable;
     public decimal? Received { get; private set; }
     public decimal CardAmount { get; private set; }
     public decimal TransferAmount { get; private set; }
@@ -24,10 +25,11 @@ public partial class CashWindow : Window
     public bool CreditRequested { get; private set; }
     public bool PrintRequested { get; private set; } = true;
 
-    public CashWindow(decimal total, decimal totalItems, Guid? selectedCustomerId = null, string? selectedCustomerName = null)
+    public CashWindow(decimal total, decimal totalItems, Guid? selectedCustomerId = null, string? selectedCustomerName = null, bool? printingAvailable = null)
     {
         InitializeComponent();
         _total = decimal.Round(total, 2);
+        _printingAvailable = printingAvailable ?? ApiClient.IsTicketPrintingAvailable;
         CustomerId = selectedCustomerId;
         CreditButton.IsEnabled = true;
         _controlsReady = true;
@@ -37,6 +39,12 @@ public partial class CashWindow : Window
         ReceivedTextBox.Focus();
         ReceivedTextBox.SelectAll();
         if (CustomerId is not null) MessageText.Text = $"Cliente seleccionado para esta venta: {selectedCustomerName ?? "Cliente"}.";
+        ConfirmPrintButton.Visibility = _printingAvailable ? Visibility.Visible : Visibility.Collapsed;
+        ConfirmWithoutPrintButton.Content = _printingAvailable ? "Cobrar sin imprimir  F2" : "Cobrar  F1";
+        ConfirmWithoutPrintButton.Height = _printingAvailable ? 32 : 40;
+        ConfirmWithoutPrintButton.Background = _printingAvailable ? Brushes.White : new SolidColorBrush(Color.FromRgb(20, 108, 176));
+        ConfirmWithoutPrintButton.Foreground = _printingAvailable ? Brushes.Black : Brushes.White;
+        ConfirmWithoutPrintButton.FontWeight = _printingAvailable ? FontWeights.Normal : FontWeights.Bold;
         Loaded += OnLoaded;
     }
 
@@ -107,7 +115,7 @@ public partial class CashWindow : Window
         ChangeText.Text = change >= 0m ? $"${change:0.00}" : "Falta efectivo";
     }
 
-    private void OnConfirmClick(object sender, RoutedEventArgs e) => Confirm(print: true);
+    private void OnConfirmClick(object sender, RoutedEventArgs e) => Confirm(print: _printingAvailable);
 
     private void OnConfirmWithoutPrintClick(object sender, RoutedEventArgs e) => Confirm(print: false);
 
@@ -135,13 +143,13 @@ public partial class CashWindow : Window
             if (customers.ShowDialog() != true || customers.SelectedCustomerId is null) return;
             CustomerId = customers.SelectedCustomerId;
         }
-        CreditRequested = true; _paymentMethod = "Credit"; Received = 0m; PrintRequested = true; DialogResult = true;
+        CreditRequested = true; _paymentMethod = "Credit"; Received = 0m; PrintRequested = _printingAvailable; DialogResult = true;
     }
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.F1) { Confirm(print: true); e.Handled = true; }
-        else if (e.Key == Key.F2) { Confirm(print: false); e.Handled = true; }
+        if (e.Key == Key.F1) { Confirm(print: _printingAvailable); e.Handled = true; }
+        else if (e.Key == Key.F2 && _printingAvailable) { Confirm(print: false); e.Handled = true; }
         else if (e.Key == Key.F3) { OnCreditClick(this, new RoutedEventArgs()); e.Handled = true; }
         else if (e.Key == Key.Escape) { DialogResult = false; e.Handled = true; }
     }

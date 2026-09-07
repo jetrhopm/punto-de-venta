@@ -693,16 +693,15 @@ public partial class MainWindow : Window
         var isCommonProduct = window.Decision == MissingProductDecision.CommonProduct;
         if (isCommonProduct)
         {
-            await OpenCommonProductAsync(window.ProductCode);
+            await AddCommonProductAsync(window.ProductCode, window.ProductDescription, window.Price, window.UnitOfMeasure, 1m);
             return;
         }
-        var requiredPermission = isCommonProduct ? "UseCommonProduct" : "ManageProducts";
-        await using var authorization = await PermissionAuthorization.RequestAsync(this, requiredPermission, isCommonProduct ? "Agregar un producto común requiere autorización." : "Registrar un producto desde la venta requiere autorización.");
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "ManageProducts", "Registrar un producto desde la venta requiere autorización.");
         if (authorization is null) { FocusProductInput(); return; }
 
         try
         {
-            var command = new { code = window.ProductCode, description = window.ProductDescription, price = window.Price, unitOfMeasure = window.UnitOfMeasure, isCommonProduct };
+            var command = new { code = window.ProductCode, description = window.ProductDescription, price = window.Price, unitOfMeasure = window.UnitOfMeasure, isCommonProduct = false };
             using var response = await Client.PostAsJsonAsync("/api/products/quick-sale", command);
             if (!response.IsSuccessStatusCode)
             {
@@ -733,12 +732,17 @@ public partial class MainWindow : Window
         var window = new CommonProductWindow(suggestedCode) { Owner = this };
         if (window.ShowDialog() != true) { FocusProductInput(); return; }
 
+        await AddCommonProductAsync(window.ProductCode, window.ProductDescription, window.Price, window.UnitOfMeasure, window.Quantity);
+    }
+
+    private async Task AddCommonProductAsync(string code, string description, decimal price, string unitOfMeasure, decimal quantity)
+    {
         await using var authorization = await PermissionAuthorization.RequestAsync(this, "UseCommonProduct", "Agregar un producto común requiere autorización.");
         if (authorization is null) { FocusProductInput(); return; }
 
         try
         {
-            var command = new { code = window.ProductCode, description = window.ProductDescription, price = window.Price, unitOfMeasure = window.UnitOfMeasure, isCommonProduct = true };
+            var command = new { code, description, price, unitOfMeasure, isCommonProduct = true };
             using var response = await Client.PostAsJsonAsync("/api/products/quick-sale", command);
             if (!response.IsSuccessStatusCode)
             {
@@ -749,7 +753,7 @@ public partial class MainWindow : Window
 
             var product = await response.Content.ReadFromJsonAsync<ProductSearchResult>();
             if (product is null) throw new InvalidOperationException("El servidor no devolvió el artículo temporal.");
-            await AddProductToCartAsync(product, window.Quantity);
+            await AddProductToCartAsync(product, quantity);
             StatusText.Text = "Producto común agregado sólo a este ticket. No modifica el inventario.";
         }
         catch (HttpRequestException)
@@ -1204,7 +1208,7 @@ public partial class MainWindow : Window
         if (!await PersistActiveTicketAsync()) return;
         var ticketSubtotal = decimal.Round(ticket.Lines.Sum(item => item.Total), 2, MidpointRounding.AwayFromZero);
         var ticketTotal = CalculateSaleTotal(ticketSubtotal);
-        var cashWindow = new CashWindow(ticketTotal, ticket.Lines.Sum(item => item.Quantity), ticket.CustomerId, ticket.CustomerName) { Owner = this };
+        var cashWindow = new CashWindow(ticketTotal, ticket.Lines.Sum(item => item.Quantity), ticket.CustomerId, ticket.CustomerName, ApiClient.IsTicketPrintingAvailable) { Owner = this };
         if (cashWindow.ShowDialog() != true || cashWindow.Received is null) return;
         await using var creditAuthorization = cashWindow.CreditRequested
             ? await PermissionAuthorization.RequestAsync(this, "SellOnCredit", "Cobrar una venta a crédito requiere autorización.")
@@ -1297,20 +1301,17 @@ public partial class MainWindow : Window
 
     private static async Task<string> OutputTicketAsync(Guid saleId)
     {
-        if (string.IsNullOrWhiteSpace(ApiClient.PrinterName))
-        {
-            await SaveTicketPdfAsync(saleId);
-            return "No hay impresora configurada; se ofreció guardar el ticket en PDF.";
-        }
+        var printerName = ApiClient.PrinterName;
+        if (!ApiClient.PrintingEnabled || string.IsNullOrWhiteSpace(printerName)) return "La impresión de tickets está desactivada para esta caja.";
 
         var ticket = await Client.GetFromJsonAsync<TicketPdfData>($"/api/sales/{saleId}/ticket-data")
             ?? throw new InvalidOperationException("El servidor no devolvió los datos del ticket.");
         var profile = TicketWindowsPrinter.CurrentProfile;
-        TicketWindowsPrinter.Print(ApiClient.PrinterName, ticket, profile, $"Ticket {saleId:N}");
+        TicketWindowsPrinter.Print(printerName, ticket, profile, $"Ticket {saleId:N}");
         using var markResponse = await Client.PostAsync($"/api/sales/{saleId}/ticket/printed", null);
         return markResponse.IsSuccessStatusCode
-            ? $"Ticket enviado a {ApiClient.PrinterName}."
-            : $"Ticket enviado a {ApiClient.PrinterName}; no se pudo actualizar el estado de impresión.";
+            ? $"Ticket enviado a {printerName}."
+            : $"Ticket enviado a {printerName}; no se pudo actualizar el estado de impresión.";
     }
 
     private async Task<bool> TryOpenCashDrawerAsync(bool explainIfDisabled = false)
