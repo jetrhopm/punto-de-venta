@@ -8,6 +8,13 @@ namespace Pos.Infrastructure;
 public sealed record OpenShiftCommand(Guid RegisterId, decimal InitialCash);
 public sealed record OpenShiftResult(Guid ShiftId, Guid RegisterId, Guid UserId, decimal InitialCash, DateTimeOffset OpenedAtUtc);
 public sealed record CurrentShiftResult(Guid ShiftId, Guid RegisterId, Guid UserId, decimal InitialCash, DateTimeOffset OpenedAtUtc);
+public sealed record OpenRegisterShiftConflict(string OpenedBy, DateTimeOffset OpenedAtUtc);
+
+public sealed class RegisterShiftAlreadyOpenException(OpenRegisterShiftConflict conflict)
+    : InvalidOperationException("La caja ya tiene un turno abierto.")
+{
+    public OpenRegisterShiftConflict Conflict { get; } = conflict;
+}
 
 public sealed class ShiftService(PosDbContext database)
 {
@@ -25,7 +32,13 @@ public sealed class ShiftService(PosDbContext database)
         var session = await GetSessionAsync(accessToken, cancellationToken);
         if (session is null) return null;
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-        if (await database.Shifts.AnyAsync(item => item.RegisterId == command.RegisterId && item.Status == "Open", cancellationToken)) throw new InvalidOperationException("La caja ya tiene un turno abierto.");
+        var existingShift = await (
+            from openShift in database.Shifts.AsNoTracking()
+            join user in database.Users.AsNoTracking() on openShift.UserId equals user.Id
+            where openShift.RegisterId == command.RegisterId && openShift.Status == "Open"
+            select new OpenRegisterShiftConflict(user.DisplayName, openShift.OpenedAtUtc)
+        ).SingleOrDefaultAsync(cancellationToken);
+        if (existingShift is not null) throw new RegisterShiftAlreadyOpenException(existingShift);
         var shift = new ShiftRecord { Id = Guid.NewGuid(), RegisterId = command.RegisterId, UserId = session.UserId, InitialCash = decimal.Round(command.InitialCash, 2), OpenedAtUtc = DateTimeOffset.UtcNow };
         database.Shifts.Add(shift);
         await database.SaveChangesAsync(cancellationToken);

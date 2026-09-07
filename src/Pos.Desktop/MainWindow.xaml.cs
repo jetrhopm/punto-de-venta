@@ -377,7 +377,7 @@ public partial class MainWindow : Window
             StatusText.Text = response.StatusCode switch
             {
                 System.Net.HttpStatusCode.Unauthorized => "Este usuario no tiene permiso para abrir caja. Pide a un administrador ajustar sus permisos.",
-                System.Net.HttpStatusCode.Conflict => await ReadApiMessageAsync(response),
+                System.Net.HttpStatusCode.Conflict => await ShowOpenShiftConflictAsync(response),
                 _ => $"No se pudo abrir caja. Codigo {(int)response.StatusCode}."
             };
             return response.IsSuccessStatusCode;
@@ -758,6 +758,25 @@ public partial class MainWindow : Window
         }
     }
 
+    private async Task<string> ShowOpenShiftConflictAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var conflict = await response.Content.ReadFromJsonAsync<OpenShiftConflictResponse>();
+            if (conflict is not null &&
+                string.Equals(conflict.Code, "register_shift_open", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(conflict.OpenedBy))
+            {
+                var openedBy = conflict.OpenedBy;
+                new RegisterShiftOpenWindow(openedBy, conflict.OpenedAtUtc) { Owner = this }.ShowDialog();
+                return $"La caja sigue abierta por {openedBy}. Cierra esta sesión e inicia con ese usuario para realizar el corte.";
+            }
+        }
+        catch (Exception) { }
+
+        return await ReadApiMessageAsync(response);
+    }
+
     private async Task AddProductToCartAsync(ProductSearchResult product, decimal? requestedQuantity = null)
     {
         if (_activeTicket is null)
@@ -984,6 +1003,7 @@ public partial class MainWindow : Window
     private sealed record CutSettingsResponse(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, decimal CashLimit, string CashLimitMessage);
     private sealed record MercadoPagoStatus(bool Enabled);
     private sealed record CurrentShiftResponse(Guid ShiftId, Guid RegisterId, Guid UserId, decimal InitialCash, DateTimeOffset OpenedAtUtc);
+    private sealed record OpenShiftConflictResponse(string? Code, string? Message, string? OpenedBy, DateTimeOffset OpenedAtUtc);
     private sealed record LatestSaleRow(Guid SaleId, DateTimeOffset CreatedAtUtc, decimal Total, string Status);
 
     private async void OnNewTicketClick(object sender, RoutedEventArgs e) => await CreateNewTicketAsync();

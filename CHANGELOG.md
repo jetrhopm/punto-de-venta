@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se publica la versión 2.3.8: al intentar abrir una caja ocupada, JetVenta identifica la cuenta que mantiene el turno abierto y explica que debe cerrar corte antes de operar con otra cuenta.
 - Se publica la versión 2.3.7: corte y configuraciones muestran validaciones claras; Diagnóstico separa y limpia sólo historial técnico de impresión sin modificar ventas.
 - Se publica la versión 2.3.6: JetVenta mantiene visible el aviso de demostración en la ventana principal hasta activar una licencia. Se unifican botones de confirmar, cancelar, anterior y siguiente, y las autorizaciones temporales distinguen visualmente contraseña incorrecta, cuenta sin permiso y errores de conexión.
 - Se publica la versión 2.3.5: el total redondeado se muestra antes de cobrar y el ticket distingue subtotal, ajuste de redondeo y total final. Las partidas permiten editar cantidad, incluso decimales, y los artículos comunes tienen un flujo temporal independiente sin inventario.

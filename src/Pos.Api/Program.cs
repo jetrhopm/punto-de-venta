@@ -848,6 +848,16 @@ app.MapPost("/api/shifts/open", async (HttpRequest request, OpenShiftCommand com
         var result = await shifts.OpenAsync(token, command, cancellationToken);
         return result is null ? Results.Unauthorized() : Results.Ok(result);
     }
+    catch (RegisterShiftAlreadyOpenException exception)
+    {
+        return Results.Conflict(new
+        {
+            code = "register_shift_open",
+            message = $"La caja tiene un turno abierto por {exception.Conflict.OpenedBy}.",
+            openedBy = exception.Conflict.OpenedBy,
+            openedAtUtc = exception.Conflict.OpenedAtUtc
+        });
+    }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 
