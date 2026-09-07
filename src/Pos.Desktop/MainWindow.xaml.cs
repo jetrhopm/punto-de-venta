@@ -40,8 +40,6 @@ public partial class MainWindow : Window
         CashierNameText.Text = string.IsNullOrWhiteSpace(SessionContext.DisplayName) ? "Usuario" : SessionContext.DisplayName.Trim();
         TicketTabs.ItemsSource = _tickets;
         CartList.ItemsSource = _emptyCart;
-        // No se permiten acciones de venta hasta recuperar o crear el ticket del turno.
-        SalesWorkspace.IsEnabled = false;
         Loaded += (_, _) => ApplyNavigationPermissions();
         Closing += OnClosing;
         PreviewTextInput += OnPreviewTextInput;
@@ -411,6 +409,7 @@ public partial class MainWindow : Window
             using var response = await Client.PostAsJsonAsync("/api/shifts/open", new { registerId = register.Id, initialCash = window.InitialCash.Value });
             if (response.IsSuccessStatusCode)
             {
+                _salesBlockedReason = null;
                 StatusText.Text = "Turno abierto correctamente.";
                 return true;
             }
@@ -1082,9 +1081,23 @@ public partial class MainWindow : Window
 
     private async void OnNewTicketClick(object sender, RoutedEventArgs e)
     {
-        if (_salesInitializationInProgress || !_salesInitializationComplete)
+        if (_salesInitializationInProgress)
         {
             StatusText.Text = "La caja se está preparando. Espera a que se recupere o cree el ticket inicial.";
+            return;
+        }
+
+        if (!_salesInitializationComplete)
+        {
+            _salesInitializationInProgress = true;
+            try
+            {
+                _salesInitializationComplete = await EnsureShiftOpenAfterLoginAsync(showExistingShiftNotice: false);
+            }
+            finally
+            {
+                _salesInitializationInProgress = false;
+            }
             return;
         }
 
@@ -1460,14 +1473,17 @@ public partial class MainWindow : Window
         await RequestExitAsync();
     }
 
-    private async Task<bool> EnsureShiftOpenAfterLoginAsync()
+    private async Task<bool> EnsureShiftOpenAfterLoginAsync(bool showExistingShiftNotice = true)
     {
         var currentShift = await GetCurrentShiftAsync();
         if (currentShift is not null)
         {
-            var window = new ShiftWindow { Owner = this };
-            window.ShowAlreadyOpen(currentShift.InitialCash, currentShift.OpenedAtUtc);
-            window.ShowDialog();
+            if (showExistingShiftNotice)
+            {
+                var window = new ShiftWindow { Owner = this };
+                window.ShowAlreadyOpen(currentShift.InitialCash, currentShift.OpenedAtUtc);
+                window.ShowDialog();
+            }
             StatusText.Text = "Caja abierta. Puedes continuar vendiendo.";
             return await LoadSaleDraftsAsync();
         }
@@ -1476,7 +1492,7 @@ public partial class MainWindow : Window
         if (register is null)
         {
             _salesBlockedReason = "No hay una caja activa configurada. Pide a un administrador revisar Configuración > Datos de la tienda.";
-            SalesWorkspace.IsEnabled = false;
+            SalesWorkspace.IsEnabled = true;
             StatusText.Text = _salesBlockedReason;
             return false;
         }
@@ -1545,7 +1561,7 @@ public partial class MainWindow : Window
     private void BlockSalesWithoutOpenShift()
     {
         _salesBlockedReason = "No hay un turno abierto. Para vender, abre la caja con el fondo inicial desde el inicio de sesión.";
-        SalesWorkspace.IsEnabled = false;
+        SalesWorkspace.IsEnabled = true;
         StatusText.Text = _salesBlockedReason;
     }
 
@@ -1553,7 +1569,7 @@ public partial class MainWindow : Window
     {
         var openedAt = register.OpenedAtUtc is null ? string.Empty : $" desde {register.OpenedAtUtc.Value.LocalDateTime:g}";
         _salesBlockedReason = $"La caja {register.Name} continúa abierta por {register.OpenShiftUserName}{openedAt}. Para proteger el efectivo, este usuario no puede crear tickets ni vender. Inicia sesión con {register.OpenShiftUserName} para continuar o realizar el corte.";
-        SalesWorkspace.IsEnabled = false;
+        SalesWorkspace.IsEnabled = true;
         StatusText.Text = _salesBlockedReason;
         MessageBox.Show(_salesBlockedReason, "Caja en uso", MessageBoxButton.OK, MessageBoxImage.Information);
     }
