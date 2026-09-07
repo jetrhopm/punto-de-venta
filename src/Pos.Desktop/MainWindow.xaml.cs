@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private bool _exitConfirmed;
     private bool _exitDialogOpen;
     private bool _openingProductLookup;
+    private bool _chargeInProgress;
     private bool _roundSaleAmounts;
     private string _roundingMode = "Tenths";
     private TemporaryPermissionLease? _modulePermissionLease;
@@ -194,9 +195,9 @@ public partial class MainWindow : Window
             OnDiscardTicketClick(sender, e);
             e.Handled = true;
         }
-        else if (e.Key == Key.F12)
+        else if (key == Key.F12)
         {
-            OnChargeClick(sender, e);
+            await ChargeActiveTicketAsync();
             e.Handled = true;
         }
         else if (e.Key == Key.F5)
@@ -1188,8 +1189,14 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnChargeClick(object sender, RoutedEventArgs e)
+    private async void OnChargeClick(object sender, RoutedEventArgs e) => await ChargeActiveTicketAsync();
+
+    private async Task ChargeActiveTicketAsync()
     {
+        if (_chargeInProgress) return;
+        _chargeInProgress = true;
+        try
+        {
         var ticket = _activeTicket;
         if (ticket is null || ticket.Lines.Count == 0) { StatusText.Text = "Agrega al menos un producto antes de cobrar."; return; }
         await using var saleAuthorization = await PermissionAuthorization.RequestAsync(this, "Sell", "Cobrar una venta requiere autorización.");
@@ -1236,6 +1243,8 @@ public partial class MainWindow : Window
             FocusProductInput();
         }
         catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableNotConfirmed; }
+        }
+        finally { _chargeInProgress = false; }
     }
 
     private static async Task<bool> IsMercadoPagoEnabledAsync()
