@@ -693,7 +693,7 @@ public partial class MainWindow : Window
         var isCommonProduct = window.Decision == MissingProductDecision.CommonProduct;
         if (isCommonProduct)
         {
-            await AddCommonProductAsync(window.ProductCode, window.ProductDescription, window.Price, window.UnitOfMeasure, 1m);
+            await AddCommonProductAsync(window.ProductCode, window.ProductDescription, window.Price, window.UnitOfMeasure, window.Quantity);
             return;
         }
         await using var authorization = await PermissionAuthorization.RequestAsync(this, "ManageProducts", "Registrar un producto desde la venta requiere autorización.");

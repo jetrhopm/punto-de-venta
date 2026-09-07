@@ -18,6 +18,7 @@ public partial class MissingProductWindow : Window
     public string ProductCode { get; private set; } = string.Empty;
     public string ProductDescription { get; private set; } = string.Empty;
     public decimal Price { get; private set; }
+    public decimal Quantity { get; private set; } = 1m;
     public string UnitOfMeasure { get; private set; } = "Pieza";
 
     public MissingProductWindow(string scannedCode)
@@ -28,6 +29,7 @@ public partial class MissingProductWindow : Window
         CodeBox.Text = _scannedCode;
         DescriptionBox.Text = "";
         PriceBox.Text = "0.00";
+        QuantityBox.Text = "1";
         Loaded += (_, _) =>
         {
             DescriptionBox.Focus();
@@ -85,10 +87,33 @@ public partial class MissingProductWindow : Window
             return false;
         }
 
+        if (!decimal.TryParse(QuantityBox.Text, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out var quantity) &&
+            !decimal.TryParse(QuantityBox.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out quantity) || quantity <= 0m)
+        {
+            MessageText.Text = "Escribe una cantidad mayor que cero.";
+            QuantityBox.Focus();
+            QuantityBox.SelectAll();
+            return false;
+        }
+
         ProductDescription = DescriptionBox.Text.Trim();
         Price = decimal.Round(price, 2);
+        Quantity = decimal.Round(quantity, 3);
         var selectedUnit = UnitBox.SelectedItem as ComboBoxItem;
         UnitOfMeasure = selectedUnit?.Tag?.ToString() ?? selectedUnit?.Content?.ToString() ?? "Pieza";
         return true;
+    }
+
+    private void OnSelectAll(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is TextBox box) box.SelectAll();
+    }
+
+    private void OnSelectAllOnClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is not TextBox box) return;
+        box.Focus();
+        box.SelectAll();
+        e.Handled = true;
     }
 }
