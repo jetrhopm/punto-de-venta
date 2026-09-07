@@ -44,6 +44,7 @@ public partial class ProductCatalogWindow : UserControl
             _loadCancellation?.Cancel();
         };
         SearchBox.TextChanged += OnFilterTextChanged;
+        ProductsGrid.MouseDoubleClick += OnProductsGridDoubleClick;
         MinimumPriceBox.TextChanged += OnFilterTextChanged;
         MaximumPriceBox.TextChanged += OnFilterTextChanged;
         MinimumProfitBox.TextChanged += OnFilterTextChanged;
@@ -192,17 +193,30 @@ public partial class ProductCatalogWindow : UserControl
         _loadingForm = false;
     }
 
-    private void OnNewClick(object sender, RoutedEventArgs e) { ClearForm(); HideEditor(); }
-    private void OnShowNewProductClick(object sender, RoutedEventArgs e) { ClearForm(); ShowEditor(); CodeBox.Focus(); }
+    private void OnNewClick(object sender, RoutedEventArgs e) => OpenProductEditor(null);
+    private void OnShowNewProductClick(object sender, RoutedEventArgs e) => OpenProductEditor(null);
     private void OnShowEditProductClick(object sender, RoutedEventArgs e)
     {
-        if (ProductsGrid.SelectedItem is not CatalogProductRow)
+        if (ProductsGrid.SelectedItem is not CatalogProductRow row)
         {
             new OperationResultWindow("Selecciona un producto", "Selecciona una fila de la lista antes de editar.", OperationResultKind.Information) { Owner = Window.GetWindow(this) }.ShowDialog();
             return;
         }
-        ShowEditor();
-        CodeBox.Focus();
+        OpenProductEditor(row);
+    }
+    private void OnProductsGridDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (ProductsGrid.SelectedItem is CatalogProductRow row) OpenProductEditor(row);
+    }
+    private void OpenProductEditor(CatalogProductRow? row)
+    {
+        var model = row is null ? null : new ProductEditorWindow.ProductEditModel(row.Id, row.Code, row.Description, row.DepartmentId, row.UnitOfMeasure, row.Cost, row.Price, row.ProfitPercent, row.WholesalePrice, row.WholesaleProfitPercent, row.WholesaleMinimumQuantity, row.Stock, row.MinimumStock, row.MaximumStock, row.IsKit);
+        var departments = _departments.Select(item => new ProductEditorWindow.DepartmentOption(item.Id, item.Name)).ToArray();
+        var dialog = new ProductEditorWindow(model, departments, _configuredWeightUnit, _autoPriceWithProfit, _defaultProfitPercent) { Owner = Window.GetWindow(this) };
+        if (dialog.ShowDialog() != true || dialog.SavedProduct is null) return;
+        SearchBox.Text = dialog.SavedProduct.Code;
+        _page = 1;
+        _ = LoadCatalogAsync();
     }
     private void ConfigureCatalogModes()
     {

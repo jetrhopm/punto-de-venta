@@ -41,12 +41,44 @@ public partial class InventoryAdjustmentWindow : Window
         catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableRetry; }
     }
 
+    private void OnSearchKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter || string.IsNullOrWhiteSpace(SearchTextBox.Text)) return;
+        _ = SelectExactBarcodeAsync(e);
+    }
+
+    private async Task SelectExactBarcodeAsync(KeyEventArgs e)
+    {
+        try
+        {
+            var query = SearchTextBox.Text.Trim();
+            var results = await Client.GetFromJsonAsync<List<ProductResult>>($"/api/products/search?q={Uri.EscapeDataString(query)}") ?? [];
+            var exact = results.FirstOrDefault(item => string.Equals(item.Code.Trim(), query, StringComparison.OrdinalIgnoreCase));
+            if (exact is null)
+            {
+                MessageText.Text = "No se encontró un código exacto. Revisa la lectura o usa las flechas para elegir una coincidencia.";
+                return;
+            }
+
+            SelectProduct(new ProductRow(exact));
+            e.Handled = true;
+        }
+        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableRetry; }
+        catch (OperationCanceledException) { }
+    }
+
     private void OnProductSelected(object sender, MouseButtonEventArgs e)
     {
-        if (ResultsList.SelectedItem is not ProductRow row) return;
+        if (ResultsList.SelectedItem is ProductRow row) SelectProduct(row);
+    }
+
+    private void SelectProduct(ProductRow row)
+    {
         _selected = row;
         SelectedProductText.Text = $"{row.Product.Code} | {row.Product.Description} | Existencia actual: {row.Product.Stock:0.###}";
         ResultsList.Visibility = Visibility.Collapsed;
+        QuantityTextBox.Focus();
+        QuantityTextBox.SelectAll();
     }
 
     private async void OnAdjustClick(object sender, RoutedEventArgs e)
