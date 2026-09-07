@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se publica la versión 2.3.4: el inicio de sesión y la autorización temporal muestran siempre los usuarios activos para elegirlos; ya no es necesario ni posible escribir el nombre de usuario. Sólo se captura la contraseña de la cuenta elegida.
 - Se publica la versión 2.3.3: el inicio de sesión muestra el estado de la demo antes de entrar, permite abrir la activación con credenciales válidas y conserva el aviso de demo al abrir ventas.
 - El selector de usuario ahora aplica la cuenta elegida de forma explícita y filtra las cuentas activas mientras se escribe.
 - Las autorizaciones temporales distinguen una contraseña incorrecta, una sesión vencida y una cuenta sin el permiso requerido.

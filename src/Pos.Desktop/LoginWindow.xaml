@@ -96,14 +96,10 @@
                     <ComboBox x:Name="UserComboBox"
                               Height="46" Padding="45,7,12,7"
                               FontSize="16"
-                              IsEditable="True"
-                              IsTextSearchEnabled="False"
-                              StaysOpenOnEdit="True"
                               DisplayMemberPath="DisplayText"
                               SelectionChanged="OnUserSelectionChanged"
-                              DropDownClosed="OnUserDropDownClosed"
                               automation:AutomationProperties.Name="Usuario"
-                              ToolTip="Elige un usuario o escribe su nombre"/>
+                              ToolTip="Elige el usuario que iniciará sesión"/>
                 </Grid>
             </StackPanel>
 

@@ -2,11 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Reflection;
-using System.ComponentModel;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
-using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using MahApps.Metro.IconPacks;
@@ -24,18 +20,15 @@ public partial class LoginWindow : Window
     private static readonly Brush ErrorStatusBorder = new SolidColorBrush(Color.FromRgb(232, 187, 183));
     private static HttpClient Client => ApiClient.Client;
     private bool _isBusy;
-    private bool _applyingUserSelection;
     private bool _openLicenseAfterLogin;
     private string? _licenseReminder;
     private List<LoginUserOption> _users = [];
-    private ICollectionView? _userView;
 
     public LoginWindow()
     {
         InitializeComponent();
         ServerText.Text = $"Conexión: {ApiClient.BaseUrl}";
         VersionText.Text = $"Versión {GetApplicationVersion()}";
-        UserComboBox.AddHandler(TextBoxBase.TextChangedEvent, new TextChangedEventHandler(OnUserTextChanged));
         Loaded += OnLoaded;
         Activated += (_, _) => UpdateCapsLockWarning();
     }
@@ -72,32 +65,9 @@ public partial class LoginWindow : Window
         ApplySelectedUser();
     }
 
-    private void OnUserDropDownClosed(object sender, EventArgs e) => ApplySelectedUser();
-
-    private void OnUserTextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (_applyingUserSelection) return;
-        _userView?.Refresh();
-        if (UserComboBox.IsKeyboardFocusWithin && _userView?.Cast<object>().Any() == true)
-        {
-            UserComboBox.IsDropDownOpen = true;
-        }
-    }
-
     private void ApplySelectedUser()
     {
-        if (_applyingUserSelection || UserComboBox.SelectedItem is not LoginUserOption selectedUser) return;
-        _applyingUserSelection = true;
-        try
-        {
-            UserComboBox.Text = selectedUser.UserName;
-            UserComboBox.IsDropDownOpen = false;
-        }
-        finally
-        {
-            _applyingUserSelection = false;
-        }
-        PasswordBox.Focus();
+        if (UserComboBox.SelectedItem is LoginUserOption) PasswordBox.Focus();
     }
 
     private async Task LoadActiveUsersAsync()
@@ -105,12 +75,7 @@ public partial class LoginWindow : Window
         try
         {
             _users = await Client.GetFromJsonAsync<List<LoginUserOption>>("api/auth/active-users") ?? [];
-            _userView = CollectionViewSource.GetDefaultView(_users);
-            _userView.Filter = item => item is LoginUserOption user &&
-                (string.IsNullOrWhiteSpace(UserComboBox.Text) ||
-                 user.UserName.Contains(UserComboBox.Text.Trim(), StringComparison.OrdinalIgnoreCase) ||
-                 user.DisplayName.Contains(UserComboBox.Text.Trim(), StringComparison.OrdinalIgnoreCase));
-            UserComboBox.ItemsSource = _userView;
+            UserComboBox.ItemsSource = _users;
             UserComboBox.SelectedItem = _users.FirstOrDefault();
             ApplySelectedUser();
         }
@@ -169,7 +134,7 @@ public partial class LoginWindow : Window
 
     private void OnActivateLicenseClick(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(UserComboBox.Text))
+        if (UserComboBox.SelectedItem is not LoginUserOption)
         {
             SetStatus("Selecciona un usuario autorizado para activar la licencia.", StatusKind.Information);
             UserComboBox.Focus();
@@ -190,15 +155,9 @@ public partial class LoginWindow : Window
     {
         if (_isBusy) return;
 
-        var typedUserName = UserComboBox.Text.Trim();
-        var selectedUser = _users.FirstOrDefault(user =>
-            string.Equals(user.UserName, typedUserName, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(user.DisplayText, typedUserName, StringComparison.OrdinalIgnoreCase));
-        if (selectedUser is null)
+        if (UserComboBox.SelectedItem is not LoginUserOption selectedUser)
         {
-            SetStatus(string.IsNullOrWhiteSpace(typedUserName)
-                ? "Escribe o selecciona un usuario para continuar."
-                : "El usuario escrito no existe o está desactivado.", StatusKind.Error);
+            SetStatus("Selecciona un usuario activo para continuar.", StatusKind.Error);
             UserComboBox.Focus();
             return;
         }

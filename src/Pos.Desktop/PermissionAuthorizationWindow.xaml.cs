@@ -25,23 +25,14 @@ public partial class PermissionAuthorizationWindow : Window
         try
         {
             _users = await ApiClient.Client.GetFromJsonAsync<List<ActiveUser>>("api/auth/active-users") ?? [];
-            RefreshUsers();
+            UserComboBox.ItemsSource = _users;
+            UserComboBox.SelectedItem = _users.FirstOrDefault();
             PasswordBox.Focus();
         }
         catch (Exception exception)
         {
             ShowStatus(ConnectionHelp.FromException(exception, "No se pudieron consultar los usuarios activos"));
         }
-    }
-
-    private void OnUserFilterChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) => RefreshUsers();
-
-    private void RefreshUsers()
-    {
-        var filter = UserFilterTextBox.Text.Trim();
-        var items = _users.Where(user => string.IsNullOrWhiteSpace(filter) || user.DisplayText.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
-        UserComboBox.ItemsSource = items;
-        UserComboBox.SelectedIndex = items.Count == 1 ? 0 : -1;
     }
 
     private async void OnAuthorizeClick(object sender, RoutedEventArgs e)

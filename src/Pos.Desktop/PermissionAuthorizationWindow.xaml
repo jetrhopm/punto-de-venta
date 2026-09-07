@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
-        Title="Autorización requerida" Width="550" Height="470"
+        Title="Autorización requerida" Width="550" Height="425"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize" ShowInTaskbar="False"
         PreviewKeyDown="OnPreviewKeyDown">
     <Grid Margin="24">
@@ -26,13 +26,12 @@
         <Border Grid.Row="1" Margin="0,18,0,0" Padding="12" Background="#FFF8E7" BorderBrush="#F7C948" BorderThickness="1" CornerRadius="4">
             <StackPanel>
                 <TextBlock x:Name="RequiredPermissionText" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                <TextBlock Text="Un administrador o usuario autorizado debe elegir su cuenta y escribir su contraseña. La autorización se revoca al terminar esta acción." Margin="0,5,0,0" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                <TextBlock Text="Elige una cuenta existente y escribe su contraseña. La autorización se revoca al terminar esta acción." Margin="0,5,0,0" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
             </StackPanel>
         </Border>
         <StackPanel Grid.Row="2" Margin="0,16,0,0">
             <TextBlock Text="Usuario que autoriza" FontWeight="SemiBold" Margin="0,0,0,6"/>
-            <TextBox x:Name="UserFilterTextBox" Height="36" Padding="10,6" TextChanged="OnUserFilterChanged" ToolTip="Escribe para buscar un usuario"/>
-            <ComboBox x:Name="UserComboBox" Height="36" Margin="0,7,0,0" DisplayMemberPath="DisplayText"/>
+            <ComboBox x:Name="UserComboBox" Height="36" Margin="0,0,0,0" DisplayMemberPath="DisplayText" ToolTip="Elige el usuario que autoriza"/>
         </StackPanel>
         <StackPanel Grid.Row="3" Margin="0,14,0,0">
             <TextBlock Text="Contraseña" FontWeight="SemiBold" Margin="0,0,0,6"/>
