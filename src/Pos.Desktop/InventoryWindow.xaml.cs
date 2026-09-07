@@ -9,7 +9,7 @@ using System.Windows.Threading;
 
 namespace Pos.Desktop;
 
-public partial class InventoryWindow : UserControl
+public partial class InventoryWindow : UserControl, INotifyPropertyChanged
 {
     private readonly DispatcherTimer _filterTimer = new() { Interval = TimeSpan.FromMilliseconds(350) };
     private CancellationTokenSource? _loadCancellation;
@@ -18,12 +18,18 @@ public partial class InventoryWindow : UserControl
     private bool _descending;
     private bool _saving;
     private int _totalPages = 1;
+    private bool _loadingDepartments;
+    public IReadOnlyList<DepartmentOption> DepartmentOptions { get; private set; } = [];
 
     public InventoryWindow()
     {
         InitializeComponent();
         _filterTimer.Tick += async (_, _) => { _filterTimer.Stop(); _page = 1; await LoadAsync(); };
-        Loaded += async (_, _) => await LoadAsync();
+        Loaded += async (_, _) =>
+        {
+            await LoadDepartmentsAsync();
+            await LoadAsync();
+        };
         Unloaded += (_, _) => _loadCancellation?.Cancel();
     }
 
@@ -44,6 +50,42 @@ public partial class InventoryWindow : UserControl
         _page = 1;
         _ = LoadAsync();
     }
+
+    private async Task LoadDepartmentsAsync()
+    {
+        _loadingDepartments = true;
+        try
+        {
+            var departments = await ApiClient.Client.GetFromJsonAsync<List<DepartmentOption>>("api/departments") ?? [];
+            DepartmentOptions = [new DepartmentOption(null, "Sin departamento"), .. departments];
+            OnPropertyChanged(nameof(DepartmentOptions));
+        }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron cargar los departamentos"); }
+        finally { _loadingDepartments = false; }
+    }
+
+    private async void OnDepartmentChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingDepartments || sender is not ComboBox combo || !combo.IsKeyboardFocusWithin && !combo.IsMouseOver || combo.DataContext is not InventoryRow row) return;
+        var departmentId = combo.SelectedValue is Guid id && id != Guid.Empty ? id : (Guid?)null;
+        try
+        {
+            using var response = await ApiClient.Client.PostAsJsonAsync("api/inventory/department", new { operationId = Guid.NewGuid(), productId = row.ProductId, departmentId });
+            if (!response.IsSuccessStatusCode)
+            {
+                new OperationResultWindow("Departamento no actualizado", await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo asignar el departamento."), OperationResultKind.Warning) { Owner = Window.GetWindow(this) }.ShowDialog();
+                await LoadAsync();
+                return;
+            }
+            row.DepartmentId = departmentId;
+            row.Department = DepartmentOptions.FirstOrDefault(item => item.Id == departmentId)?.Name ?? "Sin departamento";
+            StatusText.Text = $"Departamento actualizado para {row.Description}.";
+        }
+        catch (Exception exception) { new OperationResultWindow("Departamento no actualizado", ConnectionHelp.FromException(exception, "No se pudo asignar el departamento."), OperationResultKind.Error) { Owner = Window.GetWindow(this) }.ShowDialog(); }
+    }
+
+    private void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    public event PropertyChangedEventHandler? PropertyChanged;
 
     private async void OnCellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
     {
@@ -97,7 +139,7 @@ public partial class InventoryWindow : UserControl
         if (_saving) return;
         if (!decimal.TryParse(row.MinimumStockText, out var minimum) || !decimal.TryParse(row.MaximumStockText, out var maximum) || minimum < 0m || maximum < 0m || maximum > 0m && maximum < minimum)
         {
-            MessageBox.Show("Los mínimos y máximos deben ser números no negativos. El máximo puede quedar en 0 para no utilizarlo.", "Inventario", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShowResult("Límites no válidos", "Los mínimos y máximos deben ser números no negativos. El máximo puede quedar en 0 para no utilizarlo.", OperationResultKind.Warning);
             await LoadAsync();
             return;
         }
@@ -120,7 +162,7 @@ public partial class InventoryWindow : UserControl
         if (_saving) return;
         if (!decimal.TryParse(row.StockText, out var requestedStock) || requestedStock < 0m)
         {
-            MessageBox.Show("La existencia debe ser un número igual o mayor que cero.", "Inventario", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShowResult("Existencia no válida", "La existencia debe ser un número igual o mayor que cero.", OperationResultKind.Warning);
             await LoadAsync();
             return;
         }
@@ -170,11 +212,13 @@ public partial class InventoryWindow : UserControl
         var dialog = new SaveFileDialog { Title = "Exportar inventario", Filter = "CSV (*.csv)|*.csv", FileName = $"inventario-{DateTime.Now:yyyyMMdd-HHmmss}.csv", AddExtension = true };
         if (dialog.ShowDialog() != true) return;
         using var response = await ApiClient.Client.GetAsync("api/inventory/export");
-        if (!response.IsSuccessStatusCode) { MessageBox.Show("No se pudo exportar el inventario.", "Inventario", MessageBoxButton.OK, MessageBoxImage.Error); return; }
+        if (!response.IsSuccessStatusCode) { ShowResult("Exportación no completada", "No se pudo exportar el inventario.", OperationResultKind.Error); return; }
         await using var source = await response.Content.ReadAsStreamAsync(); await using var target = File.Create(dialog.FileName); await source.CopyToAsync(target);
         StatusText.Text = $"Inventario exportado: {dialog.FileName}";
     }
     private void OnMovementsClick(object sender, RoutedEventArgs e) => new InventoryMovementsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+
+    private void ShowResult(string title, string message, OperationResultKind kind) => new OperationResultWindow(title, message, kind) { Owner = Window.GetWindow(this) }.ShowDialog();
 
     private sealed class InventoryPage
     {
@@ -200,6 +244,7 @@ public partial class InventoryWindow : UserControl
         public string Code { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
         public string Department { get; set; } = string.Empty;
+        public Guid? DepartmentId { get; set; }
         public string UnitOfMeasure { get; set; } = string.Empty;
         public decimal Cost { get; set; }
         public decimal Price { get; set; }
@@ -226,4 +271,6 @@ public partial class InventoryWindow : UserControl
         public decimal PotentialProfit { get; set; }
         public string Status { get; set; } = string.Empty;
     }
+
+    public sealed record DepartmentOption(Guid? Id, string Name);
 }

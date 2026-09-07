@@ -18,6 +18,7 @@ public sealed class KitService(PosDbContext database)
         if (command.Components.Any(item => item.ComponentProductId == command.KitProductId || item.Quantity <= 0m) || command.Components.GroupBy(item => item.ComponentProductId).Any(group => group.Count() > 1)) throw new ArgumentException("Los componentes del kit deben ser positivos, únicos y no pueden contener al propio kit.");
         var components = await database.Products.Where(item => command.Components.Select(component => component.ComponentProductId).Contains(item.Id) && item.IsActive).ToDictionaryAsync(item => item.Id, cancellationToken);
         if (components.Count != command.Components.Count) throw new KeyNotFoundException("Uno o más componentes no existen.");
+        if (components.Values.Any(item => item.IsKit)) throw new ArgumentException("Los componentes de un kit deben ser productos normales; los kits anidados no están disponibles.");
         kit.IsKit = true; database.KitComponents.RemoveRange(database.KitComponents.Where(item => item.KitProductId == kit.Id));
         database.KitComponents.AddRange(command.Components.Select(item => new KitComponentRecord { Id = Guid.NewGuid(), KitProductId = kit.Id, ComponentProductId = item.ComponentProductId, Quantity = decimal.Round(item.Quantity, 3) })); await database.SaveChangesAsync(cancellationToken);
         return command.Components.Select(item => new KitComponentResult(item.ComponentProductId, components[item.ComponentProductId].Code, components[item.ComponentProductId].Description, item.Quantity)).ToArray();

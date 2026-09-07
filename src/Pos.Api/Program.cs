@@ -819,6 +819,12 @@ app.MapPost("/api/auth/temporary-permission", async (HttpRequest request, Tempor
     };
     return Results.Json(new { code = attempt.FailureCode, message = attempt.FailureMessage }, statusCode: statusCode);
 });
+app.MapPost("/api/inventory/department", async (HttpRequest request, InventoryDepartmentChangeCommand command, InventoryService inventory, CancellationToken cancellationToken) =>
+{
+    try { var result = await inventory.UpdateDepartmentAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { updated = true }); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["department"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+});
 app.MapDelete("/api/auth/session", async (HttpRequest request, AuthenticationService authentication, CancellationToken cancellationToken) =>
 {
     var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);

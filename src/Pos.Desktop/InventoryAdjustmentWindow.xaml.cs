@@ -51,14 +51,20 @@ public partial class InventoryAdjustmentWindow : Window
 
     private async void OnAdjustClick(object sender, RoutedEventArgs e)
     {
-        if (_selected is null || !TryParseDecimal(QuantityTextBox.Text, out var quantity) || quantity == 0m || string.IsNullOrWhiteSpace(ReasonTextBox.Text))
+        var reason = ReasonTextBox.Text.Trim();
+        if (_selected is null || !TryParseDecimal(QuantityTextBox.Text, out var quantity) || quantity == 0m || reason.Length == 0)
         {
-            MessageText.Text = "Selecciona producto, indica una cantidad distinta de cero y un motivo.";
+            MessageText.Text = "Selecciona producto, indica una cantidad distinta de cero y escribe un motivo.";
+            return;
+        }
+        if (reason.Length > 80)
+        {
+            MessageText.Text = $"El motivo no puede superar 80 caracteres. Actualmente tiene {reason.Length}.";
             return;
         }
         try
         {
-            var command = new { operationId = Guid.NewGuid(), productId = _selected.Product.Id, quantity, reason = ReasonTextBox.Text.Trim() };
+            var command = new { operationId = Guid.NewGuid(), productId = _selected.Product.Id, quantity, reason };
             using var response = await Client.PostAsJsonAsync("/api/inventory/adjust", command);
             if (!response.IsSuccessStatusCode) { MessageText.Text = await response.Content.ReadAsStringAsync(); return; }
             var result = await response.Content.ReadFromJsonAsync<AdjustmentResult>();

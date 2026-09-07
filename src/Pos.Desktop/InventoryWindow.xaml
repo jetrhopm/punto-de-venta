@@ -1,4 +1,4 @@
-<UserControl x:Class="Pos.Desktop.InventoryWindow"
+<UserControl x:Class="Pos.Desktop.InventoryWindow" x:Name="InventoryRoot"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
@@ -49,7 +49,11 @@
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Código" Binding="{Binding Code}" SortMemberPath="code" IsReadOnly="True" Width="110"/>
                 <DataGridTextColumn Header="Producto" Binding="{Binding Description}" SortMemberPath="description" IsReadOnly="True" Width="230"/>
-                <DataGridTextColumn Header="Departamento" Binding="{Binding Department}" SortMemberPath="department" IsReadOnly="True" Width="135"/>
+                <DataGridTemplateColumn Header="Departamento" SortMemberPath="department" Width="170">
+                    <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                        <ComboBox ItemsSource="{Binding DepartmentOptions, ElementName=InventoryRoot}" DisplayMemberPath="Name" SelectedValuePath="Id" SelectedValue="{Binding DepartmentId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" SelectionChanged="OnDepartmentChanged" ToolTip="Asigna el departamento del producto"/>
+                    </DataTemplate></DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Tipo" Binding="{Binding UnitOfMeasure}" SortMemberPath="unit" IsReadOnly="True" Width="105"/>
                 <DataGridTextColumn Header="Costo" Binding="{Binding Cost, StringFormat={}{0:C2}}" SortMemberPath="cost" IsReadOnly="True" Width="92"/>
                 <DataGridTextColumn Header="P. venta" Binding="{Binding Price, StringFormat={}{0:C2}}" SortMemberPath="price" IsReadOnly="True" Width="98"/>

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se prepara la versión 2.5.0: Productos F3 separa la lista de los formularios de alta y edición; Inventario F4 permite consultar y asignar departamentos; las validaciones de mínimos, máximos y ajustes muestran mensajes claros; y kits, ventas, cancelaciones y devoluciones mantienen el descuento y la reversión de inventario por componentes.
 - Se publica la versión 2.4.4: se refuerza el flujo de producto no encontrado para impedir una segunda captura de cantidad en artículos comunes temporales, incluso ante eventos de entrada repetidos.
 - Se publica la versión 2.4.3: el producto común temporal creado desde un código no encontrado se identifica de extremo a extremo y nunca vuelve a solicitar peso o piezas; los productos de inventario a granel conservan esa captura.
 - Se publica la versión 2.4.2: las alertas y confirmaciones de escritorio adoptan el estilo visual de JetVenta sin alterar sus decisiones; Productos F3 marca y explica inmediatamente cuando el máximo de existencia es menor que el mínimo.

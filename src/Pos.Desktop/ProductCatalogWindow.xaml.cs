@@ -20,10 +20,13 @@ public partial class ProductCatalogWindow : UserControl
     private decimal _defaultProfitPercent = 20m;
     private bool _catalogReady;
     private bool _updatingFilterControls;
+    private Grid? _catalogLayout;
+    private Border? _editorPanel;
 
     public ProductCatalogWindow()
     {
         InitializeComponent();
+        ConfigureCatalogModes();
         Loaded += async (_, _) =>
         {
             await LoadStoreOptionsAsync();
@@ -189,7 +192,50 @@ public partial class ProductCatalogWindow : UserControl
         _loadingForm = false;
     }
 
-    private void OnNewClick(object sender, RoutedEventArgs e) => ClearForm();
+    private void OnNewClick(object sender, RoutedEventArgs e) { ClearForm(); HideEditor(); }
+    private void OnShowNewProductClick(object sender, RoutedEventArgs e) { ClearForm(); ShowEditor(); CodeBox.Focus(); }
+    private void OnShowEditProductClick(object sender, RoutedEventArgs e)
+    {
+        if (ProductsGrid.SelectedItem is not CatalogProductRow)
+        {
+            new OperationResultWindow("Selecciona un producto", "Selecciona una fila de la lista antes de editar.", OperationResultKind.Information) { Owner = Window.GetWindow(this) }.ShowDialog();
+            return;
+        }
+        ShowEditor();
+        CodeBox.Focus();
+    }
+    private void ConfigureCatalogModes()
+    {
+        if (ProductsGrid.Parent is not Grid layout) return;
+        _catalogLayout = layout;
+        _editorPanel = layout.Children.OfType<Border>().FirstOrDefault();
+        if (_editorPanel is null) return;
+        HideEditor();
+
+        if (Content is not Grid root || root.Children.OfType<Grid>().FirstOrDefault() is not Grid header) return;
+        var actions = header.Children.OfType<StackPanel>().FirstOrDefault(panel => panel.HorizontalAlignment == HorizontalAlignment.Right);
+        if (actions is null) return;
+        actions.Children.Insert(0, CreateCatalogAction("Nuevo producto", "ConfirmButtonStyle", OnShowNewProductClick));
+        actions.Children.Insert(1, CreateCatalogAction("Editar seleccionado", "PrimaryButtonStyle", OnShowEditProductClick));
+    }
+    private Button CreateCatalogAction(string text, string styleKey, RoutedEventHandler click)
+    {
+        var button = new Button { Content = text, Margin = new Thickness(0, 0, 8, 0), Style = FindResource(styleKey) as Style };
+        button.Click += click;
+        return button;
+    }
+    private void ShowEditor()
+    {
+        if (_editorPanel is null || _catalogLayout is null) return;
+        _editorPanel.Visibility = Visibility.Visible;
+        Grid.SetColumnSpan(ProductsGrid, 1);
+    }
+    private void HideEditor()
+    {
+        if (_editorPanel is null || _catalogLayout is null) return;
+        _editorPanel.Visibility = Visibility.Collapsed;
+        Grid.SetColumnSpan(ProductsGrid, 2);
+    }
     private void OnPricingChanged(object sender, RoutedEventArgs e) { if (!_loadingForm) CalculateSalePrice(); }
     private void OnWholesalePricingChanged(object sender, RoutedEventArgs e) { if (!_loadingForm) CalculateWholesalePrice(); }
     private void OnPriceChanged(object sender, TextChangedEventArgs e) { UpdateProfitAmount(); }
@@ -215,7 +261,7 @@ public partial class ProductCatalogWindow : UserControl
         {
             using var response = _selected is null ? await ApiClient.Client.PostAsJsonAsync("/api/products", command) : await ApiClient.Client.PutAsJsonAsync($"/api/products/{_selected.Id}", command);
             if (!response.IsSuccessStatusCode) { StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo guardar el producto."); new OperationResultWindow("Producto no guardado", StatusText.Text, OperationResultKind.Error) { Owner = Window.GetWindow(this) }.ShowDialog(); return; }
-            var code = CodeBox.Text.Trim(); var action = _selected is null ? "Producto creado" : "Producto actualizado"; ClearForm(); SearchBox.Text = code; _page = 1; await LoadCatalogAsync(); StatusText.Text = $"{action} correctamente."; new OperationResultWindow(action, "Los datos del catálogo se guardaron. La existencia sólo se modifica mediante el ajuste de inventario.", OperationResultKind.Success) { Owner = Window.GetWindow(this) }.ShowDialog();
+            var code = CodeBox.Text.Trim(); var action = _selected is null ? "Producto creado" : "Producto actualizado"; ClearForm(); HideEditor(); SearchBox.Text = code; _page = 1; await LoadCatalogAsync(); StatusText.Text = $"{action} correctamente."; new OperationResultWindow(action, "Los datos del catálogo se guardaron. La existencia sólo se modifica mediante el ajuste de inventario.", OperationResultKind.Success) { Owner = Window.GetWindow(this) }.ShowDialog();
         }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar el producto"); }
     }
@@ -295,6 +341,15 @@ public partial class ProductCatalogWindow : UserControl
     private static string Money(decimal value) => value.ToString("0.00", CultureInfo.InvariantCulture);
     private static string Percent(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
     private static string Quantity(decimal value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            if (child is T match) yield return match;
+            foreach (var descendant in FindVisualChildren<T>(child)) yield return descendant;
+        }
+    }
     private sealed record DepartmentRow(Guid Id, string Name, bool IsActive);
     private sealed record CatalogProductRow(Guid Id, string Code, string Description, string Department, Guid? DepartmentId, decimal Cost, decimal Price, decimal ProfitPercent, decimal ProfitAmount, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleProfitAmount, decimal WholesaleMinimumQuantity, decimal Stock, decimal MinimumStock, decimal MaximumStock, string UnitOfMeasure, bool IsKit, bool IsActive)
     {

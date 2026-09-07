@@ -9,8 +9,9 @@ public sealed record InventoryAdjustmentCommand(Guid OperationId, Guid ProductId
 public sealed record InventoryAdjustmentResult(Guid MovementId, Guid ProductId, decimal Quantity, decimal StockBefore, decimal StockAfter, string Reason);
 public sealed record InventoryMovementResult(Guid Id, Guid ProductId, Guid? SaleId, Guid UserId, Guid OperationId, decimal Quantity, decimal StockBefore, decimal StockAfter, string Reason, DateTimeOffset CreatedAtUtc);
 public sealed record InventoryLimitChangeCommand(Guid OperationId, Guid ProductId, decimal MinimumStock, decimal MaximumStock);
+public sealed record InventoryDepartmentChangeCommand(Guid OperationId, Guid ProductId, Guid? DepartmentId);
 public sealed record InventoryLimitChangeResult(Guid ProductId, decimal PreviousMinimumStock, decimal PreviousMaximumStock, decimal MinimumStock, decimal MaximumStock);
-public sealed record InventoryCatalogRow(Guid ProductId, string Code, string Description, string Department, string UnitOfMeasure, decimal Cost, decimal Price, decimal Stock, decimal MinimumStock, decimal MaximumStock, decimal CostValue, decimal SaleValue, decimal PotentialProfit, string Status);
+public sealed record InventoryCatalogRow(Guid ProductId, string Code, string Description, string Department, Guid? DepartmentId, string UnitOfMeasure, decimal Cost, decimal Price, decimal Stock, decimal MinimumStock, decimal MaximumStock, decimal CostValue, decimal SaleValue, decimal PotentialProfit, string Status);
 public sealed record InventoryCatalogPageResult(IReadOnlyList<InventoryCatalogRow> Items, int Page, int PageSize, int TotalCount, int TotalPages, decimal TotalUnits, decimal TotalCostValue, decimal TotalSaleValue, decimal TotalPotentialProfit, int LowStockCount, int OutOfStockCount);
 public sealed record InventoryMovementRow(Guid Id, string Code, string Description, decimal Quantity, decimal StockBefore, decimal StockAfter, string Reason, string UserName, DateTimeOffset CreatedAtUtc);
 public sealed record InventoryMovementPageResult(IReadOnlyList<InventoryMovementRow> Items, int Page, int PageSize, int TotalCount, int TotalPages);
@@ -45,7 +46,7 @@ public sealed class InventoryService(PosDbContext database)
         products = sort.ToLowerInvariant() switch
         {
             "code" => descending ? products.OrderByDescending(item => item.Code) : products.OrderBy(item => item.Code),
-            "department" => descending ? products.OrderByDescending(item => item.Category) : products.OrderBy(item => item.Category),
+            "department" => descending ? products.OrderByDescending(item => item.Department!.Name) : products.OrderBy(item => item.Department!.Name),
             "cost" => descending ? products.OrderByDescending(item => item.Cost) : products.OrderBy(item => item.Cost),
             "price" => descending ? products.OrderByDescending(item => item.Price) : products.OrderBy(item => item.Price),
             "stock" => descending ? products.OrderByDescending(item => item.Stock) : products.OrderBy(item => item.Stock),
@@ -54,8 +55,8 @@ public sealed class InventoryService(PosDbContext database)
             _ => descending ? products.OrderByDescending(item => item.Description) : products.OrderBy(item => item.Description)
         };
         var total = await products.CountAsync(cancellationToken);
-        var rows = await products.Skip((page - 1) * pageSize).Take(pageSize).Select(item => new InventoryCatalogRow(
-            item.Id, item.Code, item.Description, item.Category, item.UnitOfMeasure, item.Cost, item.Price, item.Stock, item.MinimumStock, item.MaximumStock,
+        var rows = await products.Include(item => item.Department).Skip((page - 1) * pageSize).Take(pageSize).Select(item => new InventoryCatalogRow(
+            item.Id, item.Code, item.Description, item.Department == null ? string.Empty : item.Department.Name, item.DepartmentId, item.UnitOfMeasure, item.Cost, item.Price, item.Stock, item.MinimumStock, item.MaximumStock,
             decimal.Round(item.Stock * item.Cost, 2), decimal.Round(item.Stock * item.Price, 2), decimal.Round(item.Stock * (item.Price - item.Cost), 2),
             item.Stock <= 0m ? "Agotado" : item.MinimumStock > 0m && item.Stock <= item.MinimumStock ? "Bajo mínimo" : item.MaximumStock > 0m && item.Stock > item.MaximumStock ? "Sobre máximo" : "Normal"))
             .ToListAsync(cancellationToken);
@@ -65,9 +66,9 @@ public sealed class InventoryService(PosDbContext database)
     public async Task<byte[]?> ExportCsvAsync(string token, CancellationToken cancellationToken)
     {
         if (await GetAuthorizedUserAsync(token, "ViewInventory", cancellationToken) is null) return null;
-        var rows = await database.Products.AsNoTracking().Where(item => item.IsActive && !item.IsTemporary).OrderBy(item => item.Description).Select(item => new { item.Code, item.Description, item.Category, item.UnitOfMeasure, item.Cost, item.Price, item.Stock, item.MinimumStock, item.MaximumStock }).ToListAsync(cancellationToken);
+        var rows = await database.Products.AsNoTracking().Where(item => item.IsActive && !item.IsTemporary).Include(item => item.Department).OrderBy(item => item.Description).Select(item => new { item.Code, item.Description, Department = item.Department == null ? string.Empty : item.Department.Name, item.UnitOfMeasure, item.Cost, item.Price, item.Stock, item.MinimumStock, item.MaximumStock }).ToListAsync(cancellationToken);
         var builder = new StringBuilder("Codigo,Descripcion,Departamento,TipoVenta,Costo,PrecioVenta,Existencia,InventarioMinimo,InventarioMaximo\r\n");
-        foreach (var row in rows) builder.Append(string.Join(',', Csv(row.Code), Csv(row.Description), Csv(row.Category), Csv(row.UnitOfMeasure), row.Cost.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), row.Price.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture), row.Stock.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), row.MinimumStock.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), row.MaximumStock.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))).Append("\r\n");
+        foreach (var row in rows) builder.Append(string.Join(',', Csv(row.Code), Csv(row.Description), Csv(row.Department), Csv(row.UnitOfMeasure), row.Cost.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), row.Price.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture), row.Stock.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), row.MinimumStock.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), row.MaximumStock.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))).Append("\r\n");
         return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(builder.ToString())).ToArray();
     }
 
@@ -106,7 +107,9 @@ public sealed class InventoryService(PosDbContext database)
     }
     public async Task<InventoryAdjustmentResult?> AdjustAsync(string token, InventoryAdjustmentCommand command, CancellationToken cancellationToken)
     {
-        if (command.OperationId == Guid.Empty || command.ProductId == Guid.Empty || command.Quantity == 0m || string.IsNullOrWhiteSpace(command.Reason)) throw new ArgumentException("El ajuste requiere operacion, producto, cantidad distinta de cero y motivo.");
+        var reason = command.Reason?.Trim() ?? string.Empty;
+        if (command.OperationId == Guid.Empty || command.ProductId == Guid.Empty || command.Quantity == 0m || reason.Length == 0) throw new ArgumentException("El ajuste requiere operación, producto, cantidad distinta de cero y motivo.");
+        if (reason.Length > 80) throw new ArgumentException("El motivo del ajuste no puede superar 80 caracteres.");
         var userId = await GetAuthorizedUserAsync(token, "AdjustInventory", cancellationToken);
         if (userId is null) return null;
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
@@ -117,11 +120,24 @@ public sealed class InventoryService(PosDbContext database)
         var after = decimal.Round(before + command.Quantity, 3, MidpointRounding.AwayFromZero);
         if (after < 0m) throw new InvalidOperationException("El ajuste no puede dejar existencia negativa.");
         product.Stock = after;
-        var movement = new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, UserId = userId.Value, OperationId = command.OperationId, Quantity = decimal.Round(command.Quantity, 3, MidpointRounding.AwayFromZero), StockBefore = before, StockAfter = after, Reason = command.Reason.Trim(), CreatedAtUtc = DateTimeOffset.UtcNow };
+        var movement = new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, UserId = userId.Value, OperationId = command.OperationId, Quantity = decimal.Round(command.Quantity, 3, MidpointRounding.AwayFromZero), StockBefore = before, StockAfter = after, Reason = reason, CreatedAtUtc = DateTimeOffset.UtcNow };
         database.InventoryMovements.Add(movement);
         await database.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new InventoryAdjustmentResult(movement.Id, movement.ProductId, movement.Quantity, before, after, movement.Reason);
+    }
+
+    public async Task<bool?> UpdateDepartmentAsync(string token, InventoryDepartmentChangeCommand command, CancellationToken cancellationToken)
+    {
+        if (command.OperationId == Guid.Empty || command.ProductId == Guid.Empty) throw new ArgumentException("La asignación requiere una operación y un producto.");
+        if (await GetAuthorizedUserAsync(token, "ManageProducts", cancellationToken) is null) return null;
+        if (command.DepartmentId is not null && !await database.Departments.AnyAsync(item => item.Id == command.DepartmentId && item.IsActive, cancellationToken))
+            throw new ArgumentException("El departamento no existe o está inactivo.");
+        var product = await database.Products.SingleOrDefaultAsync(item => item.Id == command.ProductId && item.IsActive && !item.IsTemporary, cancellationToken)
+            ?? throw new KeyNotFoundException("Producto no encontrado o inactivo.");
+        product.DepartmentId = command.DepartmentId;
+        await database.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<IReadOnlyList<InventoryMovementResult>?> KardexAsync(string token, Guid productId, CancellationToken cancellationToken)
