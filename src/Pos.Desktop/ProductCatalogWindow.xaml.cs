@@ -178,6 +178,10 @@ public partial class ProductCatalogWindow : UserControl
         WholesaleProfitPercentBox.Text = row.WholesaleProfitPercent > 0m ? Percent(row.WholesaleProfitPercent) : string.Empty;
         WholesaleProfitAmountBox.Text = Money(row.WholesaleProfitAmount);
         WholesaleMinimumBox.Text = Quantity(row.WholesaleMinimumQuantity);
+        InitialStockBox.Text = Quantity(row.Stock);
+        InitialStockBox.IsEnabled = false;
+        MinimumStockBox.Text = Quantity(row.MinimumStock);
+        MaximumStockBox.Text = Quantity(row.MaximumStock);
         IsKitBox.IsChecked = row.IsKit;
         _loadingForm = false;
     }
@@ -207,8 +211,8 @@ public partial class ProductCatalogWindow : UserControl
         try
         {
             using var response = _selected is null ? await ApiClient.Client.PostAsJsonAsync("/api/products", command) : await ApiClient.Client.PutAsJsonAsync($"/api/products/{_selected.Id}", command);
-            if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
-            var code = CodeBox.Text.Trim(); ClearForm(); SearchBox.Text = code; _page = 1; await LoadCatalogAsync(); StatusText.Text = "Producto guardado correctamente.";
+            if (!response.IsSuccessStatusCode) { StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo guardar el producto."); new OperationResultWindow("Producto no guardado", StatusText.Text, OperationResultKind.Error) { Owner = Window.GetWindow(this) }.ShowDialog(); return; }
+            var code = CodeBox.Text.Trim(); var action = _selected is null ? "Producto creado" : "Producto actualizado"; ClearForm(); SearchBox.Text = code; _page = 1; await LoadCatalogAsync(); StatusText.Text = $"{action} correctamente."; new OperationResultWindow(action, "Los datos del catálogo se guardaron. La existencia sólo se modifica mediante el ajuste de inventario.", OperationResultKind.Success) { Owner = Window.GetWindow(this) }.ShowDialog();
         }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar el producto"); }
     }
@@ -216,12 +220,12 @@ public partial class ProductCatalogWindow : UserControl
     private async void OnDeactivateClick(object sender, RoutedEventArgs e)
     {
         if (_selected is null) { StatusText.Text = "Selecciona un producto para desactivarlo."; return; }
-        if (MessageBox.Show($"Se desactivará {_selected.Code} - {_selected.Description}. El historial se conservará.", "Desactivar producto", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show($"Se retirará {_selected.Code} - {_selected.Description} del catálogo activo. Sus ventas, movimientos e historial se conservarán.", "Retirar producto", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         try
         {
             using var response = await ApiClient.Client.DeleteAsync($"/api/products/{_selected.Id}");
             if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
-            ClearForm(); await LoadCatalogAsync(); StatusText.Text = "Producto desactivado. El historial se conserva.";
+            ClearForm(); await LoadCatalogAsync(); StatusText.Text = "Producto retirado del catálogo. El historial se conserva.";
         }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo desactivar el producto"); }
     }
@@ -235,23 +239,30 @@ public partial class ProductCatalogWindow : UserControl
         var wholesalePrice = TryDecimal(WholesalePriceBox.Text, out var parsedWholesalePrice) ? parsedWholesalePrice : 0m;
         var wholesaleProfit = TryDecimal(WholesaleProfitPercentBox.Text, out var parsedWholesaleProfit) ? parsedWholesaleProfit : 0m;
         var wholesaleMinimum = TryDecimal(WholesaleMinimumBox.Text, out var parsedWholesaleMinimum) ? parsedWholesaleMinimum : 0m;
-        if (cost < 0 || profit < 0 || price < 0 || wholesalePrice < 0 || wholesaleProfit < 0 || wholesaleMinimum < 0) { StatusText.Text = "Los importes y porcentajes no pueden ser negativos."; return false; }
+        var initialStock = TryDecimal(InitialStockBox.Text, out var parsedInitialStock) ? parsedInitialStock : -1m;
+        var minimumStock = TryDecimal(MinimumStockBox.Text, out var parsedMinimumStock) ? parsedMinimumStock : -1m;
+        var maximumStock = TryDecimal(MaximumStockBox.Text, out var parsedMaximumStock) ? parsedMaximumStock : -1m;
+        if (cost < 0 || profit < 0 || price < 0 || wholesalePrice < 0 || wholesaleProfit < 0 || wholesaleMinimum < 0 || initialStock < 0 || minimumStock < 0 || maximumStock < 0) { StatusText.Text = "Los importes, existencias y porcentajes no pueden ser negativos."; return false; }
+        if (maximumStock > 0m && maximumStock < minimumStock) { StatusText.Text = "El máximo de existencia debe ser igual o mayor al mínimo."; MaximumStockBox.Focus(); return false; }
         if (price <= 0m && profit <= 0m) { StatusText.Text = "Indica un precio de venta manual mayor a cero o captura un porcentaje de ganancia."; return false; }
         var unit = UnitBox.SelectedItem?.ToString() ?? "Pieza";
         if (string.Equals(unit, "Granel (unidad configurada)", StringComparison.OrdinalIgnoreCase)) unit = _configuredWeightUnit;
-        command = new { code = CodeBox.Text.Trim(), description = DescriptionBox.Text.Trim(), price, cost, profitPercent = profit, wholesalePrice, wholesaleProfitPercent = wholesaleProfit, wholesaleMinimumQuantity = wholesaleMinimum, isKit = IsKitBox.IsChecked == true, unitOfMeasure = unit, departmentId = DepartmentBox.SelectedValue is Guid department && department != Guid.Empty ? department : (Guid?)null };
+        command = new { code = CodeBox.Text.Trim(), description = DescriptionBox.Text.Trim(), price, cost, profitPercent = profit, wholesalePrice, wholesaleProfitPercent = wholesaleProfit, wholesaleMinimumQuantity = wholesaleMinimum, isKit = IsKitBox.IsChecked == true, unitOfMeasure = unit, departmentId = DepartmentBox.SelectedValue is Guid department && department != Guid.Empty ? department : (Guid?)null, initialStock, minimumStock, maximumStock };
         return true;
     }
 
     private void OnDepartmentsClick(object sender, RoutedEventArgs e) { var window = new DepartmentManagerWindow { Owner = Window.GetWindow(this) }; window.Closed += async (_, _) => await LoadDepartmentsAsync(); window.ShowDialog(); }
     private void OnPromotionsClick(object sender, RoutedEventArgs e) { new PromotionWindow { Owner = Window.GetWindow(this) }.ShowDialog(); }
-    private void ClearForm() { _selected = null; _loadingForm = true; ProductsGrid.SelectedItem = null; FormTitleText.Text = "Nuevo producto"; CodeBox.Clear(); DescriptionBox.Clear(); DepartmentBox.SelectedIndex = -1; UnitBox.SelectedIndex = 0; CostBox.Text = "0.00"; ProfitPercentBox.Text = _autoPriceWithProfit ? Percent(_defaultProfitPercent) : string.Empty; PriceBox.Text = "0.00"; ProfitAmountBox.Text = "0.00"; WholesalePriceBox.Text = "0.00"; WholesaleProfitPercentBox.Text = string.Empty; WholesaleProfitAmountBox.Text = "0.00"; WholesaleMinimumBox.Text = "0"; IsKitBox.IsChecked = false; _loadingForm = false; CodeBox.Focus(); }
+    private void ClearForm() { _selected = null; _loadingForm = true; ProductsGrid.SelectedItem = null; FormTitleText.Text = "Nuevo producto"; CodeBox.Clear(); DescriptionBox.Clear(); DepartmentBox.SelectedIndex = -1; UnitBox.SelectedIndex = 0; CostBox.Text = "0.00"; ProfitPercentBox.Text = _autoPriceWithProfit ? Percent(_defaultProfitPercent) : string.Empty; PriceBox.Text = "0.00"; ProfitAmountBox.Text = "0.00"; WholesalePriceBox.Text = "0.00"; WholesaleProfitPercentBox.Text = string.Empty; WholesaleProfitAmountBox.Text = "0.00"; WholesaleMinimumBox.Text = "0"; InitialStockBox.IsEnabled = true; InitialStockBox.Text = "0"; MinimumStockBox.Text = "0"; MaximumStockBox.Text = "0"; IsKitBox.IsChecked = false; _loadingForm = false; CodeBox.Focus(); }
     private static bool TryDecimal(string? value, out decimal result) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out result) || decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
     private static string Money(decimal value) => value.ToString("0.00", CultureInfo.InvariantCulture);
     private static string Percent(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
     private static string Quantity(decimal value) => value.ToString("0.###", CultureInfo.InvariantCulture);
     private sealed record DepartmentRow(Guid Id, string Name, bool IsActive);
-    private sealed record CatalogProductRow(Guid Id, string Code, string Description, string Department, Guid? DepartmentId, decimal Cost, decimal Price, decimal ProfitPercent, decimal ProfitAmount, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleProfitAmount, decimal WholesaleMinimumQuantity, decimal Stock, decimal MinimumStock, decimal MaximumStock, string UnitOfMeasure, bool IsKit, bool IsActive);
+    private sealed record CatalogProductRow(Guid Id, string Code, string Description, string Department, Guid? DepartmentId, decimal Cost, decimal Price, decimal ProfitPercent, decimal ProfitAmount, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleProfitAmount, decimal WholesaleMinimumQuantity, decimal Stock, decimal MinimumStock, decimal MaximumStock, string UnitOfMeasure, bool IsKit, bool IsActive)
+    {
+        public string WholesaleText => WholesalePrice > 0m ? $"${WholesalePrice:0.00} desde {WholesaleMinimumQuantity:0.###}" : "No configurado";
+    }
     private sealed record CatalogPage(List<CatalogProductRow> Items, int Page, int PageSize, int TotalCount, int TotalPages);
     private sealed record MeasureSettings(string DefaultWeightUnit);
     private sealed record StoreOptions(bool InventoryEnabled, string InventoryCostMethod, bool CreditSalesEnabled, bool CommonProductsEnabled, bool AutoPriceWithProfit, decimal DefaultProfitPercent, bool RoundSaleAmounts, string RoundingMode, string OccasionalNotice, int OccasionalNoticeEverySales);
