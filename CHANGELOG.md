@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se prepara la versión 2.5.2: se corrige la apertura del diálogo de productos cuando WPF dispara los eventos de cálculo antes de terminar de inicializar sus controles.
 - Se prepara la versión 2.5.1: F3 abre alta y edición en un cuadro de diálogo separado; el doble clic edita el producto seleccionado conservando su identificador; F4 acepta Enter desde el lector y prioriza el código de barras exacto frente a coincidencias parciales.
 - Se prepara la versión 2.5.0: Productos F3 separa la lista de los formularios de alta y edición; Inventario F4 permite consultar y asignar departamentos; las validaciones de mínimos, máximos y ajustes muestran mensajes claros; y kits, ventas, cancelaciones y devoluciones mantienen el descuento y la reversión de inventario por componentes.
 - Se publica la versión 2.4.4: se refuerza el flujo de producto no encontrado para impedir una segunda captura de cantidad en artículos comunes temporales, incluso ante eventos de entrada repetidos.

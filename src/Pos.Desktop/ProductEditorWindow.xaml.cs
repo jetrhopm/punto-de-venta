@@ -87,12 +87,20 @@ public partial class ProductEditorWindow : Window
     private void OnWholesalePriceChanged(object sender, TextChangedEventArgs e) => UpdateWholesaleProfitAmount();
     private void OnStockLimitChanged(object sender, TextChangedEventArgs e)
     {
-        if (_loading || !TryDecimal(MinimumStockBox.Text, out var minimum) || !TryDecimal(MaximumStockBox.Text, out var maximum)) return;
+        if (_loading || MinimumStockBox is null || MaximumStockBox is null || !TryDecimal(MinimumStockBox.Text, out var minimum) || !TryDecimal(MaximumStockBox.Text, out var maximum)) return;
         MaximumStockBox.BorderBrush = maximum > 0m && maximum < minimum ? Brushes.IndianRed : (Brush)FindResource("LineBrush");
         MaximumStockBox.BorderThickness = maximum > 0m && maximum < minimum ? new Thickness(2) : new Thickness(1);
     }
-    private void UpdateProfitAmount() => ProfitAmountText.Text = TryDecimal(PriceBox.Text, out var price) && TryDecimal(CostBox.Text, out var cost) ? $"Ganancia: {Money(price - cost)}" : "";
-    private void UpdateWholesaleProfitAmount() => WholesaleProfitAmountText.Text = TryDecimal(WholesalePriceBox.Text, out var price) && TryDecimal(CostBox.Text, out var cost) && price > 0m ? $"Ganancia: {Money(price - cost)}" : "";
+    private void UpdateProfitAmount()
+    {
+        if (ProfitAmountText is null || PriceBox is null || CostBox is null) return;
+        ProfitAmountText.Text = TryDecimal(PriceBox.Text, out var price) && TryDecimal(CostBox.Text, out var cost) ? $"Ganancia: {Money(price - cost)}" : "";
+    }
+    private void UpdateWholesaleProfitAmount()
+    {
+        if (WholesaleProfitAmountText is null || WholesalePriceBox is null || CostBox is null) return;
+        WholesaleProfitAmountText.Text = TryDecimal(WholesalePriceBox.Text, out var price) && TryDecimal(CostBox.Text, out var cost) && price > 0m ? $"Ganancia: {Money(price - cost)}" : "";
+    }
 
     private bool TryReadForm(out object command)
     {
