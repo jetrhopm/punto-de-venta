@@ -27,7 +27,7 @@ public partial class MissingProductWindow : Window
         _scannedCode = scannedCode.Trim();
         CodeText.Text = $"Código leído: {_scannedCode}";
         CodeBox.Text = _scannedCode;
-        DescriptionBox.Text = "";
+        DescriptionBox.Text = "Producto común";
         PriceBox.Text = "0.00";
         QuantityBox.Text = "1";
         Loaded += (_, _) =>
