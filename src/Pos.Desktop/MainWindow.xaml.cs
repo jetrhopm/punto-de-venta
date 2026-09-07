@@ -693,7 +693,7 @@ public partial class MainWindow : Window
         var isCommonProduct = window.Decision == MissingProductDecision.CommonProduct;
         if (isCommonProduct)
         {
-            await AddCommonProductAsync(window.ProductCode, window.ProductDescription, window.Price, window.UnitOfMeasure, window.Quantity);
+            await AddMissingCommonProductAsync(window.ProductCode, window.ProductDescription, window.Price, window.UnitOfMeasure, window.Quantity);
             return;
         }
         await using var authorization = await PermissionAuthorization.RequestAsync(this, "ManageProducts", "Registrar un producto desde la venta requiere autorización.");
@@ -735,7 +735,14 @@ public partial class MainWindow : Window
         await AddCommonProductAsync(window.ProductCode, window.ProductDescription, window.Price, window.UnitOfMeasure, window.Quantity);
     }
 
-    private async Task AddCommonProductAsync(string code, string description, decimal price, string unitOfMeasure, decimal quantity)
+    // The missing-product dialog already captured its final quantity. It must not invoke
+    // the weight prompt reserved for inventory products sold by weight.
+    private async Task AddMissingCommonProductAsync(string code, string description, decimal price, string unitOfMeasure, decimal quantity)
+    {
+        await AddCommonProductAsync(code, description, price, unitOfMeasure, quantity, addDirectlyToTicket: true);
+    }
+
+    private async Task AddCommonProductAsync(string code, string description, decimal price, string unitOfMeasure, decimal quantity, bool addDirectlyToTicket = false)
     {
         await using var authorization = await PermissionAuthorization.RequestAsync(this, "UseCommonProduct", "Agregar un producto común requiere autorización.");
         if (authorization is null) { FocusProductInput(); return; }
@@ -753,7 +760,14 @@ public partial class MainWindow : Window
 
             var product = await response.Content.ReadFromJsonAsync<ProductSearchResult>();
             if (product is null) throw new InvalidOperationException("El servidor no devolvió el artículo temporal.");
-            await AddProductToCartAsync(product, quantity, skipBulkQuantityPrompt: true);
+            if (addDirectlyToTicket)
+            {
+                await AddTemporaryProductToCartAsync(product, quantity);
+            }
+            else
+            {
+                await AddProductToCartAsync(product, quantity, skipBulkQuantityPrompt: true);
+            }
             StatusText.Text = "Producto común agregado sólo a este ticket. No modifica el inventario.";
         }
         catch (HttpRequestException)
@@ -761,6 +775,38 @@ public partial class MainWindow : Window
             StatusText.Text = ConnectionHelp.ApiUnavailableNotConfirmed;
             FocusProductInput();
         }
+    }
+
+    private async Task AddTemporaryProductToCartAsync(ProductSearchResult product, decimal quantity)
+    {
+        if (_activeTicket is null)
+        {
+            StatusText.Text = "Crea o recupera un ticket antes de agregar productos.";
+            return;
+        }
+
+        if (quantity <= 0m) return;
+
+        var cart = _activeTicket.Lines;
+        var existing = cart.FirstOrDefault(item => item.ProductId == product.Id);
+        if (existing is null)
+        {
+            cart.Add(new CartLineView(product.Id, product.Code, product.Description, product.Price, product.Stock, quantity, product.UnitOfMeasure));
+        }
+        else
+        {
+            existing.Quantity += quantity;
+        }
+
+        var line = existing ?? cart[^1];
+        await ApplyPromotionQuoteAsync(line);
+        CartList.Items.Refresh();
+        ProductSearchTextBox.Clear();
+        ProductResultsList.Visibility = Visibility.Collapsed;
+        UpdateSaleSummary();
+        QueueActiveTicketSave();
+        SystemSounds.Asterisk.Play();
+        FocusProductInput();
     }
 
     private async Task<string> ShowOpenShiftConflictAsync(HttpResponseMessage response)
