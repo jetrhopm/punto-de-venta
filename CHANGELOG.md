@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se publica la versión 2.3.9: la alerta de caja con turno abierto permite cancelar sin modificar nada o volver directamente al login para cambiar de usuario.
 - Se publica la versión 2.3.8: al intentar abrir una caja ocupada, JetVenta identifica la cuenta que mantiene el turno abierto y explica que debe cerrar corte antes de operar con otra cuenta.
 - Se publica la versión 2.3.7: corte y configuraciones muestran validaciones claras; Diagnóstico separa y limpia sólo historial técnico de impresión sin modificar ventas.
 - Se publica la versión 2.3.6: JetVenta mantiene visible el aviso de demostración en la ventana principal hasta activar una licencia. Se unifican botones de confirmar, cancelar, anterior y siguiente, y las autorizaciones temporales distinguen visualmente contraseña incorrecta, cuenta sin permiso y errores de conexión.

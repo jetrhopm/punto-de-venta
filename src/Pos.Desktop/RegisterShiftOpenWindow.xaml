@@ -23,6 +23,9 @@
                 <TextBlock Text="Para vender con otra cuenta, cierra esta sesión e inicia con el usuario indicado para realizar el corte de caja. Después podrás abrir el turno del siguiente cajero." TextWrapping="Wrap" Foreground="{StaticResource TextBrush}"/>
             </StackPanel>
         </Border>
-        <Button Grid.Row="2" Width="130" HorizontalAlignment="Right" Style="{StaticResource ConfirmButtonStyle}" IsDefault="True" Click="OnCloseClick">Entendido</Button>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Width="115" Margin="0,0,8,0" Style="{StaticResource CancelButtonStyle}" IsCancel="True" Click="OnCancelClick">Cancelar</Button>
+            <Button Width="160" Style="{StaticResource NextButtonStyle}" IsDefault="True" Click="OnChangeUserClick">Cambiar usuario</Button>
+        </StackPanel>
     </Grid>
 </Window>

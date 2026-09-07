@@ -768,7 +768,14 @@ public partial class MainWindow : Window
                 !string.IsNullOrWhiteSpace(conflict.OpenedBy))
             {
                 var openedBy = conflict.OpenedBy;
-                new RegisterShiftOpenWindow(openedBy, conflict.OpenedAtUtc) { Owner = this }.ShowDialog();
+                var window = new RegisterShiftOpenWindow(openedBy, conflict.OpenedAtUtc) { Owner = this };
+                window.ShowDialog();
+                if (window.ChangeUserRequested)
+                {
+                    await EndSessionAsync();
+                    CompleteSignOut();
+                    return "Cambiando de usuario.";
+                }
                 return $"La caja sigue abierta por {openedBy}. Cierra esta sesión e inicia con ese usuario para realizar el corte.";
             }
         }
