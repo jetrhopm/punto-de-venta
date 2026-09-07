@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se prepara la versión 2.6.7: en la compilación Debug, cuando no existe turno, JetVenta abre automáticamente la caja con fondo inicial de $0.00 y crea el ticket inicial. Las compilaciones Release conservan la captura normal del fondo de caja.
 - Se prepara la versión 2.6.6: al abrir correctamente la caja se limpia cualquier bloqueo anterior antes de crear el ticket. La vista de ventas permanece disponible para reintentar y F6 recupera la preparación cuando el inicio no pudo completarla, sin dejar toda la pantalla deshabilitada.
 - Se prepara la versión 2.6.5: las ejecuciones locales Debug pueden activar `POS_PERMISSION_BYPASS=true`, con lo que cualquier usuario de la base de pruebas opera como administrador. El instalador y compilaciones Release no activan este bypass.
 - Se prepara la versión 2.6.4: Ventas permanece deshabilitado hasta que la API recupere o cree un ticket válido. Ya no puede quedar una caja visualmente habilitada sin ticket activo mientras se completa la apertura de turno.

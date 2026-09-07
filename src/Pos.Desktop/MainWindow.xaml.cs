@@ -398,19 +398,32 @@ public partial class MainWindow : Window
             return false;
         }
 
+        decimal initialCash;
+#if DEBUG
+        // La compilación local de pruebas debe quedar lista para vender sin
+        // depender del diálogo de apertura mientras se estabiliza este flujo.
+        initialCash = 0m;
+#else
         var window = new ShiftWindow { Owner = this };
         if (window.ShowDialog() != true || window.InitialCash is null)
         {
             BlockSalesWithoutOpenShift();
             return false;
         }
+        initialCash = window.InitialCash.Value;
+#endif
         try
         {
-            using var response = await Client.PostAsJsonAsync("/api/shifts/open", new { registerId = register.Id, initialCash = window.InitialCash.Value });
+            using var response = await Client.PostAsJsonAsync("/api/shifts/open", new { registerId = register.Id, initialCash });
             if (response.IsSuccessStatusCode)
             {
                 _salesBlockedReason = null;
-                StatusText.Text = "Turno abierto correctamente.";
+                StatusText.Text =
+#if DEBUG
+                    "Modo de pruebas: turno abierto automáticamente con $0.00.";
+#else
+                    "Turno abierto correctamente.";
+#endif
                 return true;
             }
 
