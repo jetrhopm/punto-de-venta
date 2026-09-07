@@ -27,6 +27,8 @@ public partial class MainWindow : Window
     private bool _exitConfirmed;
     private bool _exitDialogOpen;
     private bool _openingProductLookup;
+    private bool _roundSaleAmounts;
+    private string _roundingMode = "Tenths";
     private TemporaryPermissionLease? _modulePermissionLease;
     private string? _licenseReminder;
     public MainWindow()
@@ -63,6 +65,7 @@ public partial class MainWindow : Window
                 StoreNameText.Text = storeName;
                 RegisterStatusText.Text = "Caja: configuracion inicial completada";
                 StatusText.Text = _licenseReminder ?? "API y base de datos locales conectadas.";
+                await LoadSalePricingOptionsAsync();
                 await EnsureShiftOpenAfterLoginAsync();
                 FocusProductInput();
             }
@@ -207,12 +210,12 @@ public partial class MainWindow : Window
         }
         else if (e.Key == Key.Insert)
         {
-            ShowPendingFeature("Producto varios");
+            await OpenCommonProductAsync();
             e.Handled = true;
         }
         else if (e.Key == Key.P && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
         {
-            ShowPendingFeature("Articulo comun");
+            await OpenCommonProductAsync();
             e.Handled = true;
         }
         else if (e.Key == Key.Delete)
@@ -275,14 +278,12 @@ public partial class MainWindow : Window
     private async void OnAddProductFromEntryClick(object sender, RoutedEventArgs e) =>
         await HandleProductEntryAsync(ProductSearchTextBox.Text.Trim());
 
-    private void OnInsertCommonProductClick(object sender, RoutedEventArgs e) =>
-        ShowPendingFeature("Producto varios");
+    private async void OnInsertCommonProductClick(object sender, RoutedEventArgs e) =>
+        await OpenCommonProductAsync();
 
     private async void OnCommonProductClick(object sender, RoutedEventArgs e)
     {
-        await using var authorization = await PermissionAuthorization.RequestAsync(this, "UseCommonProduct", "Usar un producto común requiere autorización.");
-        if (authorization is null) return;
-        StatusText.Text = "Producto común disponible al registrar un código no encontrado.";
+        await OpenCommonProductAsync();
     }
 
     private async void OnProductLookupClick(object sender, RoutedEventArgs e) =>
@@ -568,9 +569,22 @@ public partial class MainWindow : Window
 
     private async void OnProductSearchKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter)
+        if (e.Key is Key.Down or Key.Up)
         {
-            await HandleProductEntryAsync(ProductSearchTextBox.Text.Trim());
+            if (ProductResultsList.Items.Count > 0)
+            {
+                var current = ProductResultsList.SelectedIndex;
+                ProductResultsList.SelectedIndex = e.Key == Key.Down
+                    ? Math.Min(current < 0 ? 0 : current + 1, ProductResultsList.Items.Count - 1)
+                    : Math.Max(current <= 0 ? 0 : current - 1, 0);
+                ProductResultsList.ScrollIntoView(ProductResultsList.SelectedItem);
+            }
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter)
+        {
+            if (ProductResultsList.SelectedItem is ProductSearchRow) await AddSelectedProductAsync();
+            else await HandleProductEntryAsync(ProductSearchTextBox.Text.Trim());
             e.Handled = true;
         }
     }
@@ -650,6 +664,11 @@ public partial class MainWindow : Window
         }
 
         var isCommonProduct = window.Decision == MissingProductDecision.CommonProduct;
+        if (isCommonProduct)
+        {
+            await OpenCommonProductAsync(window.ProductCode);
+            return;
+        }
         var requiredPermission = isCommonProduct ? "UseCommonProduct" : "ManageProducts";
         await using var authorization = await PermissionAuthorization.RequestAsync(this, requiredPermission, isCommonProduct ? "Agregar un producto común requiere autorización." : "Registrar un producto desde la venta requiere autorización.");
         if (authorization is null) { FocusProductInput(); return; }
@@ -674,7 +693,6 @@ public partial class MainWindow : Window
             }
 
             await AddProductToCartAsync(product);
-            if (isCommonProduct) StatusText.Text = "Producto común agregado solo a este ticket. No se modificará el inventario.";
         }
         catch (HttpRequestException)
         {
@@ -683,7 +701,38 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task AddProductToCartAsync(ProductSearchResult product)
+    private async Task OpenCommonProductAsync(string? suggestedCode = null)
+    {
+        var window = new CommonProductWindow(suggestedCode) { Owner = this };
+        if (window.ShowDialog() != true) { FocusProductInput(); return; }
+
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "UseCommonProduct", "Agregar un producto común requiere autorización.");
+        if (authorization is null) { FocusProductInput(); return; }
+
+        try
+        {
+            var command = new { code = window.ProductCode, description = window.ProductDescription, price = window.Price, unitOfMeasure = window.UnitOfMeasure, isCommonProduct = true };
+            using var response = await Client.PostAsJsonAsync("/api/products/quick-sale", command);
+            if (!response.IsSuccessStatusCode)
+            {
+                StatusText.Text = await ReadApiMessageAsync(response);
+                FocusProductInput();
+                return;
+            }
+
+            var product = await response.Content.ReadFromJsonAsync<ProductSearchResult>();
+            if (product is null) throw new InvalidOperationException("El servidor no devolvió el artículo temporal.");
+            await AddProductToCartAsync(product, window.Quantity);
+            StatusText.Text = "Producto común agregado sólo a este ticket. No modifica el inventario.";
+        }
+        catch (HttpRequestException)
+        {
+            StatusText.Text = ConnectionHelp.ApiUnavailableNotConfirmed;
+            FocusProductInput();
+        }
+    }
+
+    private async Task AddProductToCartAsync(ProductSearchResult product, decimal? requestedQuantity = null)
     {
         if (_activeTicket is null)
         {
@@ -691,10 +740,19 @@ public partial class MainWindow : Window
             return;
         }
 
+        var quantity = requestedQuantity ?? 1m;
+        if (requestedQuantity is null && IsBulkUnit(product.UnitOfMeasure))
+        {
+            var window = new SaleQuantityWindow(product.Description, product.UnitOfMeasure, 1m) { Owner = this };
+            if (window.ShowDialog() != true || window.Quantity is null) { FocusProductInput(); return; }
+            quantity = window.Quantity.Value;
+        }
+        if (quantity <= 0m) return;
+
         var cart = _activeTicket.Lines;
         var existing = cart.FirstOrDefault(item => item.ProductId == product.Id);
-        if (existing is null) cart.Add(new CartLineView(product.Id, product.Code, product.Description, product.Price, product.Stock, 1));
-        else { existing.Quantity++; }
+        if (existing is null) cart.Add(new CartLineView(product.Id, product.Code, product.Description, product.Price, product.Stock, quantity, product.UnitOfMeasure));
+        else { existing.Quantity += quantity; }
         var line = existing ?? cart[^1];
         await ApplyPromotionQuoteAsync(line);
         CartList.Items.Refresh();
@@ -782,6 +840,20 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private async void OnCartDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (CartList.SelectedItem is not CartLineView line || _activeTicket is null) return;
+        var window = new SaleQuantityWindow(line.Description, line.UnitOfMeasure, line.Quantity) { Owner = this };
+        if (window.ShowDialog() != true || window.Quantity is null) return;
+        line.Quantity = window.Quantity.Value;
+        await ApplyPromotionQuoteAsync(line);
+        CartList.Items.Refresh();
+        UpdateSaleSummary();
+        QueueActiveTicketSave();
+        StatusText.Text = "Cantidad actualizada en el ticket.";
+        FocusProductInput();
+    }
+
     private void DeleteSelectedCartLine()
     {
         if (CartList.SelectedItem is not CartLineView line)
@@ -803,8 +875,13 @@ public partial class MainWindow : Window
     private void UpdateSaleSummary()
     {
         var cart = _activeTicket?.Lines ?? _emptyCart;
-        SaleTotalText.Text = $"${cart.Sum(item => item.Total):0.00}";
-        SaleItemsText.Text = $"Artículos: {cart.Sum(item => item.Quantity):0.###}";
+        var subtotal = decimal.Round(cart.Sum(item => item.Total), 2, MidpointRounding.AwayFromZero);
+        var total = CalculateSaleTotal(subtotal);
+        SaleTotalText.Text = $"${total:0.00}";
+        var rounding = total - subtotal;
+        SaleItemsText.Text = rounding == 0m
+            ? $"Artículos: {cart.Sum(item => item.Quantity):0.###}"
+            : $"Artículos: {cart.Sum(item => item.Quantity):0.###} · Subtotal ${subtotal:0.00} · Redondeo +${rounding:0.00}";
         CurrentSectionText.Text = _activeTicket?.Title ?? "Nueva venta";
     }
 
@@ -821,15 +898,41 @@ public partial class MainWindow : Window
         catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableRetry; }
     }
 
-    private sealed record ProductSearchResult(Guid Id, string Code, string Description, decimal Price, decimal Stock = 0m);
+    private static bool IsBulkUnit(string? unit) => unit is not null && unit.Contains("granel", StringComparison.OrdinalIgnoreCase) || unit is "Kilogramo" or "Gramo" or "Litro" or "Mililitro" or "Metro";
+
+    private decimal CalculateSaleTotal(decimal subtotal)
+    {
+        if (!_roundSaleAmounts) return subtotal;
+        return string.Equals(_roundingMode, "Whole", StringComparison.OrdinalIgnoreCase)
+            ? decimal.Ceiling(subtotal)
+            : decimal.Ceiling(subtotal * 10m) / 10m;
+    }
+
+    private async Task LoadSalePricingOptionsAsync()
+    {
+        try
+        {
+            var settings = await Client.GetFromJsonAsync<StoreOptionsResponse>("/api/store-options");
+            if (settings is null) return;
+            _roundSaleAmounts = settings.RoundSaleAmounts;
+            _roundingMode = settings.RoundingMode;
+            UpdateSaleSummary();
+        }
+        catch (HttpRequestException)
+        {
+            _roundSaleAmounts = false;
+        }
+    }
+
+    private sealed record ProductSearchResult(Guid Id, string Code, string Description, decimal Price, decimal Stock = 0m, string UnitOfMeasure = "Pieza");
     private sealed record ProductSearchRow(ProductSearchResult Product)
     {
         public string DisplayText => $"{Product.Code} | {Product.Description} | ${Product.Price:0.00}";
     }
 
-    private sealed class CartLineView(Guid productId, string code, string description, decimal unitPrice, decimal stock, decimal quantity)
+    private sealed class CartLineView(Guid productId, string code, string description, decimal unitPrice, decimal stock, decimal quantity, string unitOfMeasure = "Pieza")
     {
-        public Guid ProductId { get; } = productId; public string Code { get; } = code; public string Description { get; } = description; public decimal BaseUnitPrice { get; } = unitPrice; public decimal UnitPrice { get; set; } = unitPrice; public decimal Stock { get; } = stock; public decimal Quantity { get; set; } = quantity; public decimal DiscountTotal { get; set; } public decimal? PromotionalTotal { get; set; } public decimal Total => PromotionalTotal ?? decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Code} | {Description} x {Quantity:0.###} = ${Total:0.00}";
+        public Guid ProductId { get; } = productId; public string Code { get; } = code; public string Description { get; } = description; public string UnitOfMeasure { get; } = unitOfMeasure; public decimal BaseUnitPrice { get; } = unitPrice; public decimal UnitPrice { get; set; } = unitPrice; public decimal Stock { get; } = stock; public decimal Quantity { get; set; } = quantity; public decimal DiscountTotal { get; set; } public decimal? PromotionalTotal { get; set; } public decimal Total => PromotionalTotal ?? decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Code} | {Description} x {Quantity:0.###} = ${Total:0.00}";
     }
 
     private sealed class TicketTabView(Guid id, Guid operationId, int ticketNumber, IEnumerable<CartLineView>? lines = null)
@@ -848,6 +951,7 @@ public partial class MainWindow : Window
     private sealed record SaleDraftLineResponse(Guid ProductId, string Code, string Description, decimal UnitPrice, decimal Stock, decimal Quantity);
     private sealed record PromotionPriceQuote(Guid ProductId, decimal BaseUnitPrice, decimal UnitPrice, decimal Quantity, decimal Total, decimal DiscountTotal, bool PromotionApplied);
     private sealed record SaleResponse(Guid SaleId, decimal Total, decimal Change, bool Existing);
+    private sealed record StoreOptionsResponse(bool InventoryEnabled, string InventoryCostMethod, bool CreditSalesEnabled, bool CommonProductsEnabled, bool AutoPriceWithProfit, decimal DefaultProfitPercent, bool RoundSaleAmounts, string RoundingMode, string OccasionalNotice, int OccasionalNoticeEverySales);
     private sealed record RegisterResponse(Guid Id, string Name);
     private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
     private sealed record CutSettingsResponse(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, decimal CashLimit, string CashLimitMessage);
@@ -1037,7 +1141,9 @@ public partial class MainWindow : Window
         await using var saleAuthorization = await PermissionAuthorization.RequestAsync(this, "Sell", "Cobrar una venta requiere autorización.");
         if (saleAuthorization is null) return;
         if (!await PersistActiveTicketAsync()) return;
-        var cashWindow = new CashWindow(ticket.Lines.Sum(item => item.Total), ticket.Lines.Sum(item => item.Quantity), ticket.CustomerId, ticket.CustomerName) { Owner = this };
+        var ticketSubtotal = decimal.Round(ticket.Lines.Sum(item => item.Total), 2, MidpointRounding.AwayFromZero);
+        var ticketTotal = CalculateSaleTotal(ticketSubtotal);
+        var cashWindow = new CashWindow(ticketTotal, ticket.Lines.Sum(item => item.Quantity), ticket.CustomerId, ticket.CustomerName) { Owner = this };
         if (cashWindow.ShowDialog() != true || cashWindow.Received is null) return;
         await using var creditAuthorization = cashWindow.CreditRequested
             ? await PermissionAuthorization.RequestAsync(this, "SellOnCredit", "Cobrar una venta a crédito requiere autorización.")
@@ -1045,7 +1151,7 @@ public partial class MainWindow : Window
         if (cashWindow.CreditRequested && creditAuthorization is null) return;
         try
         {
-            var pointAmount = cashWindow.PaymentMethod == "Card" ? ticket.Lines.Sum(item => item.Total) : cashWindow.PaymentMethod == "Mixed" ? cashWindow.CardAmount : 0m;
+            var pointAmount = cashWindow.PaymentMethod == "Card" ? ticketTotal : cashWindow.PaymentMethod == "Mixed" ? cashWindow.CardAmount : 0m;
             if (pointAmount > 0m && await IsMercadoPagoEnabledAsync())
             {
                 var point = new MercadoPagoPaymentWindow(ticket.OperationId, pointAmount) { Owner = this };

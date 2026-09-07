@@ -485,16 +485,20 @@ app.MapPost("/api/products/quick-sale", async (HttpRequest request, ProductComma
     var requiredPermission = command.IsCommonProduct ? "UseCommonProduct" : "ManageProducts";
     var allowed = user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == requiredPermission, cancellationToken);
     if (!allowed) return Results.StatusCode(StatusCodes.Status403Forbidden);
-    if (string.IsNullOrWhiteSpace(command.Code) || string.IsNullOrWhiteSpace(command.Description) || command.Price < 0m) return Results.ValidationProblem(new Dictionary<string, string[]> { ["product"] = ["Codigo, descripcion y precio valido son obligatorios."] });
+    if (string.IsNullOrWhiteSpace(command.Description) || command.Price < 0m || (!command.IsCommonProduct && string.IsNullOrWhiteSpace(command.Code)))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["product"] = [command.IsCommonProduct ? "La descripción y un precio válido son obligatorios." : "Código, descripción y precio válido son obligatorios."] });
 
-    var normalized = ProductCatalogService.NormalizeCode(command.Code);
+    var productCode = string.IsNullOrWhiteSpace(command.Code)
+        ? $"COMUN-{Guid.NewGuid():N}"
+        : command.Code.Trim();
+    var normalized = ProductCatalogService.NormalizeCode(productCode);
     var existing = await database.Products.AsNoTracking().SingleOrDefaultAsync(item => item.NormalizedCode == normalized && item.IsActive, cancellationToken);
     if (existing is not null) return Results.Ok(new { existing.Id, existing.Code, existing.Description, existing.Price, existing.UnitOfMeasure });
 
     var product = new ProductRecord
     {
         Id = Guid.NewGuid(),
-        Code = command.Code.Trim(),
+        Code = productCode,
         NormalizedCode = normalized,
         Description = command.Description.Trim(),
         Price = decimal.Round(command.Price, 2),

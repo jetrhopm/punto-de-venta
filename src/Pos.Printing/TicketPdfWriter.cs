@@ -27,7 +27,8 @@ public sealed record TicketPdfData(
     decimal Total,
     string CurrencySymbol = "$",
     long Folio = 0,
-    long ShiftNumber = 0)
+    long ShiftNumber = 0,
+    decimal? Subtotal = null)
 {
     public TicketPdfData(string storeName, Guid saleId, DateTimeOffset createdAtUtc, IReadOnlyList<TicketPdfLine> lines, decimal total, decimal received, decimal change)
         : this(storeName, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, "Gracias por su compra", 80, saleId, Guid.Empty, "Caja principal", "Administrador", createdAtUtc, lines, [new TicketPdfPayment("Cash", total, received, change)], total) { }
@@ -107,7 +108,10 @@ public static class TicketPdfWriter
         AddRule(rows);
         var itemCount = ticket.Lines.Sum(line => line.Quantity);
         rows.Add(new LayoutRow($"ARTICULOS: {itemCount:0.###}", normalSize, false, TextAlignment.Left, 4m));
-        rows.Add(new LayoutRow($"SUBTOTAL: {Money(ticket, ticket.Total)}", normalSize + 1m, true, TextAlignment.Right, 3m));
+        var subtotal = ticket.Subtotal ?? ticket.Total;
+        rows.Add(new LayoutRow($"SUBTOTAL: {Money(ticket, subtotal)}", normalSize + 1m, true, TextAlignment.Right, 3m));
+        if (subtotal != ticket.Total)
+            rows.Add(new LayoutRow($"REDONDEO: {Money(ticket, ticket.Total - subtotal)}", normalSize, false, TextAlignment.Right, 2m));
         rows.Add(new LayoutRow($"TOTAL: {Money(ticket, ticket.Total)}", totalSize, true, TextAlignment.Right, 5m));
 
         foreach (var payment in ticket.Payments.Where(payment => payment.Amount > 0m))

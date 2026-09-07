@@ -115,7 +115,10 @@ public static class TicketWindowsPrinter
 
         root.Children.Add(Text($"Articulos: {ticket.Lines.Sum(line => line.Quantity):0.###}", baseSize, FontWeights.Normal, TextAlignment.Left, new Thickness(0, 1, 0, 4)));
         var totalWeight = profile.UseNormalTotals ? FontWeights.Normal : FontWeights.Bold;
-        root.Children.Add(AmountLine(ticket, "Subtotal", ticket.Total, baseSize + 1d, totalWeight));
+        var subtotal = ticket.Subtotal ?? ticket.Total;
+        root.Children.Add(AmountLine(ticket, "Subtotal", subtotal, baseSize + 1d, totalWeight));
+        if (subtotal != ticket.Total)
+            root.Children.Add(AmountLine(ticket, "Redondeo", ticket.Total - subtotal, baseSize, FontWeights.Normal));
         root.Children.Add(AmountLine(ticket, "TOTAL", ticket.Total, baseSize + 4d, totalWeight));
         foreach (var payment in ticket.Payments.Where(payment => payment.Amount > 0m))
             root.Children.Add(AmountLine(ticket, PaymentLabel(payment.Method), payment.Amount, baseSize, FontWeights.Normal));

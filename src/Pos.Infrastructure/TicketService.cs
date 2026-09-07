@@ -55,7 +55,8 @@ public sealed class TicketService(PosDbContext database)
             sale.Total,
             store.CurrencySymbol,
             sale.Folio,
-            shiftNumber);
+            shiftNumber,
+            lines.Sum(line => line.Total));
     }
 
     public async Task<bool?> MarkPrintedAsync(string token, Guid saleId, CancellationToken cancellationToken)

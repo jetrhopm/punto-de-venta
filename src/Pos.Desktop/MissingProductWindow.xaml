@@ -17,7 +17,9 @@
 
         <ScrollViewer Grid.Row="1" Margin="0,18,0,0" VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="0,0,8,0">
-            <TextBlock Text="Nombre o descripcion" FontWeight="SemiBold" Margin="0,0,0,4"/>
+            <TextBlock Text="Código" FontWeight="SemiBold" Margin="0,0,0,4"/>
+            <TextBox x:Name="CodeBox" Height="36"/>
+            <TextBlock Text="Nombre o descripción" FontWeight="SemiBold" Margin="0,12,0,4"/>
             <TextBox x:Name="DescriptionBox" Height="36"/>
             <TextBlock Text="Precio" FontWeight="SemiBold" Margin="0,12,0,4"/>
             <TextBox x:Name="PriceBox" Height="36"/>
@@ -43,7 +45,7 @@
             </Grid.ColumnDefinitions>
             <Button Width="110" Height="38" Click="OnCancelClick">Cancelar</Button>
             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button Width="210" Height="38" Margin="0,0,8,0" Click="OnCommonClick" ToolTip="Agrega un articulo temporal solo a este ticket; no modifica el inventario.">Producto comun (temporal)</Button>
+                <Button Width="210" Height="38" Margin="0,0,8,0" Click="OnCommonClick" ToolTip="Abre el formulario de artículo temporal; no modifica el inventario.">Producto común (temporal)</Button>
                 <Button Width="155" Height="38" Background="#146CB0" Foreground="White" FontWeight="Bold" Click="OnRegisterClick">Registrar producto</Button>
             </StackPanel>
         </Grid>

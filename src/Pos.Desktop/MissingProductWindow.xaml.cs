@@ -24,7 +24,8 @@ public partial class MissingProductWindow : Window
     {
         InitializeComponent();
         _scannedCode = scannedCode.Trim();
-        CodeText.Text = $"Codigo leido: {_scannedCode}";
+        CodeText.Text = $"Código leído: {_scannedCode}";
+        CodeBox.Text = _scannedCode;
         DescriptionBox.Text = "";
         PriceBox.Text = "0.00";
         Loaded += (_, _) =>
@@ -37,7 +38,13 @@ public partial class MissingProductWindow : Window
     private void OnRegisterClick(object sender, RoutedEventArgs e)
     {
         if (!TryReadValues()) return;
-        ProductCode = _scannedCode;
+        ProductCode = CodeBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(ProductCode))
+        {
+            MessageText.Text = "Para registrar el producto en inventario, escribe o confirma su código.";
+            CodeBox.Focus();
+            return;
+        }
         ProductDescription = string.IsNullOrWhiteSpace(ProductDescription) ? "Producto sin nombre" : ProductDescription;
         Decision = MissingProductDecision.RegisterProduct;
         DialogResult = true;
@@ -45,9 +52,7 @@ public partial class MissingProductWindow : Window
 
     private void OnCommonClick(object sender, RoutedEventArgs e)
     {
-        if (!TryReadValues()) return;
-        ProductCode = $"COMUN-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}";
-        ProductDescription = string.IsNullOrWhiteSpace(ProductDescription) ? $"Producto comun ({_scannedCode})" : ProductDescription;
+        ProductCode = CodeBox.Text.Trim();
         Decision = MissingProductDecision.CommonProduct;
         DialogResult = true;
     }

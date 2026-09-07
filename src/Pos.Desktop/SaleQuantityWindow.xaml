@@ -1,0 +1,21 @@
+<Window x:Class="Pos.Desktop.SaleQuantityWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
+        Title="Cantidad de la partida" Width="470" Height="300" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" PreviewKeyDown="OnPreviewKeyDown">
+    <Grid Margin="24">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel Orientation="Horizontal">
+            <Border Width="44" Height="44" Background="#E7F3FB" CornerRadius="5"><icons:PackIconMaterial Kind="Counter" Width="25" Height="25" Foreground="#146CB0" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+            <StackPanel Margin="12,0,0,0"><TextBlock Text="Cantidad" FontSize="22" FontWeight="SemiBold"/><TextBlock x:Name="ProductText" Foreground="#526577" TextTrimming="CharacterEllipsis" MaxWidth="340"/></StackPanel>
+        </StackPanel>
+        <TextBlock Grid.Row="1" x:Name="UnitText" Margin="0,17,0,6" Foreground="#526577"/>
+        <TextBox Grid.Row="2" x:Name="QuantityBox" Height="42" FontSize="19" Padding="11,6"/>
+        <TextBlock Grid.Row="3" x:Name="MessageText" Margin="0,9,0,0" Foreground="#B42318" TextWrapping="Wrap"/>
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Width="112" Height="38" Margin="0,0,8,0" IsCancel="True" Click="OnCancelClick">Cancelar</Button>
+            <Button Width="128" Height="38" Style="{StaticResource PrimaryButtonStyle}" IsDefault="True" Click="OnAcceptClick">Aceptar</Button>
+        </StackPanel>
+    </Grid>
+</Window>
