@@ -5,7 +5,7 @@
 | Estado | Version | Commit o rama | Evidencia |
 | --- | --- | --- | --- |
 | Estable validada | 2.2.6 | `c6982d0` / `codex/rollback-ventas-estable` | El 6 de septiembre de 2026 se valido inicio de sesion, apertura de turno, F6, tickets, productos y ventas. Compila sin advertencias y las dos pruebas de tickets pasan. |
-| Candidata local por validar | 2.6.2 | `artifacts/production/setup/Pos.Setup.exe` | Artefacto completo creado el 6 de septiembre de 2026 a las 13:53, anterior a los cambios 2.6.3 y 2.6.4. Requiere prueba de F6, tickets y venta en maquina virtual antes de distribuir. SHA-256: `F6A1CB653FCFF60074CE569DCFAFD7F1E2DB1CA14229FC4F06A2AAFEA056E67F`. |
+| Artefacto historico no reproducible | 2.6.2 | `artifacts/production/setup/Pos.Setup.exe` | Paquete completo creado el 6 de septiembre de 2026 a las 13:53. Su metadata indica 2.6.2, pero se genero con cambios locales sin commit: contiene el bloqueo de caja por otro usuario. Puede probarse como referencia, pero no se marca como estable ni permite recuperar su fuente exacta. SHA-256: `F6A1CB653FCFF60074CE569DCFAFD7F1E2DB1CA14229FC4F06A2AAFEA056E67F`. |
 | No distribuir | 2.6.4 | `b9ebe5e` / `codex/respaldo-2.6.4-antes-rollback` | Contiene desarrollo posterior respaldado antes de la regresion: F6 intenta abrir turno y el flujo de tickets puede bloquear ventas. |
 
 La version estable no se modifica directamente. Cualquier correccion parte de una rama nueva y solo reemplaza esta linea cuando el usuario valida el ejecutable local y las pruebas tecnicas terminan correctamente.
@@ -17,7 +17,8 @@ La version estable no se modifica directamente. Cualquier correccion parte de un
 | 2.0.0 | Historico local | Dialogos y atajos iniciales. | `b12f851` (objeto local recuperable). |
 | 2.1.1 - 2.1.15 | Respaldado en Git | Licencia, restauracion, respaldos, pagos mixtos, tickets, impresion, demo, inicio automatico. | Commits entre `08d855d` y `bf30fc8`. |
 | 2.2.0 - 2.2.6 | Respaldado en Git | Rediseño de instalador, identidad visual, descarte y conservacion de tickets. | Commits entre `239eac3` y `c6982d0`. |
-| 2.3.0 - 2.5.6 | Desarrollo sin punto inmutable | Importacion, licencia, alertas, redondeo, producto comun, granel y mejoras de venta. | Integrado dentro de `b9ebe5e`; no existe un commit o etiqueta exacta para regresar. |
+| 2.3.0 | Artefactos locales parciales | Importacion y licencia. | Existen compilaciones locales de seguridad; no hay instalador completo publicable asociado a un commit inmutable. |
+| 2.4.0 - 2.5.6 | Sin artefacto local ni punto inmutable | Alertas, permisos, conexion, redondeo, producto comun, granel y mejoras de venta. | No existe instalador, publicacion, commit ni etiqueta exactos; los cambios estan integrados dentro de `b9ebe5e`. |
 | 2.6.0 - 2.6.4 | Regresion identificada | Catalogo y permisos; despues cambios en relevo de sesion, F6 y acceso a tickets. | Integrado dentro de `b9ebe5e`; no distribuir. |
 
 La siguiente candidata de codigo se nombrara `2.5.7`, no `2.5.6`: se reconstruira desde el respaldo de desarrollo, retirando el flujo regresivo de `2.6.1` a `2.6.4` y conservando las mejoras comprobables de `2.5.x`. Antes de esa reconstruccion se validara el instalador local `2.6.2`, pues podria ser el ultimo paquete completo funcional previo a la regresion.
@@ -31,6 +32,7 @@ La siguiente candidata de codigo se nombrara `2.5.7`, no `2.5.6`: se reconstruir
 5. Generar y abrir primero el ejecutable local de pruebas. No generar instalador hasta que se valide el flujo afectado.
 6. Tras la validacion del usuario, crear una etiqueta inmutable `vX.Y.Z-validada-AAAAMMDD`, subirla a GitHub y solo entonces generar el instalador.
 7. El instalador se genera desde el commit etiquetado. Nunca desde cambios sin commit.
+8. La version mostrada por Windows no se considerara evidencia suficiente: debe coincidir con un commit y una etiqueta publicada en GitHub.
 
 ## Pruebas minimas de regresion para ventas
 
