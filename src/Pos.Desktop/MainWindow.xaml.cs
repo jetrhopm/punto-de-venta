@@ -753,7 +753,7 @@ public partial class MainWindow : Window
 
             var product = await response.Content.ReadFromJsonAsync<ProductSearchResult>();
             if (product is null) throw new InvalidOperationException("El servidor no devolvió el artículo temporal.");
-            await AddProductToCartAsync(product, quantity);
+            await AddProductToCartAsync(product, quantity, skipBulkQuantityPrompt: true);
             StatusText.Text = "Producto común agregado sólo a este ticket. No modifica el inventario.";
         }
         catch (HttpRequestException)
@@ -789,7 +789,7 @@ public partial class MainWindow : Window
         return await ReadApiMessageAsync(response);
     }
 
-    private async Task AddProductToCartAsync(ProductSearchResult product, decimal? requestedQuantity = null)
+    private async Task AddProductToCartAsync(ProductSearchResult product, decimal? requestedQuantity = null, bool skipBulkQuantityPrompt = false)
     {
         if (_activeTicket is null)
         {
@@ -798,7 +798,7 @@ public partial class MainWindow : Window
         }
 
         var quantity = requestedQuantity ?? 1m;
-        if (requestedQuantity is null && IsBulkUnit(product.UnitOfMeasure))
+        if (!skipBulkQuantityPrompt && requestedQuantity is null && IsBulkUnit(product.UnitOfMeasure))
         {
             var window = new SaleQuantityWindow(product.Description, product.UnitOfMeasure, 1m) { Owner = this };
             if (window.ShowDialog() != true || window.Quantity is null) { FocusProductInput(); return; }
