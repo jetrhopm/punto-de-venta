@@ -411,7 +411,6 @@ public partial class MainWindow : Window
             using var response = await Client.PostAsJsonAsync("/api/shifts/open", new { registerId = register.Id, initialCash = window.InitialCash.Value });
             if (response.IsSuccessStatusCode)
             {
-                EnableSales();
                 StatusText.Text = "Turno abierto correctamente.";
                 return true;
             }
@@ -1119,7 +1118,9 @@ public partial class MainWindow : Window
 
             if (_tickets.Count == 0)
             {
-                return await CreateNewTicketAsync(saveCurrentTicket: false);
+                var created = await CreateNewTicketAsync(saveCurrentTicket: false);
+                if (created) EnableSales();
+                return created;
             }
 
             TicketTabs.SelectedIndex = 0;
@@ -1127,6 +1128,7 @@ public partial class MainWindow : Window
             StatusText.Text = _tickets.Count == 1
                 ? "Ticket en atención recuperado."
                 : $"{_tickets.Count} tickets en atención recuperados.";
+            EnableSales();
             return true;
         }
         catch (HttpRequestException)
@@ -1463,7 +1465,6 @@ public partial class MainWindow : Window
         var currentShift = await GetCurrentShiftAsync();
         if (currentShift is not null)
         {
-            EnableSales();
             var window = new ShiftWindow { Owner = this };
             window.ShowAlreadyOpen(currentShift.InitialCash, currentShift.OpenedAtUtc);
             window.ShowDialog();
@@ -1544,7 +1545,7 @@ public partial class MainWindow : Window
     private void BlockSalesWithoutOpenShift()
     {
         _salesBlockedReason = "No hay un turno abierto. Para vender, abre la caja con el fondo inicial desde el inicio de sesión.";
-        SalesWorkspace.IsEnabled = true;
+        SalesWorkspace.IsEnabled = false;
         StatusText.Text = _salesBlockedReason;
     }
 

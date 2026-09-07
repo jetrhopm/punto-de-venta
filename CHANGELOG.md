@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se prepara la versión 2.6.4: Ventas permanece deshabilitado hasta que la API recupere o cree un ticket válido. Ya no puede quedar una caja visualmente habilitada sin ticket activo mientras se completa la apertura de turno.
 - Se prepara la versión 2.6.3: el inicio de ventas ahora espera a recuperar o crear el ticket inicial antes de habilitar F6 y el registro de productos. F6 ya no solicita un fondo inicial ni intenta abrir caja. Cuando otro usuario dejó abierta la única caja, la salida muestra una decisión explícita para salir sin alterar su turno, en vez de cerrar JetVenta de inmediato.
 - Se prepara la versión 2.6.1: se reforzó el relevo de ventanas para que la opción explícita de volver al login no termine JetVenta al cerrar la ventana principal.
 - Se prepara la versión 2.6.0: se completa el bloque de catálogo, inventario, mayoreo, baja lógica y atajos de venta posterior a las pruebas de usuario.
