@@ -36,6 +36,7 @@ public sealed class TicketService(PosDbContext database)
             .Select(item => item.Id)
             .ToListAsync(cancellationToken);
         var shiftNumber = shiftIds.FindIndex(id => id == shift.Id) + 1L;
+        var subtotal = decimal.Round(lines.Sum(line => line.Total), 2, MidpointRounding.AwayFromZero);
         return new TicketPdfData(
             store.Name,
             store.LegalName,
@@ -56,7 +57,7 @@ public sealed class TicketService(PosDbContext database)
             store.CurrencySymbol,
             sale.Folio,
             shiftNumber,
-            lines.Sum(line => line.Total));
+            subtotal);
     }
 
     public async Task<bool?> MarkPrintedAsync(string token, Guid saleId, CancellationToken cancellationToken)

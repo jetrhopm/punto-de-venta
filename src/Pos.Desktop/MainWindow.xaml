@@ -199,6 +199,8 @@
                         <TextBlock Text="Venta en curso" FontSize="18" FontWeight="SemiBold"/>
                         <TextBlock Text="Total de la venta" Margin="0,22,0,2" HorizontalAlignment="Center" Foreground="{StaticResource TextMutedBrush}"/>
                         <TextBlock x:Name="SaleTotalText" Text="$0.00" FontSize="38" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
+                        <TextBlock x:Name="SaleSubtotalText" HorizontalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" Visibility="Collapsed"/>
+                        <TextBlock x:Name="SaleRoundingText" HorizontalAlignment="Center" Foreground="{StaticResource PrimaryBrush}" FontWeight="SemiBold" Visibility="Collapsed"/>
                         <TextBlock x:Name="SaleItemsText" Text="Artículos: 0" HorizontalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" Margin="0,2,0,15"/>
                     </StackPanel>
                     <StackPanel Grid.Row="2" Margin="0,18,0,0">

@@ -40,6 +40,7 @@ public partial class MainWindow : Window
         TicketTabs.ItemsSource = _tickets;
         CartList.ItemsSource = _emptyCart;
         Loaded += (_, _) => ApplyNavigationPermissions();
+        Activated += OnActivated;
         Closing += OnClosing;
         PreviewTextInput += OnPreviewTextInput;
         BarcodeScannerService.BarcodeScanned += OnSerialBarcodeScanned;
@@ -75,6 +76,12 @@ public partial class MainWindow : Window
         {
             StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
         }
+    }
+
+    private async void OnActivated(object? sender, EventArgs e)
+    {
+        if (!IsLoaded || _exitConfirmed || string.IsNullOrWhiteSpace(SessionContext.AccessToken)) return;
+        await LoadSalePricingOptionsAsync();
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -989,6 +996,11 @@ public partial class MainWindow : Window
         var total = CalculateSaleTotal(subtotal);
         SaleTotalText.Text = $"${total:0.00}";
         var rounding = total - subtotal;
+        var showRounding = cart.Count > 0 && rounding != 0m;
+        SaleSubtotalText.Text = $"Subtotal: ${subtotal:0.00}";
+        SaleSubtotalText.Visibility = showRounding ? Visibility.Visible : Visibility.Collapsed;
+        SaleRoundingText.Text = $"Redondeo: +${rounding:0.00} · Total a cobrar: ${total:0.00}";
+        SaleRoundingText.Visibility = showRounding ? Visibility.Visible : Visibility.Collapsed;
         SaleItemsText.Text = rounding == 0m
             ? $"Artículos: {cart.Sum(item => item.Quantity):0.###}"
             : $"Artículos: {cart.Sum(item => item.Quantity):0.###} · Subtotal ${subtotal:0.00} · Redondeo +${rounding:0.00}";
@@ -1259,6 +1271,7 @@ public partial class MainWindow : Window
         await using var saleAuthorization = await PermissionAuthorization.RequestAsync(this, "Sell", "Cobrar una venta requiere autorización.");
         if (saleAuthorization is null) return;
         if (!await PersistActiveTicketAsync()) return;
+        await LoadSalePricingOptionsAsync();
         var ticketSubtotal = decimal.Round(ticket.Lines.Sum(item => item.Total), 2, MidpointRounding.AwayFromZero);
         var ticketTotal = CalculateSaleTotal(ticketSubtotal);
         var cashWindow = new CashWindow(ticketTotal, ticket.Lines.Sum(item => item.Quantity), ticket.CustomerId, ticket.CustomerName, ApiClient.IsTicketPrintingAvailable) { Owner = this };

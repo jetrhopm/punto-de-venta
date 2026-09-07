@@ -36,6 +36,28 @@ public sealed class TicketPdfTests
     }
 
     [Fact]
+    public void PrintsSubtotalAndRoundingWhenTotalIsRounded()
+    {
+        var ticket = new TicketPdfData(
+            "Tienda de prueba",
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow,
+            [new TicketPdfLine("Producto", 1m, 45.52m, 45.52m)],
+            45.60m,
+            50m,
+            4.40m)
+        {
+            Subtotal = 45.52m
+        };
+
+        var text = Encoding.Latin1.GetString(TicketPdfWriter.Create(ticket));
+
+        Assert.Contains("SUBTOTAL:", text);
+        Assert.Contains("REDONDEO:", text);
+        Assert.Contains("TOTAL:", text);
+    }
+
+    [Fact]
     public void DeserializesTicketDataForWindowsPrinter()
     {
         var ticket = CreateTicket(Guid.NewGuid(), 80, 1) with { Folio = 1234, ShiftNumber = 91 };

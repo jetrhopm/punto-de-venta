@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se prepara la versión 2.5.3: el redondeo se refresca al volver a ventas y antes de cobrar; la vista muestra subtotal, ajuste y total a cobrar; los tickets conservan e imprimen el subtotal previo al redondeo.
 - Se prepara la versión 2.5.2: se corrige la apertura del diálogo de productos cuando WPF dispara los eventos de cálculo antes de terminar de inicializar sus controles.
 - Se prepara la versión 2.5.1: F3 abre alta y edición en un cuadro de diálogo separado; el doble clic edita el producto seleccionado conservando su identificador; F4 acepta Enter desde el lector y prioriza el código de barras exacto frente a coincidencias parciales.
 - Se prepara la versión 2.5.0: Productos F3 separa la lista de los formularios de alta y edición; Inventario F4 permite consultar y asignar departamentos; las validaciones de mínimos, máximos y ajustes muestran mensajes claros; y kits, ventas, cancelaciones y devoluciones mantienen el descuento y la reversión de inventario por componentes.
