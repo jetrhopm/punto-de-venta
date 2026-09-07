@@ -20,6 +20,7 @@ publish/
 # Datos locales de desarrollo
 .local/
 .postgres/
+**/tmp/
 *.db
 *.db-shm
 *.db-wal
