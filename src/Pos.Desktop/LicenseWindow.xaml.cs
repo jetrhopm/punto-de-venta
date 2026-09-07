@@ -11,13 +11,15 @@ namespace Pos.Desktop;
 public partial class LicenseWindow : Window
 {
     private static HttpClient Client => ApiClient.Client;
+    private readonly bool _allowPreLoginActivation;
     private bool _busy;
     private LicenseStatus? _currentStatus;
     private readonly DispatcherTimer _countdownTimer = new() { Interval = TimeSpan.FromSeconds(1) };
 
-    public LicenseWindow()
+    public LicenseWindow(bool allowPreLoginActivation = false)
     {
         InitializeComponent();
+        _allowPreLoginActivation = allowPreLoginActivation;
         _countdownTimer.Tick += (_, _) => UpdateCountdown();
         Loaded += async (_, _) => await LoadStatusAsync();
         Closed += (_, _) => _countdownTimer.Stop();
@@ -42,7 +44,8 @@ public partial class LicenseWindow : Window
         {
             SetBusy(true);
             var content = await File.ReadAllTextAsync(picker.FileName);
-            using var response = await Client.PostAsJsonAsync("api/license/import", new { content });
+            var endpoint = _allowPreLoginActivation ? "api/license/activate" : "api/license/import";
+            using var response = await Client.PostAsJsonAsync(endpoint, new { content });
             if (!response.IsSuccessStatusCode)
             {
                 var detail = await response.Content.ReadAsStringAsync();
@@ -63,7 +66,8 @@ public partial class LicenseWindow : Window
         try
         {
             SetBusy(true);
-            var result = await Client.GetFromJsonAsync<LicenseStatus>("api/license/status");
+            var endpoint = _allowPreLoginActivation ? "api/license/public-status" : "api/license/status";
+            var result = await Client.GetFromJsonAsync<LicenseStatus>(endpoint);
             if (result is null) throw new InvalidOperationException("JetVenta no devolvió el estado de la licencia.");
             RequestCodeTextBox.Text = result.RequestCode;
             ApplyStatus(result);

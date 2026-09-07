@@ -21,6 +21,7 @@ public partial class DiagnosticWindow : Window
 
     private async void OnRepairApiClick(object sender, RoutedEventArgs e)
     {
+        if (MessageBox.Show(ConnectionHelp.LocalRepairConfirmation, "Levantar API", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         RepairApiButton.IsEnabled = false;
         StatusText.Text = "Levantando y comprobando los servicios de JetVenta...";
         try
@@ -31,12 +32,45 @@ public partial class DiagnosticWindow : Window
                 ? "La API respondió correctamente. Actualizando diagnóstico..."
                 : "No se pudo levantar la API. Revisa los detalles y vuelve a intentarlo.";
             await RefreshAsync();
+            if (repaired)
+            {
+                MessageBox.Show("La API volvió a responder y JetVenta actualizó el diagnóstico. Puedes regresar a operar; revisa cualquier fila marcada como Problema.", "Servicios listos", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                MessageBox.Show("No se pudo recuperar la API. Revisa las filas de Diagnóstico y, si el servidor es otra computadora, confirma que esté encendido, conectado y con JetVenta instalado.", "No se pudo levantar la API", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
         catch (Exception exception)
         {
             StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo levantar la API. Ve a Configuración > Diagnóstico y pulsa Levantar API");
         }
         finally { RepairApiButton.IsEnabled = true; }
+    }
+
+    private async void OnClearPrintQueueClick(object sender, RoutedEventArgs e)
+    {
+        if (MessageBox.Show("Se cancelarán únicamente las solicitudes de impresión que siguen pendientes. Las ventas, los tickets y el historial no se borrarán; podrás reimprimir cualquier venta desde Historial. ¿Deseas continuar?", "Limpiar cola de impresión", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+
+        ClearPrintQueueButton.IsEnabled = false;
+        try
+        {
+            using var response = await ApiClient.Client.DeleteAsync("api/diagnostics/print-queue");
+            if (!response.IsSuccessStatusCode)
+            {
+                MessageBox.Show("No se pudo limpiar la cola de impresión. No se modificó ninguna venta.", "Cola sin cambios", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<PrintQueueClearResult>();
+            await RefreshAsync();
+            MessageBox.Show($"Se cancelaron {result?.Cancelled ?? 0} solicitud(es) de impresión. Las ventas y los tickets permanecen disponibles para reimprimir.", "Cola actualizada", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(ConnectionHelp.FromException(exception, "No se pudo limpiar la cola de impresión"), "Cola sin cambios", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally { ClearPrintQueueButton.IsEnabled = _checks.Any(item => item.Name == "Cola de impresión" && item.Status == "Aviso"); }
     }
 
     private async Task RefreshAsync()
@@ -55,6 +89,7 @@ public partial class DiagnosticWindow : Window
             BackupText.Text = report.LatestBackup ?? "Sin respaldo";
             CheckedText.Text = report.CheckedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm");
             _reportText = BuildReportText(report, _checks);
+            ClearPrintQueueButton.IsEnabled = report.PendingPrintJobCount > 0;
             StatusText.Text = _checks.Any(item => item.Status == "Problema")
                 ? "Se encontraron problemas. Atiende primero las filas marcadas como Problema."
                 : "Diagnóstico terminado. Revisa también los avisos antes de operar.";
@@ -69,6 +104,7 @@ public partial class DiagnosticWindow : Window
             CheckedText.Text = DateTime.Now.ToString("dd/MM/yyyy HH:mm");
             _reportText = $"JETVENTA - DIAGNÓSTICO{Environment.NewLine}{exception.Message}";
             StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
+            ClearPrintQueueButton.IsEnabled = false;
         }
     }
 
@@ -112,7 +148,7 @@ public partial class DiagnosticWindow : Window
         builder.AppendLine($"Proveedores: {report.SupplierCount:N0}");
         builder.AppendLine($"Usuarios activos: {report.UserCount:N0}");
         builder.AppendLine($"Tickets abiertos: {report.OpenTicketCount:N0}");
-        builder.AppendLine($"Trabajos de impresión pendientes: {report.PendingPrintJobCount:N0}");
+        builder.AppendLine($"Solicitudes de impresión pendientes: {report.PendingPrintJobCount:N0}");
         builder.AppendLine($"Respaldo más reciente: {report.LatestBackup ?? "Sin respaldo"}");
         builder.AppendLine($"Checksum del respaldo: {report.LatestBackupSha256 ?? "No disponible"}");
         if (report.FreeBytes is not null) builder.AppendLine($"Espacio libre del servidor: {report.FreeBytes.Value / 1024d / 1024d / 1024d:0.##} GB");
@@ -130,5 +166,6 @@ public partial class DiagnosticWindow : Window
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
     private sealed record DiagnosticCheck(string Name, string Status, string Detail, string Action);
+    private sealed record PrintQueueClearResult(int Cancelled);
     private sealed record DiagnosticApiReport(DateTimeOffset CheckedAtUtc, string ApiVersion, List<DiagnosticCheck> Checks, int ProductCount, int UserCount, int CustomerCount, int SupplierCount, int CompletedSaleCount, int OpenTicketCount, int PendingPrintJobCount, int BackupCount, string? LatestBackup, string? LatestBackupSha256, long? FreeBytes);
 }

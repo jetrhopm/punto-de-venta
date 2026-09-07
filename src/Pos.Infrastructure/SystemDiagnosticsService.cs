@@ -24,6 +24,24 @@ public sealed record DiagnosticReport(
 
 public sealed class SystemDiagnosticsService(PosDbContext database)
 {
+    public async Task<int?> CancelPendingPrintJobsAsync(string token, CancellationToken cancellationToken)
+    {
+        if (!await AuthorizedAsync(token, cancellationToken)) return null;
+
+        var jobs = await database.PrintJobs
+            .Where(item => item.PrintRequested && (item.Status == "Pending" || item.Status == "Processing"))
+            .ToListAsync(cancellationToken);
+        var completedAt = DateTimeOffset.UtcNow;
+        foreach (var job in jobs)
+        {
+            job.Status = "Cancelled";
+            job.CompletedAtUtc = completedAt;
+        }
+
+        if (jobs.Count > 0) await database.SaveChangesAsync(cancellationToken);
+        return jobs.Count;
+    }
+
     public async Task<DiagnosticReport?> RunAsync(string token, string apiVersion, CancellationToken cancellationToken)
     {
         if (!await AuthorizedAsync(token, cancellationToken)) return null;
@@ -70,7 +88,7 @@ public sealed class SystemDiagnosticsService(PosDbContext database)
                 : new("Tickets pendientes", "Aviso", $"Hay {openTicketCount} ticket(s) guardado(s) para recuperar.", "Revísalos en Ventas antes de cerrar el turno."));
             checks.Add(pendingPrintJobCount == 0
                 ? new("Cola de impresión", "Correcto", "No hay trabajos de impresión pendientes.", "")
-                : new("Cola de impresión", "Aviso", $"Hay {pendingPrintJobCount} trabajo(s) pendiente(s).", "Revisa la impresora y reimprime solo si es necesario."));
+                : new("Cola de impresión", "Aviso", $"Hay {pendingPrintJobCount} solicitud(es) pendiente(s).", "Revisa la impresora. Puedes cancelar la cola sin borrar ventas y reimprimir desde Historial."));
         }
         catch (Exception)
         {

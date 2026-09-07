@@ -9,6 +9,7 @@ namespace Pos.Desktop;
 public partial class ProductLookupWindow : Window
 {
     private CancellationTokenSource? _searchCancellation;
+    public ProductLookupSelection? SelectedProduct { get; private set; }
 
     public ProductLookupWindow(string initialQuery = "")
     {
@@ -19,6 +20,7 @@ public partial class ProductLookupWindow : Window
             SearchBox.Focus();
             SearchBox.SelectAll();
         };
+        Closed += (_, _) => _searchCancellation?.Cancel();
     }
 
     private async void OnSearchChanged(object sender, TextChangedEventArgs e)
@@ -39,6 +41,7 @@ public partial class ProductLookupWindow : Window
             await Task.Delay(180, token);
             var products = await ApiClient.Client.GetFromJsonAsync<List<ProductLookupResult>>($"/api/products/search?q={Uri.EscapeDataString(query)}", token) ?? [];
             ProductsGrid.ItemsSource = products.Select(product => new ProductLookupRow(product)).ToList();
+            ProductsGrid.SelectedIndex = products.Count > 0 ? 0 : -1;
             StatusText.Text = products.Count == 0 ? "No se encontraron productos." : $"{products.Count} producto(s) encontrados.";
         }
         catch (OperationCanceledException) { }
@@ -48,13 +51,82 @@ public partial class ProductLookupWindow : Window
         }
     }
 
-    private void OnSearchKeyDown(object sender, KeyEventArgs e)
+    private async void OnSearchKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape)
         {
             Close();
             e.Handled = true;
         }
+        else if (e.Key is Key.Down or Key.Up)
+        {
+            if (ProductsGrid.Items.Count > 0)
+            {
+                ProductsGrid.SelectedIndex = e.Key == Key.Down
+                    ? Math.Min(ProductsGrid.SelectedIndex < 0 ? 0 : ProductsGrid.SelectedIndex + 1, ProductsGrid.Items.Count - 1)
+                    : Math.Max(ProductsGrid.SelectedIndex <= 0 ? 0 : ProductsGrid.SelectedIndex - 1, 0);
+                ProductsGrid.Focus();
+            }
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter)
+        {
+            await SelectProductAsync();
+            e.Handled = true;
+        }
+    }
+
+    private async void OnProductsGridKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            await SelectProductAsync();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            Close();
+            e.Handled = true;
+        }
+    }
+
+    private async void OnProductDoubleClick(object sender, MouseButtonEventArgs e) => await SelectProductAsync();
+
+    private async Task SelectProductAsync()
+    {
+        if (ProductsGrid.SelectedItem is not ProductLookupRow row)
+        {
+            var query = SearchBox.Text.Trim();
+            if (query.Length == 0)
+            {
+                StatusText.Text = "Escribe un código o selecciona un producto para agregarlo a la venta.";
+                return;
+            }
+
+            try
+            {
+                var products = await ApiClient.Client.GetFromJsonAsync<List<ProductLookupResult>>($"/api/products/search?q={Uri.EscapeDataString(query)}") ?? [];
+                var product = products.FirstOrDefault(item => string.Equals(item.Code, query, StringComparison.OrdinalIgnoreCase))
+                    ?? (products.Count == 1 ? products[0] : null);
+                if (product is null)
+                {
+                    StatusText.Text = products.Count > 1 ? "Hay varios productos. Selecciona uno de la lista." : "No se encontró el producto.";
+                    return;
+                }
+
+                SelectedProduct = new ProductLookupSelection(product.Id, product.Code, product.Description, product.Price, product.WholesalePrice, product.WholesaleMinimumQuantity, product.Stock, product.UnitOfMeasure);
+                DialogResult = true;
+                return;
+            }
+            catch (HttpRequestException)
+            {
+                StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
+                return;
+            }
+        }
+
+        SelectedProduct = new ProductLookupSelection(row.Product.Id, row.Product.Code, row.Product.Description, row.Product.Price, row.Product.WholesalePrice, row.Product.WholesaleMinimumQuantity, row.Product.Stock, row.Product.UnitOfMeasure);
+        DialogResult = true;
     }
 
     private sealed record ProductLookupResult(Guid Id, string Code, string Description, string? Category, decimal Price, decimal WholesalePrice, decimal WholesaleMinimumQuantity, decimal Stock, string UnitOfMeasure);
@@ -70,3 +142,5 @@ public partial class ProductLookupWindow : Window
         public string StockText => $"{Product.Stock:0.###}";
     }
 }
+
+public sealed record ProductLookupSelection(Guid Id, string Code, string Description, decimal Price, decimal WholesalePrice, decimal WholesaleMinimumQuantity, decimal Stock, string UnitOfMeasure = "Pieza");

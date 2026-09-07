@@ -34,18 +34,15 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <TextBox x:Name="FileBox" Height="34" IsReadOnly="True"/>
-            <Button Grid.Column="1" Width="110" Margin="8,0" Click="OnSelectFileClick">Seleccionar</Button>
-            <StackPanel Grid.Column="2" Margin="10,0">
-                <TextBlock Text="Duplicados"/>
-                <ComboBox x:Name="DuplicateRuleBox" Width="120" SelectedIndex="0">
-                    <ComboBoxItem Tag="Skip">Omitir</ComboBoxItem>
-                    <ComboBoxItem Tag="Update">Actualizar</ComboBoxItem>
-                </ComboBox>
-            </StackPanel>
+            <Button Grid.Column="1" Width="110" Margin="8,0" Click="OnSelectFileClick"
+                    Background="#146CB0" Foreground="White" FontWeight="SemiBold">Seleccionar</Button>
+            <Button Grid.Column="2" x:Name="AdjustColumnsButton" Width="145" Height="34" Margin="0,0,8,0"
+                    IsEnabled="False" Click="OnAdjustColumnsClick"
+                    Background="#A65F16" Foreground="White">Ajustar columnas</Button>
             <StackPanel Grid.Column="3" Margin="10,0">
-                <TextBlock Text="Minimo mayoreo"/>
+                <TextBlock Text="Mínimo mayoreo"/>
                 <TextBox x:Name="WholesaleMinimumBox" Width="90" Height="30" Text="1"
-                         ToolTip="Se usa cuando eleventa exporta precio de mayoreo sin cantidad minima"/>
+                         ToolTip="Se usa cuando el archivo incluye precio de mayoreo sin cantidad mínima"/>
             </StackPanel>
         </Grid>
 
@@ -55,17 +52,26 @@
                   CellEditEnding="OnPreviewCellEditEnding"
                   Sorting="OnPreviewSorting">
             <DataGrid.Columns>
+                <DataGridTemplateColumn Header="Importar" Width="72">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      Click="OnRowSelectionClick"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Fila" Binding="{Binding RowNumber}" SortMemberPath="RowNumber" IsReadOnly="True"/>
-                <DataGridTextColumn Header="Codigo" Binding="{Binding Code, UpdateSourceTrigger=LostFocus}" SortMemberPath="Code" Width="110"/>
+                <DataGridTextColumn Header="Código" Binding="{Binding Code, UpdateSourceTrigger=LostFocus}" SortMemberPath="Code" Width="110"/>
                 <DataGridTextColumn Header="Producto" Binding="{Binding Description, UpdateSourceTrigger=LostFocus}" SortMemberPath="Description" Width="220"/>
                 <DataGridTextColumn Header="Departamento" Binding="{Binding Category, UpdateSourceTrigger=LostFocus}" SortMemberPath="Category" Width="130"/>
                 <DataGridTextColumn Header="Costo" Binding="{Binding CostText, UpdateSourceTrigger=LostFocus}" SortMemberPath="Cost"/>
                 <DataGridTextColumn Header="Venta" Binding="{Binding PriceText, UpdateSourceTrigger=LostFocus}" SortMemberPath="Price"/>
                 <DataGridTextColumn Header="Mayoreo" Binding="{Binding WholesalePriceText, UpdateSourceTrigger=LostFocus}" SortMemberPath="WholesalePrice"/>
-                <DataGridTextColumn Header="Minimo mayoreo" Binding="{Binding WholesaleMinimumQuantityText, UpdateSourceTrigger=LostFocus}" SortMemberPath="WholesaleMinimumQuantity"/>
+                <DataGridTextColumn Header="Mínimo mayoreo" Binding="{Binding WholesaleMinimumQuantityText, UpdateSourceTrigger=LostFocus}" SortMemberPath="WholesaleMinimumQuantity"/>
                 <DataGridTextColumn Header="Existencia" Binding="{Binding StockText, UpdateSourceTrigger=LostFocus}" SortMemberPath="Stock"/>
-                <DataGridTextColumn Header="Minimo" Binding="{Binding MinimumStockText, UpdateSourceTrigger=LostFocus}" SortMemberPath="MinimumStock"/>
-                <DataGridTextColumn Header="Maximo" Binding="{Binding MaximumStockText, UpdateSourceTrigger=LostFocus}" SortMemberPath="MaximumStock"/>
+                <DataGridTextColumn Header="Mínimo" Binding="{Binding MinimumStockText, UpdateSourceTrigger=LostFocus}" SortMemberPath="MinimumStock"/>
+                <DataGridTextColumn Header="Máximo" Binding="{Binding MaximumStockText, UpdateSourceTrigger=LostFocus}" SortMemberPath="MaximumStock"/>
                 <DataGridComboBoxColumn Header="Tipo de venta" SelectedItemBinding="{Binding UnitOfMeasure, UpdateSourceTrigger=LostFocus}" ItemsSource="{StaticResource UnitOptions}" SortMemberPath="UnitOfMeasure" Width="125"/>
                 <DataGridTextColumn Header="Proveedor" Binding="{Binding SupplierName, UpdateSourceTrigger=LostFocus}" SortMemberPath="SupplierName" Width="150"/>
                 <DataGridTextColumn Header="Estado" Binding="{Binding Status}" SortMemberPath="Status" Width="150" IsReadOnly="True"/>
@@ -73,22 +79,38 @@
         </DataGrid>
 
         <Grid Grid.Row="3" Margin="0,10,0,0">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-            <Button x:Name="PreviousPageButton" Width="120" Height="34" Click="OnPreviousPageClick">Anterior</Button>
-            <Button Grid.Column="1" x:Name="NextPageButton" Width="120" Height="34" Margin="8,0,0,0" Click="OnNextPageClick">Siguiente</Button>
-            <TextBlock Grid.Column="2" x:Name="PageInfoText" VerticalAlignment="Center" Margin="14,0,0,0" Foreground="#526577"/>
-            <TextBlock Grid.Column="3" Text="Clic en encabezados para ordenar" VerticalAlignment="Center" Foreground="#526577"/>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <Button Width="135" Height="34" Click="OnSelectAllClick" Background="#1B7E62" Foreground="White">Seleccionar todos</Button>
+            <Button Grid.Column="1" Width="135" Height="34" Margin="8,0,14,0" Click="OnOmitErrorsClick" Background="#B54708" Foreground="White">Omitir con error</Button>
+            <Button Grid.Column="2" x:Name="PreviousPageButton" Width="105" Height="34" Click="OnPreviousPageClick" Background="#526577" Foreground="White">Anterior</Button>
+            <Button Grid.Column="3" x:Name="NextPageButton" Width="105" Height="34" Margin="8,0,0,0" Click="OnNextPageClick" Background="#526577" Foreground="White">Siguiente</Button>
+            <TextBlock Grid.Column="4" x:Name="PageInfoText" VerticalAlignment="Center" Margin="14,0,0,0" Foreground="#526577"/>
+            <TextBlock Grid.Column="5" Text="Marca solo los productos que deseas importar" VerticalAlignment="Center" Foreground="#526577"/>
         </Grid>
 
         <Grid Grid.Row="4" Margin="0,12,0,0">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <StackPanel>
                 <TextBlock x:Name="StatusText" Foreground="#526577" TextWrapping="Wrap"/>
                 <ProgressBar x:Name="ImportProgressBar" Height="6" Margin="0,8,12,0" IsIndeterminate="True" Visibility="Collapsed"/>
                 <TextBlock x:Name="ErrorDetailsText" Margin="0,5,12,0" Foreground="#B42318" TextWrapping="Wrap"/>
             </StackPanel>
-            <Button Grid.Column="1" x:Name="SaveReportButton" Width="160" Height="38" Margin="0,0,8,0" IsEnabled="False" Click="OnSaveReportClick">Guardar reporte</Button>
-            <Button Grid.Column="2" x:Name="ImportButton" Width="170" Height="38" IsEnabled="False" Click="OnImportClick">Importar ahora</Button>
+            <Button Grid.Column="1" x:Name="SaveReportButton" Width="150" Height="52" Margin="0,0,8,0" IsEnabled="False" Click="OnSaveReportClick"
+                    Background="#7650A6" Foreground="White">Guardar reporte</Button>
+            <Button Grid.Column="2" x:Name="ImportNewButton" Width="180" Height="52" Margin="0,0,8,0" IsEnabled="False" Click="OnImportNewClick"
+                    Background="#16864B" Foreground="White" ToolTip="Agrega productos nuevos y omite los códigos ya existentes.">
+                <StackPanel>
+                    <TextBlock Text="Importar nuevos" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Omite existentes" FontSize="10" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button Grid.Column="3" x:Name="UpdateExistingButton" Width="205" Height="52" IsEnabled="False" Click="OnUpdateExistingClick"
+                    Background="#146CB0" Foreground="White" ToolTip="Agrega productos nuevos y actualiza los existentes según el archivo.">
+                <StackPanel>
+                    <TextBlock Text="Actualizar inventario" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Actualiza códigos existentes" FontSize="10" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Button>
         </Grid>
     </Grid>
 </Window>

@@ -14,7 +14,10 @@ public partial class ExitShiftWindow : Window
 {
     public ExitShiftDecision Decision { get; private set; } = ExitShiftDecision.Cancel;
 
-    public ExitShiftWindow() => InitializeComponent();
+    public ExitShiftWindow()
+    {
+        InitializeComponent();
+    }
 
     private void OnCloseShiftAndExitClick(object sender, RoutedEventArgs e)
     {

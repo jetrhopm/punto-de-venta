@@ -26,7 +26,9 @@ public partial class MeasureSettingsWindow : Window
         try
         {
             using var response = await ApiClient.Client.PutAsJsonAsync("api/measure-settings", new { defaultWeightUnit = unit });
-            StatusText.Text = response.IsSuccessStatusCode ? "Unidad de peso guardada correctamente." : await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
+            StatusText.Text = "Unidad de peso guardada. Se aplicará al crear productos de granel.";
+            DialogResult = true;
         }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar la unidad"); }
     }

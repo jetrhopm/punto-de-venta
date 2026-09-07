@@ -17,6 +17,7 @@ public partial class CashWindow : Window
     private bool _transferEnabled = true;
     private bool _creditEnabled = true;
     public decimal? Received { get; private set; }
+    public decimal Total => _total;
     public decimal CardAmount { get; private set; }
     public decimal TransferAmount { get; private set; }
     public string PaymentMethod => _paymentMethod;

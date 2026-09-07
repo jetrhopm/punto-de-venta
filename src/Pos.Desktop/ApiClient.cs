@@ -32,7 +32,19 @@ public static class ApiClient
         var value = host.Trim();
         if (!value.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !value.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) value = $"http://{value}";
         var uri = new UriBuilder(value) { Port = port }.Uri;
-        BaseUrl = uri.ToString().TrimEnd('/');
+        SetServerUrl(uri.GetLeftPart(UriPartial.Authority), persist);
+    }
+
+    public static void SetServerUrl(string address, bool persist = true)
+    {
+        if (!Uri.TryCreate(address, UriKind.Absolute, out var uri) ||
+            uri.Scheme is not ("http" or "https") ||
+            string.IsNullOrWhiteSpace(uri.Host))
+        {
+            throw new ArgumentException("La dirección del servidor no es válida.", nameof(address));
+        }
+
+        BaseUrl = uri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
         ReplaceClient(BaseUrl);
         if (persist)
         {

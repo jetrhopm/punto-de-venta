@@ -23,7 +23,9 @@ public partial class StoreSettingsWindow : Window
         try
         {
             using var response = await ApiClient.Client.PutAsJsonAsync("api/store-settings", new { name = NameBox.Text, businessType = BusinessTypeBox.Text, legalName = LegalNameBox.Text, taxId = TaxIdBox.Text, address = AddressBox.Text, phone = PhoneBox.Text, timeZoneId = TimeZoneBox.Text });
-            StatusText.Text = response.IsSuccessStatusCode ? "Datos de la tienda guardados correctamente." : await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
+            StatusText.Text = "Datos de la tienda guardados correctamente. Se verán al volver a abrir JetVenta.";
+            DialogResult = true;
         }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron guardar los datos"); }
     }

@@ -7,15 +7,27 @@ namespace Pos.Infrastructure;
 
 public sealed record SaveSaleDraftLinesCommand(IReadOnlyList<SaleDraftLineCommand> Lines);
 public sealed record SaleDraftLineCommand(Guid ProductId, decimal Quantity);
-public sealed record SaleDraftLineResult(Guid ProductId, string Code, string Description, decimal UnitPrice, decimal Stock, decimal Quantity);
+public sealed record SaleDraftLineResult(Guid ProductId, string Code, string Description, decimal UnitPrice, decimal Stock, decimal Quantity, string UnitOfMeasure = "Pieza");
 public sealed record SaleDraftResult(Guid Id, Guid OperationId, int TicketNumber, DateTimeOffset UpdatedAtUtc, IReadOnlyList<SaleDraftLineResult> Lines);
+
+public enum SaleDraftAccessFailure
+{
+    SessionExpired,
+    UserInactive,
+    SellPermissionRequired,
+    ShiftRequired
+}
+
+public sealed class SaleDraftAccessException(SaleDraftAccessFailure failure, string message) : InvalidOperationException(message)
+{
+    public SaleDraftAccessFailure Failure { get; } = failure;
+}
 
 public sealed class SaleDraftService(PosDbContext database)
 {
-    public async Task<IReadOnlyList<SaleDraftResult>?> ListOpenAsync(string accessToken, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SaleDraftResult>> ListOpenAsync(string accessToken, CancellationToken cancellationToken)
     {
         var context = await GetOpenShiftContextAsync(accessToken, cancellationToken);
-        if (context is null) return null;
 
         var drafts = await database.SaleDrafts
             .Include(item => item.Lines)
@@ -39,10 +51,9 @@ public sealed class SaleDraftService(PosDbContext database)
         return await ToResultsAsync(drafts, cancellationToken);
     }
 
-    public async Task<SaleDraftResult?> CreateAsync(string accessToken, CancellationToken cancellationToken)
+    public async Task<SaleDraftResult> CreateAsync(string accessToken, CancellationToken cancellationToken)
     {
         var context = await GetOpenShiftContextAsync(accessToken, cancellationToken);
-        if (context is null) return null;
 
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var nextTicket = (await database.SaleDrafts
@@ -66,14 +77,13 @@ public sealed class SaleDraftService(PosDbContext database)
         return new SaleDraftResult(draft.Id, draft.OperationId, draft.TicketNumber, draft.UpdatedAtUtc, []);
     }
 
-    public async Task<SaleDraftResult?> SaveLinesAsync(string accessToken, Guid draftId, SaveSaleDraftLinesCommand command, CancellationToken cancellationToken)
+    public async Task<SaleDraftResult> SaveLinesAsync(string accessToken, Guid draftId, SaveSaleDraftLinesCommand command, CancellationToken cancellationToken)
     {
         if (draftId == Guid.Empty || command.Lines is null) throw new ArgumentException("El ticket y sus partidas son obligatorios.");
         if (command.Lines.Any(line => line.ProductId == Guid.Empty || line.Quantity <= 0m)) throw new ArgumentException("Cada partida requiere producto y cantidad positiva.");
         if (command.Lines.Select(line => line.ProductId).Distinct().Count() != command.Lines.Count) throw new ArgumentException("Un producto solo puede aparecer una vez por ticket.");
 
         var context = await GetOpenShiftContextAsync(accessToken, cancellationToken);
-        if (context is null) return null;
         var draft = await database.SaleDrafts.Include(item => item.Lines).SingleOrDefaultAsync(item => item.Id == draftId && item.UserId == context.UserId && item.Status == "Open", cancellationToken)
             ?? throw new KeyNotFoundException("El ticket en atención no existe o ya fue finalizado.");
 
@@ -107,10 +117,9 @@ public sealed class SaleDraftService(PosDbContext database)
         return (await ToResultsAsync([refreshed], cancellationToken)).Single();
     }
 
-    public async Task<bool?> DiscardAsync(string accessToken, Guid draftId, CancellationToken cancellationToken)
+    public async Task<bool> DiscardAsync(string accessToken, Guid draftId, CancellationToken cancellationToken)
     {
         var context = await GetOpenShiftContextAsync(accessToken, cancellationToken);
-        if (context is null) return null;
         var draft = await database.SaleDrafts.SingleOrDefaultAsync(item => item.Id == draftId && item.UserId == context.UserId && item.Status == "Open", cancellationToken);
         if (draft is null) return false;
         draft.Status = "Discarded";
@@ -122,29 +131,42 @@ public sealed class SaleDraftService(PosDbContext database)
     private async Task<IReadOnlyList<SaleDraftResult>> ToResultsAsync(IReadOnlyList<SaleDraftRecord> drafts, CancellationToken cancellationToken)
     {
         var productIds = drafts.SelectMany(item => item.Lines).Select(item => item.ProductId).Distinct().ToArray();
-        var stock = productIds.Length == 0
-            ? new Dictionary<Guid, decimal>()
-            : await database.Products.AsNoTracking().Where(item => productIds.Contains(item.Id)).ToDictionaryAsync(item => item.Id, item => item.Stock, cancellationToken);
+        var products = productIds.Length == 0
+            ? new Dictionary<Guid, ProductSaleDraftDetails>()
+            : await database.Products.AsNoTracking()
+                .Where(item => productIds.Contains(item.Id))
+                .Select(item => new ProductSaleDraftDetails(item.Id, item.Stock, item.UnitOfMeasure))
+                .ToDictionaryAsync(item => item.Id, cancellationToken);
         return drafts.Select(draft => new SaleDraftResult(
             draft.Id,
             draft.OperationId,
             draft.TicketNumber,
             draft.UpdatedAtUtc,
-            draft.Lines.OrderBy(line => line.Description).Select(line => new SaleDraftLineResult(line.ProductId, line.Code, line.Description, line.UnitPrice, stock.GetValueOrDefault(line.ProductId), line.Quantity)).ToArray()))
+            draft.Lines.OrderBy(line => line.Description).Select(line =>
+            {
+                var product = products.GetValueOrDefault(line.ProductId);
+                return new SaleDraftLineResult(line.ProductId, line.Code, line.Description, line.UnitPrice, product?.Stock ?? 0m, line.Quantity, product?.UnitOfMeasure ?? "Pieza");
+            }).ToArray()))
             .ToArray();
     }
 
-    private async Task<OpenShiftContext?> GetOpenShiftContextAsync(string accessToken, CancellationToken cancellationToken)
+    private async Task<OpenShiftContext> GetOpenShiftContextAsync(string accessToken, CancellationToken cancellationToken)
     {
         var tokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(accessToken ?? string.Empty)));
         var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == tokenHash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
-        if (session is null) return null;
+        if (session is null)
+            throw new SaleDraftAccessException(SaleDraftAccessFailure.SessionExpired, "La sesión ya no es válida. Cierra sesión e inicia nuevamente.");
         var user = await database.Users.AsNoTracking().SingleOrDefaultAsync(item => item.Id == session.UserId && item.IsActive, cancellationToken);
-        if (user is null) return null;
-        if (!user.IsAdministrator && !await database.Permissions.AsNoTracking().AnyAsync(item => item.UserId == user.Id && item.Code == "Sell", cancellationToken)) return null;
+        if (user is null)
+            throw new SaleDraftAccessException(SaleDraftAccessFailure.UserInactive, "El usuario actual ya no está activo. Pide a un administrador revisar Cajeros y permisos.");
+        if (!user.IsAdministrator && !await database.Permissions.AsNoTracking().AnyAsync(item => item.UserId == user.Id && item.Code == "Sell", cancellationToken))
+            throw new SaleDraftAccessException(SaleDraftAccessFailure.SellPermissionRequired, "Este usuario no tiene permiso para vender. Pide al administrador activar \"Cobrar ticket\" en Configuración > Cajeros y permisos.");
         var shift = await database.Shifts.AsNoTracking().SingleOrDefaultAsync(item => item.UserId == session.UserId && item.Status == "Open", cancellationToken);
-        return shift is null ? null : new OpenShiftContext(session.UserId, shift.Id);
+        if (shift is null)
+            throw new SaleDraftAccessException(SaleDraftAccessFailure.ShiftRequired, "No hay un turno abierto para este usuario. Abre la caja con el fondo inicial antes de crear o recuperar tickets.");
+        return new OpenShiftContext(session.UserId, shift.Id);
     }
 
     private sealed record OpenShiftContext(Guid UserId, Guid ShiftId);
+    private sealed record ProductSaleDraftDetails(Guid Id, decimal Stock, string UnitOfMeasure);
 }

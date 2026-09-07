@@ -40,8 +40,8 @@
         </StackPanel>
         <TextBlock x:Name="StatusText" Grid.Row="4" Margin="0,12,0,0" Foreground="#B42318" TextWrapping="Wrap"/>
         <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Width="120" Height="38" Margin="0,0,8,0" IsCancel="True" Click="OnCancelClick">Cancelar (Esc)</Button>
-            <Button Width="190" Height="38" Style="{StaticResource PrimaryButtonStyle}" IsDefault="True" Click="OnAuthorizeClick">Autorizar temporalmente</Button>
+            <Button Width="120" Height="38" Margin="0,0,8,0" Style="{StaticResource DangerButtonStyle}" IsCancel="True" Click="OnCancelClick">Cancelar (Esc)</Button>
+            <Button Width="190" Height="38" Style="{StaticResource SuccessButtonStyle}" IsDefault="True" Click="OnAuthorizeClick">Autorizar temporalmente</Button>
         </StackPanel>
     </Grid>
 </Window>

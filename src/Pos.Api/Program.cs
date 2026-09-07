@@ -178,6 +178,12 @@ app.MapGet("/api/setup/status", async (PosDbContext database, CancellationToken 
     }
 });
 
+app.MapGet("/api/license/public-status", (LicenseService licenses) => Results.Ok(licenses.GetRuntimeStatus()));
+app.MapPost("/api/license/activate", (ImportLicenseCommand command, LicenseService licenses) =>
+{
+    try { return Results.Ok(licenses.ImportForLocalActivation(command)); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["license"] = [exception.Message] }); }
+});
 app.MapGet("/api/license/status", async (HttpRequest request, LicenseService licenses, CancellationToken cancellationToken) =>
 {
     var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
@@ -209,6 +215,12 @@ app.MapGet("/api/diagnostics", async (HttpRequest request, SystemDiagnosticsServ
         WriteStartupLog($"No se pudo generar el diagnóstico: {exception.GetType().Name}: {exception.Message}");
         return Results.Problem("No se pudo generar el diagnóstico. Revisa la conexión y vuelve a intentarlo.", statusCode: StatusCodes.Status503ServiceUnavailable);
     }
+});
+app.MapDelete("/api/diagnostics/print-queue", async (HttpRequest request, SystemDiagnosticsService diagnostics, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    var cancelled = await diagnostics.CancelPendingPrintJobsAsync(token, cancellationToken);
+    return cancelled is null ? Results.Unauthorized() : Results.Ok(new { cancelled = cancelled.Value });
 });
 
 app.MapGet("/api/lan/info", () => Results.Ok(new
@@ -582,31 +594,53 @@ app.MapPost("/api/sales/complete", async (HttpRequest request, CompleteSaleComma
     catch (UnauthorizedAccessException) { return Results.Forbid(); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
+app.MapGet("/api/sales/quote-total", async (decimal subtotal, HttpRequest request, SaleService sales, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await sales.QuoteTotalAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), subtotal, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["subtotal"] = [exception.Message] }); }
+});
 
 app.MapGet("/api/sale-drafts", async (HttpRequest request, SaleDraftService drafts, CancellationToken cancellationToken) =>
 {
-    var result = await drafts.ListOpenAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
-    return result is null ? Results.Unauthorized() : Results.Ok(result);
+    try
+    {
+        var result = await drafts.ListOpenAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+        return Results.Ok(result);
+    }
+    catch (SaleDraftAccessException exception) { return SaleDraftAccessFailureResult(exception); }
 });
 app.MapPost("/api/sale-drafts", async (HttpRequest request, SaleDraftService drafts, CancellationToken cancellationToken) =>
 {
-    var result = await drafts.CreateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
-    return result is null ? Results.Unauthorized() : Results.Created($"/api/sale-drafts/{result.Id}", result);
+    try
+    {
+        var result = await drafts.CreateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+        return Results.Created($"/api/sale-drafts/{result.Id}", result);
+    }
+    catch (SaleDraftAccessException exception) { return SaleDraftAccessFailureResult(exception); }
 });
 app.MapPut("/api/sale-drafts/{draftId:guid}", async (Guid draftId, HttpRequest request, SaveSaleDraftLinesCommand command, SaleDraftService drafts, CancellationToken cancellationToken) =>
 {
     try
     {
         var result = await drafts.SaveLinesAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), draftId, command, cancellationToken);
-        return result is null ? Results.Unauthorized() : Results.Ok(result);
+        return Results.Ok(result);
     }
+    catch (SaleDraftAccessException exception) { return SaleDraftAccessFailureResult(exception); }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["draft"] = [exception.Message] }); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
 app.MapDelete("/api/sale-drafts/{draftId:guid}", async (Guid draftId, HttpRequest request, SaleDraftService drafts, CancellationToken cancellationToken) =>
 {
-    var result = await drafts.DiscardAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), draftId, cancellationToken);
-    return result is null ? Results.Unauthorized() : result.Value ? Results.NoContent() : Results.NotFound();
+    try
+    {
+        var result = await drafts.DiscardAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), draftId, cancellationToken);
+        return result ? Results.NoContent() : Results.NotFound();
+    }
+    catch (SaleDraftAccessException exception) { return SaleDraftAccessFailureResult(exception); }
 });
 
 app.MapPost("/api/sales/cancel", async (HttpRequest request, CancelSaleCommand command, SaleReversalService reversals, CancellationToken cancellationToken) =>
@@ -797,8 +831,19 @@ app.MapPost("/api/auth/login", async (LoginCommand command, AuthenticationServic
 app.MapPost("/api/auth/temporary-permission", async (HttpRequest request, TemporaryPermissionAuthorizationCommand command, AuthenticationService authentication, CancellationToken cancellationToken) =>
 {
     var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
-    var result = await authentication.GrantTemporaryPermissionAsync(token, command, cancellationToken);
-    return result is null ? Results.Unauthorized() : Results.Ok(result);
+    var attempt = await authentication.GrantTemporaryPermissionAsync(token, command, cancellationToken);
+    if (attempt.Succeeded) return Results.Ok(attempt.Authorization);
+
+    var (statusCode, message) = attempt.FailureCode switch
+    {
+        "invalid-request" => (StatusCodes.Status400BadRequest, "Completa el usuario, la contraseña y el permiso a autorizar."),
+        "session-expired" => (StatusCodes.Status401Unauthorized, "La sesión actual venció. Inicia sesión nuevamente."),
+        "approver-not-found" => (StatusCodes.Status404NotFound, "El usuario que autoriza ya no está disponible."),
+        "invalid-password" => (StatusCodes.Status401Unauthorized, "La contraseña del usuario que autoriza no es correcta."),
+        "approver-missing-permission" => (StatusCodes.Status403Forbidden, "Ese usuario no tiene el permiso requerido para autorizar esta acción."),
+        _ => (StatusCodes.Status400BadRequest, "No se pudo validar la autorización temporal.")
+    };
+    return Results.Problem(message, statusCode: statusCode, extensions: new Dictionary<string, object?> { ["code"] = attempt.FailureCode });
 });
 app.MapDelete("/api/auth/session", async (HttpRequest request, AuthenticationService authentication, CancellationToken cancellationToken) =>
 {
@@ -839,10 +884,22 @@ app.MapGet("/api/shifts/current", async (HttpRequest request, ShiftService shift
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
 
-app.MapGet("/api/shifts/register", async (PosDbContext database, CancellationToken cancellationToken) =>
+app.MapGet("/api/shifts/register", async (ShiftService shifts, CancellationToken cancellationToken) =>
 {
-    var register = await database.Registers.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.Name).Select(item => new { item.Id, item.Name }).FirstOrDefaultAsync(cancellationToken);
+    var register = await shifts.GetActiveRegisterAsync(cancellationToken);
     return register is null ? Results.NotFound() : Results.Ok(register);
 });
+
+static IResult SaleDraftAccessFailureResult(SaleDraftAccessException exception) =>
+    Results.Problem(
+        detail: exception.Message,
+        statusCode: exception.Failure switch
+        {
+            SaleDraftAccessFailure.SessionExpired => StatusCodes.Status401Unauthorized,
+            SaleDraftAccessFailure.UserInactive or SaleDraftAccessFailure.SellPermissionRequired => StatusCodes.Status403Forbidden,
+            SaleDraftAccessFailure.ShiftRequired => StatusCodes.Status409Conflict,
+            _ => StatusCodes.Status400BadRequest
+        },
+        title: "No se puede operar el ticket");
 
 app.Run();

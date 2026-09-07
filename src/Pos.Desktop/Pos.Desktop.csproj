@@ -17,6 +17,11 @@
     <Resource Include="Assets\Icons\app-icon-512.png" />
     <Resource Include="Assets\jetventa-banner.png" />
     <Resource Include="Assets\jetventa-icon.png" />
+    <Resource Include="Assets\logo.png" />
+    <Content Include="Assets\Icons\license-file.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>license-file.ico</TargetPath>
+    </Content>
   </ItemGroup>
 
   <PropertyGroup>

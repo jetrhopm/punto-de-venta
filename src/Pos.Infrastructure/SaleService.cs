@@ -8,9 +8,29 @@ namespace Pos.Infrastructure;
 public sealed record SaleLineCommand(Guid ProductId, decimal Quantity, bool UseWholesale = false);
 public sealed record CompleteSaleCommand(Guid OperationId, IReadOnlyList<SaleLineCommand> Lines, decimal CashReceived, Guid? CustomerId = null, string PaymentMethod = "Cash", decimal CardAmount = 0m, decimal TransferAmount = 0m, Guid? DraftId = null, bool PrintRequested = true);
 public sealed record CompleteSaleResult(Guid SaleId, Guid OperationId, decimal Total, decimal CashReceived, decimal Change, bool Existing);
+public sealed record SaleTotalQuoteResult(decimal Subtotal, decimal Total, decimal RoundingAdjustment, bool RoundingApplied, string? RoundingDescription);
 
 public sealed class SaleService(PosDbContext database, PromotionService promotions, KitService kits)
 {
+    public async Task<SaleTotalQuoteResult?> QuoteTotalAsync(string accessToken, decimal subtotal, CancellationToken cancellationToken)
+    {
+        if (subtotal < 0m) throw new ArgumentException("El subtotal no puede ser negativo.");
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(accessToken ?? string.Empty)));
+        var hasActiveSession = await database.Sessions.AsNoTracking().AnyAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
+        if (!hasActiveSession) return null;
+
+        var store = await database.Stores.AsNoTracking().OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        var roundedSubtotal = decimal.Round(subtotal, 2, MidpointRounding.AwayFromZero);
+        var total = SaleAmountRounding.Apply(roundedSubtotal, store.RoundSaleAmounts, store.RoundingMode);
+        var adjustment = decimal.Round(total - roundedSubtotal, 2, MidpointRounding.AwayFromZero);
+        var description = adjustment == 0m
+            ? null
+            : store.RoundingMode.Equals("Whole", StringComparison.OrdinalIgnoreCase)
+                ? "Redondeo a pesos cerrados"
+                : "Redondeo a décimas";
+        return new SaleTotalQuoteResult(roundedSubtotal, total, adjustment, adjustment != 0m, description);
+    }
+
     public async Task<CompleteSaleResult?> CompleteAsync(string accessToken, CompleteSaleCommand command, CancellationToken cancellationToken)
     {
         if (command.OperationId == Guid.Empty || command.Lines.Count == 0 || command.CashReceived < 0m || command.CardAmount < 0m || command.TransferAmount < 0m || command.PaymentMethod is not ("Cash" or "Card" or "Transfer" or "Mixed" or "Credit")) throw new ArgumentException("La operacion, las partidas y la forma de pago son obligatorias.");
@@ -19,6 +39,7 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         if (session is null) return null;
         var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
         if (!user.IsAdministrator && !await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "Sell", cancellationToken)) return null;
+        if (command.Lines.Any(item => item.UseWholesale) && !user.IsAdministrator && !await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "UseWholesalePrice", cancellationToken)) throw new UnauthorizedAccessException("El usuario no tiene permiso para aplicar precio de mayoreo.");
         var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
         if (command.PaymentMethod == "Credit" && !store.CreditSalesEnabled) throw new InvalidOperationException("Las ventas a crédito están deshabilitadas en Opciones habilitadas.");
         if (command.PaymentMethod == "Credit" && !user.IsAdministrator && !await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "SellOnCredit", cancellationToken)) throw new UnauthorizedAccessException("El usuario no tiene permiso para cobrar a credito.");
@@ -60,7 +81,7 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
             if (store.InventoryEnabled && !product.IsKit && !product.IsTemporary) product.Stock -= requested;
             if (originalLine is not null) lines.Add(new SaleLineRecord { Id = Guid.NewGuid(), ProductId = product.Id, Quantity = requestedQuantity, UnitPrice = unitPrice, LineTotal = total, StockBefore = stockBefore, StockAfter = product.Stock });
         }
-        var totalSale = RoundSaleAmount(lines.Sum(line => line.LineTotal), store);
+        var totalSale = SaleAmountRounding.Apply(lines.Sum(line => line.LineTotal), store.RoundSaleAmounts, store.RoundingMode);
         ValidatePaymentMethodEnabled(store, command, totalSale);
         var mercadoPagoAmount = command.PaymentMethod == "Card" ? totalSale : command.PaymentMethod == "Mixed" ? command.CardAmount : 0m;
         if (store.MercadoPagoEnabled && mercadoPagoAmount > 0m)
@@ -127,12 +148,4 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         if (transfer > 0m && !store.TransferPaymentEnabled) throw new InvalidOperationException("El pago por transferencia está desactivado en esta tienda.");
     }
 
-    private static decimal RoundSaleAmount(decimal amount, StoreRecord store)
-    {
-        var value = decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
-        if (!store.RoundSaleAmounts) return value;
-        return store.RoundingMode.Equals("Whole", StringComparison.OrdinalIgnoreCase)
-            ? decimal.Ceiling(value)
-            : decimal.Ceiling(value * 10m) / 10m;
-    }
 }

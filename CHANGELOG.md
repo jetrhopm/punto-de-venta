@@ -1,6 +1,33 @@
 # Changelog
 
 ## Sin liberar
+- Se prepara la versión 2.6.4: la creación, recuperación y guardado de tickets distinguen sesión vencida, permiso de ventas y turno cerrado. Un administrador no necesita una asignación adicional para vender; cuando no hay turno, F6/Nuevo ticket vuelve a solicitar el fondo inicial en vez de dejar Ventas bloqueado con un error de permisos.
+- Se prepara la versión 2.6.3: cuando no hay turno abierto, F6/Nuevo ticket pide el fondo inicial para abrir caja antes de crear el ticket; ya no deja la venta en una pantalla sin ticket ni turno.
+- Se prepara la versión 2.6.2: se restablece el flujo de salida con tres decisiones: cerrar turno y volver al login, cerrar turno y salir, o dejar turno abierto y salir. Así no se cambia de cajero accidentalmente frente a una caja abierta.
+- Se prepara la versión 2.6.1: se reforzó el relevo de ventanas para que la opción explícita de volver al login no termine JetVenta al cerrar la ventana principal.
+- Se prepara la versión 2.6.0: se completa el bloque de catálogo, inventario, mayoreo, baja lógica y atajos de venta posterior a las pruebas de usuario.
+- Se prepara la versión 2.5.6: Venta solicita cantidad antes de agregar productos a granel, muestra su unidad en cada partida y permite corregir la cantidad con Enter o doble clic sin perder el ticket.
+- `Ctrl+P` abre una captura completa para artículo común temporal: nombre, unidad, cantidad y precio; queda documentado en el ticket pero no entra al catálogo ni modifica inventario.
+- Se prepara la versión 2.5.5: al iniciar con un usuario distinto mientras otra persona dejó la única caja abierta, JetVenta identifica al responsable y bloquea ventas de forma explícita, en lugar de permitir una pantalla sin turno ni tickets válidos.
+- Se prepara la versión 2.5.4: F10 y la lista de búsqueda esperan el resultado correcto antes de agregar un producto; flechas y Enter seleccionan productos; una consulta visual de redondeo ya no puede bloquear el cobro.
+- Se prepara la versión 2.5.3: los errores de validación al guardar reglas de corte se traducen a mensajes legibles de JetVenta y ya no muestran JSON técnico de la API.
+- Se prepara la versión 2.5.2: el redondeo configurado se muestra antes de cobrar, se usa en la ventana de pago y coincide con el total confirmado e impreso en ticket.
+- Guardar Opciones habilitadas y Configuración de corte confirma los valores aplicados y cierra el diálogo al completar la operación.
+- Diagnóstico identifica las solicitudes pendientes de impresión y permite cancelarlas de forma auditada, sin borrar ventas, tickets ni historial; cualquier venta puede reimprimirse después.
+- Se prepara la versión 2.5.1: la reparación de API pide confirmación antes de abrir la ventana elevada de Windows, explica que no debe cerrarse y confirma visualmente si los servicios quedaron listos.
+- Configurar conexión ahora verifica la API y la base de datos de la IP y puerto escritos antes de guardarlos, conserva correctamente conexiones HTTPS durante la comprobación y explica el siguiente paso cuando falla.
+- Una caída de API durante el cobro o el cierre de turno muestra una alerta visible con la ruta exacta a Configuración > Diagnóstico > Levantar API, sin afirmar que la operación se haya confirmado.
+- Se prepara la versión 2.5.0: el inicio consulta el estado de licencia antes de autenticar y permite activar un archivo `.jv` firmado y vinculado a este equipo, incluso si la demo ya venció.
+- Se prepara la versión 2.4.2: los rechazos de autorización temporal se muestran también como una alerta visible de JetVenta, sin ocultar el motivo dentro del formulario.
+- Se prepara la versión 2.4.1: la autorización temporal distingue cuenta no disponible, contraseña incorrecta y permiso insuficiente; las alertas con tres decisiones conservan cada botón visible y separado.
+- Se prepara la versión 2.4.0: las alertas y confirmaciones adoptan una vista propia de JetVenta con estados claros, acciones coloreadas y atajos Enter y Esc, sin cambiar la lógica de las operaciones que las invocan.
+- Se prepara la versión 2.3.2: F10 abre una sola búsqueda de productos por vez; el resultado se puede recorrer con flechas y agregar a la venta con Enter o doble clic.
+- Se prepara la versión 2.3.1: la configuración inicial permite personalizar tienda, giro, administrador, contraseña, caja, moneda y unidad desde la primera instalación; los giros con acentos ya no son rechazados por la API y cualquier validación se muestra de forma clara.
+- El periodo de prueba comercial cambia de 30 minutos a 30 días y mantiene la detección de retrocesos del reloj.
+- Las compilaciones Release ya no aceptan la variable de desarrollo que omite la licencia; ese comportamiento queda limitado a Debug.
+- Las licencias con vencimiento registran la última hora validada en almacenamiento cifrado para impedir que retroceder el reloj extienda su vigencia.
+- El instalador registra los archivos `.jv` como licencias de JetVenta y les asigna un icono propio de llave sin activarlos automáticamente al abrirlos.
+- Se prepara la versión 2.3.0: la importación de productos permite relacionar manualmente las columnas de archivos CSV y XLSX, revisar ejemplos y omitir productos individuales mediante una casilla antes de confirmar.
 - El cierre de caja exige la autorización temporal concreta emitida para esa acción y la consume al completarse; permisos temporales vencidos, residuales o de otra función no permiten realizar un corte.
 - Se prepara la versión 2.2.9: el cierre de turno distingue una caída real de la API de un fallo puntual, confirma el estado tras respuestas inciertas y registra el error técnico sin dejar el programa bloqueado.
 - Los permisos temporales ya no aparecen como permisos permanentes en Cajeros y permisos; se eliminan al cerrar sesión y se limpian antes de un nuevo inicio de sesión.

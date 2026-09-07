@@ -26,7 +26,9 @@ public partial class PaymentMethodSettingsWindow : Window
         try
         {
             using var response = await ApiClient.Client.PutAsJsonAsync("api/payment-method-settings", command);
-            StatusText.Text = response.IsSuccessStatusCode ? "Formas de pago guardadas correctamente." : await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
+            StatusText.Text = "Formas de pago guardadas. Se aplicarán a las siguientes ventas.";
+            DialogResult = true;
         }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar la configuración"); }
     }

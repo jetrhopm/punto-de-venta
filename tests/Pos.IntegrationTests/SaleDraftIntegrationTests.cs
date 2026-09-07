@@ -8,6 +8,12 @@ namespace Pos.IntegrationTests;
 public sealed class SaleDraftIntegrationTests
 {
     [Fact]
+    public void CommercialTrialDurationIsThirtyDays()
+    {
+        Assert.Equal(TimeSpan.FromDays(30), TrialClockPolicy.DefaultDuration);
+    }
+
+    [Fact]
     public void TrialClockDoesNotAllowReturningToDemoAfterItExpired()
     {
         var started = new DateTimeOffset(2026, 8, 25, 12, 0, 0, TimeSpan.Zero);
@@ -100,6 +106,46 @@ public sealed class SaleDraftIntegrationTests
             database.Products.Remove(product);
             database.Registers.Remove(register);
             database.Users.Remove(user);
+            database.Stores.Remove(store);
+            await database.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
+    public async Task AdministratorWithoutExplicitPermissionsCanCreateTicketsAndNoShiftExplainsHowToRecover()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda acceso " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow };
+        var administrator = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "ADMIN_ACCESS_" + suffix, DisplayName = "Administrador de ventas", PasswordHash = "test", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja acceso " + suffix, IsActive = true };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = administrator.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        database.AddRange(store, administrator, register, session);
+        await database.SaveChangesAsync();
+
+        try
+        {
+            var drafts = new SaleDraftService(database);
+            var withoutShift = await Assert.ThrowsAsync<SaleDraftAccessException>(() => drafts.CreateAsync(token, CancellationToken.None));
+            Assert.Equal(SaleDraftAccessFailure.ShiftRequired, withoutShift.Failure);
+            Assert.Contains("No hay un turno abierto", withoutShift.Message);
+            Assert.Empty(await database.Permissions.Where(item => item.UserId == administrator.Id).ToListAsync());
+
+            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(register.Id, 0m), CancellationToken.None));
+            var ticket = await drafts.CreateAsync(token, CancellationToken.None);
+            Assert.NotEqual(Guid.Empty, ticket.Id);
+        }
+        finally
+        {
+            database.SaleDraftLines.RemoveRange(database.SaleDraftLines.Where(item => database.SaleDrafts.Where(draft => draft.UserId == administrator.Id).Select(draft => draft.Id).Contains(item.DraftId)));
+            database.SaleDrafts.RemoveRange(database.SaleDrafts.Where(item => item.UserId == administrator.Id));
+            database.Shifts.RemoveRange(database.Shifts.Where(item => item.RegisterId == register.Id));
+            database.Sessions.RemoveRange(database.Sessions.Where(item => item.UserId == administrator.Id));
+            database.Registers.Remove(register);
+            database.Users.Remove(administrator);
             database.Stores.Remove(store);
             await database.SaveChangesAsync();
         }

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Pos.Domain;
 
@@ -32,7 +33,9 @@ public static class JetVentaLicensing
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true
+        WriteIndented = true,
+        MaxDepth = 8,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
 
     public static string CreateRequestCode(string machineFingerprint)
@@ -80,8 +83,9 @@ public static class JetVentaLicensing
         try
         {
             license = JsonSerializer.Deserialize<JetVentaSignedLicense>(content, JsonOptions);
-            if (license?.License is null || string.IsNullOrWhiteSpace(license.Signature) || !IsValidClaims(license.License, out error))
+            if (license?.License is null || !IsValidSignature(license.Signature) || !IsValidClaims(license.License, out error))
             {
+                if (string.IsNullOrWhiteSpace(error)) error = "La firma de la licencia no tiene un formato válido.";
                 license = null;
                 return false;
             }
@@ -132,9 +136,26 @@ public static class JetVentaLicensing
         error = string.Empty;
         if (claims.Version != ProtocolVersion || !string.Equals(claims.Product, Product, StringComparison.Ordinal)) { error = "La licencia no corresponde a esta versión de JetVenta."; return false; }
         if (!Guid.TryParse(claims.LicenseId, out _)) { error = "La licencia no tiene un identificador válido."; return false; }
-        if (string.IsNullOrWhiteSpace(claims.MachineFingerprint) || claims.MachineFingerprint.Length > 256) { error = "La licencia no contiene un identificador de equipo válido."; return false; }
-        if (claims.StoreName?.Length > 200) { error = "La licencia contiene un nombre de tienda inválido."; return false; }
+        if (!IsValidMachineFingerprint(claims.MachineFingerprint)) { error = "La licencia no contiene un identificador de equipo válido."; return false; }
+        if (claims.IssuedAtUtc == default) { error = "La licencia no contiene una fecha de emisión válida."; return false; }
+        if (string.IsNullOrWhiteSpace(claims.StoreName) || claims.StoreName.Length > 200) { error = "La licencia contiene un nombre de tienda inválido."; return false; }
         if (claims.ExpiresAtUtc is not null && claims.ExpiresAtUtc < claims.IssuedAtUtc) { error = "La vigencia de la licencia es inválida."; return false; }
         return true;
     }
+
+    private static bool IsValidSignature(string? signature)
+    {
+        if (string.IsNullOrWhiteSpace(signature) || signature.Length > 256) return false;
+        try
+        {
+            // ECDSA P-256 usa una firma P1363 de 64 bytes en JetVenta.
+            return Convert.FromBase64String(signature).Length == 64;
+        }
+        catch (FormatException) { return false; }
+    }
+
+    private static bool IsValidMachineFingerprint(string? fingerprint) =>
+        fingerprint is { Length: 28 } &&
+        fingerprint.StartsWith("JV1-", StringComparison.Ordinal) &&
+        fingerprint.AsSpan(4).IndexOfAnyExcept("0123456789ABCDEF") < 0;
 }

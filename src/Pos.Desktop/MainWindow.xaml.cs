@@ -26,6 +26,11 @@ public partial class MainWindow : Window
     private bool _discardInProgress;
     private bool _exitConfirmed;
     private bool _exitDialogOpen;
+    private bool _openingProductLookup;
+    private bool _openingPriceVerifier;
+    private CancellationTokenSource? _totalQuoteCancellation;
+    private decimal _displayedSaleTotal;
+    private string? _salesBlockedReason;
     private TemporaryPermissionLease? _modulePermissionLease;
     public MainWindow()
     {
@@ -140,7 +145,8 @@ public partial class MainWindow : Window
 
     private async void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        var section = e.Key switch
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        var section = key switch
         {
             Key.F1 => "Ventas",
             Key.F2 => "Creditos",
@@ -176,19 +182,19 @@ public partial class MainWindow : Window
             OnNewTicketClick(sender, e);
             e.Handled = true;
         }
-        else if (e.Key == Key.F10)
+        else if (key == Key.F10)
         {
-            OpenProductLookup();
+            await OpenProductLookupAsync();
             e.Handled = true;
         }
         else if (e.Key == Key.F9)
         {
-            OpenPriceVerifier();
+            await OpenPriceVerifierAsync();
             e.Handled = true;
         }
         else if (e.Key == Key.F11)
         {
-            ShowPendingFeature("Mayoreo manual");
+            await ToggleWholesaleForSelectedLineAsync();
             e.Handled = true;
         }
         else if (e.Key == Key.F7)
@@ -208,7 +214,7 @@ public partial class MainWindow : Window
         }
         else if (e.Key == Key.P && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
         {
-            ShowPendingFeature("Articulo comun");
+            await OpenCommonProductAsync();
             e.Handled = true;
         }
         else if (e.Key == Key.Delete)
@@ -274,21 +280,33 @@ public partial class MainWindow : Window
     private void OnInsertCommonProductClick(object sender, RoutedEventArgs e) =>
         ShowPendingFeature("Producto varios");
 
-    private async void OnCommonProductClick(object sender, RoutedEventArgs e)
+    private async void OnCommonProductClick(object sender, RoutedEventArgs e) => await OpenCommonProductAsync();
+
+    private async Task OpenCommonProductAsync()
     {
+        if (!EnsureSalesAvailable()) return;
+        if (_activeTicket is null)
+        {
+            StatusText.Text = "Crea o recupera un ticket antes de agregar un artículo común.";
+            return;
+        }
         await using var authorization = await PermissionAuthorization.RequestAsync(this, "UseCommonProduct", "Usar un producto común requiere autorización.");
         if (authorization is null) return;
-        StatusText.Text = "Producto común disponible al registrar un código no encontrado.";
+        var window = new MissingProductWindow(string.Empty, commonOnly: true) { Owner = this };
+        if (window.ShowDialog() != true || window.Decision != MissingProductDecision.CommonProduct) return;
+
+        var product = await CreateQuickSaleProductAsync(window.ProductCode, window.ProductDescription, window.Price, window.UnitOfMeasure, isCommonProduct: true);
+        if (product is not null) await AddProductToCartAsync(product, window.Quantity);
     }
 
-    private void OnProductLookupClick(object sender, RoutedEventArgs e) =>
-        OpenProductLookup();
+    private async void OnProductLookupClick(object sender, RoutedEventArgs e) =>
+        await OpenProductLookupAsync();
 
-    private void OnPriceVerifierClick(object sender, RoutedEventArgs e) =>
-        OpenPriceVerifier();
+    private async void OnPriceVerifierClick(object sender, RoutedEventArgs e) =>
+        await OpenPriceVerifierAsync();
 
-    private void OnWholesaleClick(object sender, RoutedEventArgs e) =>
-        ShowPendingFeature("Mayoreo manual");
+    private async void OnWholesaleClick(object sender, RoutedEventArgs e) =>
+        await ToggleWholesaleForSelectedLineAsync();
 
     private void OnCashInClick(object sender, RoutedEventArgs e) =>
         OpenCashMovement("In");
@@ -299,43 +317,102 @@ public partial class MainWindow : Window
     private void OnDeleteSelectedLineClick(object sender, RoutedEventArgs e) =>
         DeleteSelectedCartLine();
 
-    private async void OpenProductLookup()
+    private async Task OpenProductLookupAsync()
     {
-        await using var authorization = await PermissionAuthorization.RequestAsync(this, "ViewProducts", "Consultar productos requiere autorización.");
-        if (authorization is null) return;
+        if (!EnsureSalesAvailable()) return;
+        if (_openingProductLookup) return;
+        _openingProductLookup = true;
+        try
+        {
+            await using var authorization = await PermissionAuthorization.RequestAsync(this, "ViewProducts", "Consultar productos requiere autorización.");
+            if (authorization is null) return;
 
-        new ProductLookupWindow(ProductSearchTextBox.Text.Trim()) { Owner = this }.ShowDialog();
+            var lookup = new ProductLookupWindow(ProductSearchTextBox.Text.Trim()) { Owner = this };
+            if (lookup.ShowDialog() != true || lookup.SelectedProduct is null) return;
+
+            var product = lookup.SelectedProduct;
+            await AddProductToCartAsync(new ProductSearchResult(product.Id, product.Code, product.Description, product.Price, product.WholesalePrice, product.WholesaleMinimumQuantity, product.Stock, product.UnitOfMeasure));
+        }
+        finally
+        {
+            _openingProductLookup = false;
+        }
     }
 
-    private async void OpenPriceVerifier()
+    private async Task OpenPriceVerifierAsync()
     {
-        await using var authorization = await PermissionAuthorization.RequestAsync(this, "ViewProducts", "Verificar precios requiere autorización.");
-        if (authorization is null) return;
+        if (_openingPriceVerifier) return;
+        _openingPriceVerifier = true;
+        try
+        {
+            await using var authorization = await PermissionAuthorization.RequestAsync(this, "ViewProducts", "Verificar precios requiere autorización.");
+            if (authorization is null) return;
+            new PriceVerifierWindow { Owner = this }.ShowDialog();
+        }
+        finally { _openingPriceVerifier = false; }
+    }
 
-        new PriceVerifierWindow { Owner = this }.ShowDialog();
+    private async Task ToggleWholesaleForSelectedLineAsync()
+    {
+        if (!EnsureSalesAvailable()) return;
+        if (CartList.SelectedItem is not CartLineView line) { StatusText.Text = "Selecciona una partida para aplicar o quitar el precio de mayoreo."; return; }
+        if (line.UseWholesale)
+        {
+            line.UseWholesale = false;
+            await ApplyPromotionQuoteAsync(line);
+            CartList.Items.Refresh();
+            UpdateSaleSummary();
+            StatusText.Text = "Se restauró el precio de menudeo para la partida seleccionada.";
+            return;
+        }
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "UseWholesalePrice", "Aplicar precio de mayoreo requiere autorización.");
+        if (authorization is null) return;
+        if (line.WholesalePrice <= 0m || line.WholesaleMinimumQuantity <= 0m) { StatusText.Text = "Este producto no tiene un precio de mayoreo configurado."; return; }
+        if (line.Quantity < line.WholesaleMinimumQuantity) { StatusText.Text = $"Mayoreo requiere al menos {line.WholesaleMinimumQuantity:0.###} {line.UnitOfMeasure}. La partida tiene {line.Quantity:0.###}."; return; }
+        line.UseWholesale = true;
+        await ApplyPromotionQuoteAsync(line);
+        CartList.Items.Refresh();
+        UpdateSaleSummary();
+        StatusText.Text = "Precio de mayoreo aplicado a la partida seleccionada.";
     }
 
     private async Task<bool> OpenShiftFromDialogAsync()
     {
+        var register = await GetActiveRegisterAsync();
+        if (register is null)
+        {
+            StatusText.Text = "No hay una caja activa configurada.";
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(register.OpenShiftUserName))
+        {
+            BlockSalesForOtherUser(register);
+            return false;
+        }
+
         var window = new ShiftWindow { Owner = this };
-        if (window.ShowDialog() != true || window.InitialCash is null) return false;
+        if (window.ShowDialog() != true || window.InitialCash is null)
+        {
+            BlockSalesWithoutOpenShift();
+            return false;
+        }
         try
         {
-            var register = await Client.GetFromJsonAsync<RegisterResponse>("/api/shifts/register");
-            if (register is null) { StatusText.Text = "No hay una caja activa configurada."; return false; }
             using var response = await Client.PostAsJsonAsync("/api/shifts/open", new { registerId = register.Id, initialCash = window.InitialCash.Value });
             if (response.IsSuccessStatusCode)
             {
+                EnableSales();
                 StatusText.Text = "Turno abierto correctamente.";
                 return true;
             }
 
             StatusText.Text = response.StatusCode switch
             {
-                System.Net.HttpStatusCode.Unauthorized => "Este usuario no tiene permiso para abrir caja. Pide a un administrador ajustar sus permisos.",
+                System.Net.HttpStatusCode.Unauthorized => "La sesión ya no es válida. Cierra sesión e inicia nuevamente antes de abrir caja.",
                 System.Net.HttpStatusCode.Conflict => await ReadApiMessageAsync(response),
                 _ => $"No se pudo abrir caja. Codigo {(int)response.StatusCode}."
             };
+            BlockSalesWithoutOpenShift();
             return response.IsSuccessStatusCode;
         }
         catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; return false; }
@@ -347,7 +424,16 @@ public partial class MainWindow : Window
         try
         {
             using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            return document.RootElement.TryGetProperty("message", out var message) ? message.GetString() ?? "No se pudo completar la operacion." : "No se pudo completar la operacion.";
+            var root = document.RootElement;
+            if (root.TryGetProperty("message", out var message) && !string.IsNullOrWhiteSpace(message.GetString())) return message.GetString()!;
+            if (root.TryGetProperty("detail", out var detail) && !string.IsNullOrWhiteSpace(detail.GetString())) return detail.GetString()!;
+            if (root.TryGetProperty("title", out var title) && !string.IsNullOrWhiteSpace(title.GetString())) return title.GetString()!;
+            if (root.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Object)
+            {
+                var first = errors.EnumerateObject().SelectMany(property => property.Value.EnumerateArray()).Select(item => item.GetString()).FirstOrDefault(item => !string.IsNullOrWhiteSpace(item));
+                if (!string.IsNullOrWhiteSpace(first)) return first!;
+            }
+            return "No se pudo completar la operacion.";
         }
         catch (JsonException)
         {
@@ -416,6 +502,7 @@ public partial class MainWindow : Window
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
         {
             StatusText.Text = await DescribeCloseConnectionFailureAsync();
+            ShowApiRecoveryRequired("No se pudo consultar la caja", StatusText.Text);
             return false;
         }
         if (!summaryResponse.IsSuccessStatusCode)
@@ -433,6 +520,7 @@ public partial class MainWindow : Window
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
         {
             StatusText.Text = await DescribeCloseConnectionFailureAsync();
+            ShowApiRecoveryRequired("No se pudo consultar las reglas de corte", StatusText.Text);
             return false;
         }
         decimal? countedCash;
@@ -486,6 +574,7 @@ public partial class MainWindow : Window
             StatusText.Text = closeState == false
                 ? "La API responde y el turno continúa abierto. El cierre no se aplicó; puedes volver a intentarlo sin duplicar el corte."
                 : ConnectionHelp.ApiUnavailableShiftProtected;
+            if (closeState is null) ShowApiRecoveryRequired("No se pudo confirmar el cierre del turno", StatusText.Text);
             return false;
         }
     }
@@ -551,6 +640,16 @@ public partial class MainWindow : Window
 
     private async void OnProductSearchKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key is Key.Down or Key.Up && ProductResultsList.Items.Count > 0)
+        {
+            ProductResultsList.SelectedIndex = e.Key == Key.Down
+                ? Math.Min(ProductResultsList.SelectedIndex + 1, ProductResultsList.Items.Count - 1)
+                : Math.Max(ProductResultsList.SelectedIndex - 1, 0);
+            ProductResultsList.Focus();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.Enter)
         {
             await HandleProductEntryAsync(ProductSearchTextBox.Text.Trim());
@@ -571,6 +670,21 @@ public partial class MainWindow : Window
         await AddSelectedProductAsync();
     }
 
+    private async void OnProductResultsKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            await AddSelectedProductAsync();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            ProductResultsList.Visibility = Visibility.Collapsed;
+            FocusProductInput();
+            e.Handled = true;
+        }
+    }
+
     private async Task AddSelectedProductAsync()
     {
         if (ProductResultsList.SelectedItem is not ProductSearchRow row) return;
@@ -579,6 +693,7 @@ public partial class MainWindow : Window
 
     private async Task HandleProductEntryAsync(string query)
     {
+        if (!EnsureSalesAvailable()) return;
         if (string.IsNullOrWhiteSpace(query))
         {
             FocusProductInput();
@@ -639,24 +754,10 @@ public partial class MainWindow : Window
 
         try
         {
-            var command = new { code = window.ProductCode, description = window.ProductDescription, price = window.Price, unitOfMeasure = window.UnitOfMeasure, isCommonProduct };
-            using var response = await Client.PostAsJsonAsync("/api/products/quick-sale", command);
-            if (!response.IsSuccessStatusCode)
-            {
-                StatusText.Text = await response.Content.ReadAsStringAsync();
-                FocusProductInput();
-                return;
-            }
+            var product = await CreateQuickSaleProductAsync(window.ProductCode, window.ProductDescription, window.Price, window.UnitOfMeasure, isCommonProduct);
+            if (product is null) { FocusProductInput(); return; }
 
-            var product = await response.Content.ReadFromJsonAsync<ProductSearchResult>();
-            if (product is null)
-            {
-                StatusText.Text = "No se pudo agregar el producto rapido.";
-                FocusProductInput();
-                return;
-            }
-
-            await AddProductToCartAsync(product);
+            await AddProductToCartAsync(product, window.Quantity);
             if (isCommonProduct) StatusText.Text = "Producto común agregado solo a este ticket. No se modificará el inventario.";
         }
         catch (HttpRequestException)
@@ -666,25 +767,63 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task AddProductToCartAsync(ProductSearchResult product)
+    private async Task<ProductSearchResult?> CreateQuickSaleProductAsync(string code, string description, decimal price, string unitOfMeasure, bool isCommonProduct)
     {
+        try
+        {
+            var command = new { code, description, price, unitOfMeasure, isCommonProduct };
+            using var response = await Client.PostAsJsonAsync("/api/products/quick-sale", command);
+            if (!response.IsSuccessStatusCode)
+            {
+                StatusText.Text = await ReadApiMessageAsync(response);
+                return null;
+            }
+
+            var product = await response.Content.ReadFromJsonAsync<ProductSearchResult>();
+            if (product is null) StatusText.Text = "No se pudo preparar el producto para la venta.";
+            return product;
+        }
+        catch (HttpRequestException)
+        {
+            StatusText.Text = ConnectionHelp.ApiUnavailableNotConfirmed;
+            return null;
+        }
+    }
+
+    private async Task AddProductToCartAsync(ProductSearchResult product, decimal? requestedQuantity = null)
+    {
+        if (!EnsureSalesAvailable()) return;
         if (_activeTicket is null)
         {
             StatusText.Text = "Crea o recupera un ticket antes de agregar productos.";
             return;
         }
 
+        var quantity = requestedQuantity ?? 1m;
+        if (requestedQuantity is null && RequiresQuantityCapture(product.UnitOfMeasure))
+        {
+            var window = new SaleQuantityWindow(product.Description, product.UnitOfMeasure, 1m) { Owner = this };
+            if (window.ShowDialog() != true || window.Quantity is null) { FocusProductInput(); return; }
+            quantity = window.Quantity.Value;
+        }
+        if (quantity <= 0m) return;
+
         var cart = _activeTicket.Lines;
         var existing = cart.FirstOrDefault(item => item.ProductId == product.Id);
-        if (existing is null) cart.Add(new CartLineView(product.Id, product.Code, product.Description, product.Price, product.Stock, 1));
-        else { existing.Quantity++; }
+        if (existing is null) cart.Add(new CartLineView(product.Id, product.Code, product.Description, product.Price, product.WholesalePrice, product.WholesaleMinimumQuantity, product.Stock, quantity, product.UnitOfMeasure));
+        else { existing.Quantity = decimal.Round(existing.Quantity + quantity, 3); }
         var line = existing ?? cart[^1];
         await ApplyPromotionQuoteAsync(line);
         CartList.Items.Refresh();
         ProductSearchTextBox.Clear();
         ProductResultsList.Visibility = Visibility.Collapsed;
         UpdateSaleSummary();
-        QueueActiveTicketSave();
+        if (!await PersistActiveTicketAsync())
+        {
+            StatusText.Text = "El producto sigue en pantalla, pero no se pudo guardar en el ticket. Revisa la conexión y vuelve a intentarlo antes de cambiar de venta o cobrar.";
+            FocusProductInput();
+            return;
+        }
         SystemSounds.Asterisk.Play();
         StatusText.Text = line.DiscountTotal > 0m
             ? $"Producto agregado. Promoción aplicada: {line.DiscountTotal:C2} de descuento."
@@ -696,11 +835,11 @@ public partial class MainWindow : Window
     {
         try
         {
-            var url = $"/api/promotions/quote?productId={line.ProductId}&price={line.BaseUnitPrice.ToString(System.Globalization.CultureInfo.InvariantCulture)}&quantity={line.Quantity.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+            var url = $"/api/promotions/quote?productId={line.ProductId}&price={line.PricingBasePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)}&quantity={line.Quantity.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
             using var response = await Client.GetAsync(url);
             if (!response.IsSuccessStatusCode)
             {
-                line.UnitPrice = line.BaseUnitPrice;
+                line.UnitPrice = line.PricingBasePrice;
                 line.DiscountTotal = 0m;
                 line.PromotionalTotal = null;
                 return;
@@ -760,9 +899,53 @@ public partial class MainWindow : Window
 
     private void OnCartKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Delete) return;
-        DeleteSelectedCartLine();
-        e.Handled = true;
+        if (e.Key == Key.Delete)
+        {
+            DeleteSelectedCartLine();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter)
+        {
+            _ = EditSelectedCartLineAsync();
+            e.Handled = true;
+        }
+    }
+
+    private async void OnEditSelectedLineClick(object sender, RoutedEventArgs e) => await EditSelectedCartLineAsync();
+
+    private async void OnCartLineDoubleClick(object sender, MouseButtonEventArgs e) => await EditSelectedCartLineAsync();
+
+    private async Task EditSelectedCartLineAsync()
+    {
+        if (!EnsureSalesAvailable()) return;
+        if (CartList.SelectedItem is not CartLineView line)
+        {
+            StatusText.Text = "Selecciona una partida para cambiar su cantidad.";
+            return;
+        }
+
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "Sell", "Cambiar la cantidad de una partida requiere autorización.");
+        if (authorization is null) return;
+        var window = new SaleQuantityWindow(line.Description, line.UnitOfMeasure, line.Quantity) { Owner = this };
+        if (window.ShowDialog() != true || window.Quantity is null) return;
+
+        var previousQuantity = line.Quantity;
+        line.Quantity = window.Quantity.Value;
+        await ApplyPromotionQuoteAsync(line);
+        CartList.Items.Refresh();
+        UpdateSaleSummary();
+        if (await PersistActiveTicketAsync())
+        {
+            StatusText.Text = "Cantidad actualizada en el ticket.";
+            FocusProductInput();
+            return;
+        }
+
+        line.Quantity = previousQuantity;
+        await ApplyPromotionQuoteAsync(line);
+        CartList.Items.Refresh();
+        UpdateSaleSummary();
+        StatusText.Text = "No se pudo guardar la nueva cantidad. Se restauró el valor anterior.";
     }
 
     private void DeleteSelectedCartLine()
@@ -786,9 +969,52 @@ public partial class MainWindow : Window
     private void UpdateSaleSummary()
     {
         var cart = _activeTicket?.Lines ?? _emptyCart;
-        SaleTotalText.Text = $"${cart.Sum(item => item.Total):0.00}";
+        var subtotal = decimal.Round(cart.Sum(item => item.Total), 2, MidpointRounding.AwayFromZero);
+        _displayedSaleTotal = subtotal;
+        SaleTotalText.Text = $"${subtotal:0.00}";
+        RoundingText.Visibility = Visibility.Collapsed;
         SaleItemsText.Text = $"Artículos: {cart.Sum(item => item.Quantity):0.###}";
         CurrentSectionText.Text = _activeTicket?.Title ?? "Nueva venta";
+        _ = RefreshSaleTotalQuoteAsync(_activeTicket?.Id, subtotal);
+    }
+
+    private async Task RefreshSaleTotalQuoteAsync(Guid? ticketId, decimal subtotal)
+    {
+        if (ticketId is null) return;
+        var cancellation = new CancellationTokenSource();
+        var previous = _totalQuoteCancellation;
+        _totalQuoteCancellation = cancellation;
+        previous?.Cancel();
+
+        try
+        {
+            using var response = await Client.GetAsync($"/api/sales/quote-total?subtotal={subtotal.ToString(System.Globalization.CultureInfo.InvariantCulture)}", cancellation.Token);
+            if (!response.IsSuccessStatusCode) return;
+            var quote = await response.Content.ReadFromJsonAsync<SaleTotalQuoteResponse>(cancellation.Token);
+            if (quote is null || _activeTicket?.Id != ticketId || cancellation.IsCancellationRequested) return;
+
+            _displayedSaleTotal = quote.Total;
+            SaleTotalText.Text = $"${quote.Total:0.00}";
+            RoundingText.Text = quote.RoundingApplied
+                ? $"{quote.RoundingDescription}: {quote.RoundingAdjustment:+0.00;-0.00}"
+                : string.Empty;
+            RoundingText.Visibility = quote.RoundingApplied ? Visibility.Visible : Visibility.Collapsed;
+        }
+        catch (OperationCanceledException) { }
+        catch (HttpRequestException) { }
+        finally
+        {
+            if (ReferenceEquals(_totalQuoteCancellation, cancellation)) _totalQuoteCancellation = null;
+            cancellation.Dispose();
+        }
+    }
+
+    private async Task<SaleTotalQuoteResponse?> GetSaleTotalQuoteAsync(decimal subtotal)
+    {
+        using var response = await Client.GetAsync($"/api/sales/quote-total?subtotal={subtotal.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<SaleTotalQuoteResponse>()
+            : null;
     }
 
     private async Task NotifyCashLimitAsync()
@@ -804,15 +1030,21 @@ public partial class MainWindow : Window
         catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableRetry; }
     }
 
-    private sealed record ProductSearchResult(Guid Id, string Code, string Description, decimal Price, decimal Stock = 0m);
+    private static bool RequiresQuantityCapture(string unitOfMeasure)
+    {
+        var unit = unitOfMeasure.Trim().ToUpperInvariant();
+        return unit is "KILOGRAMO" or "GRAMO" or "LIBRA" or "ONZA" or "LITRO" or "MILILITRO" or "METRO";
+    }
+
+    private sealed record ProductSearchResult(Guid Id, string Code, string Description, decimal Price, decimal WholesalePrice = 0m, decimal WholesaleMinimumQuantity = 0m, decimal Stock = 0m, string UnitOfMeasure = "Pieza");
     private sealed record ProductSearchRow(ProductSearchResult Product)
     {
         public string DisplayText => $"{Product.Code} | {Product.Description} | ${Product.Price:0.00}";
     }
 
-    private sealed class CartLineView(Guid productId, string code, string description, decimal unitPrice, decimal stock, decimal quantity)
+    private sealed class CartLineView(Guid productId, string code, string description, decimal unitPrice, decimal wholesalePrice, decimal wholesaleMinimumQuantity, decimal stock, decimal quantity, string unitOfMeasure = "Pieza")
     {
-        public Guid ProductId { get; } = productId; public string Code { get; } = code; public string Description { get; } = description; public decimal BaseUnitPrice { get; } = unitPrice; public decimal UnitPrice { get; set; } = unitPrice; public decimal Stock { get; } = stock; public decimal Quantity { get; set; } = quantity; public decimal DiscountTotal { get; set; } public decimal? PromotionalTotal { get; set; } public decimal Total => PromotionalTotal ?? decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Code} | {Description} x {Quantity:0.###} = ${Total:0.00}";
+        public Guid ProductId { get; } = productId; public string Code { get; } = code; public string Description { get; } = description; public decimal BaseUnitPrice { get; } = unitPrice; public decimal WholesalePrice { get; } = wholesalePrice; public decimal WholesaleMinimumQuantity { get; } = wholesaleMinimumQuantity; public bool UseWholesale { get; set; } public decimal PricingBasePrice => UseWholesale ? WholesalePrice : BaseUnitPrice; public string PricingMode => UseWholesale ? "Mayoreo" : "Menudeo"; public decimal UnitPrice { get; set; } = unitPrice; public decimal Stock { get; } = stock; public decimal Quantity { get; set; } = quantity; public string UnitOfMeasure { get; } = string.IsNullOrWhiteSpace(unitOfMeasure) ? "Pieza" : unitOfMeasure; public string QuantityWithUnit => $"{Quantity:0.###} {UnitOfMeasure}"; public decimal DiscountTotal { get; set; } public decimal? PromotionalTotal { get; set; } public decimal Total => PromotionalTotal ?? decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Code} | {Description} x {Quantity:0.###} {UnitOfMeasure} = ${Total:0.00}";
     }
 
     private sealed class TicketTabView(Guid id, Guid operationId, int ticketNumber, IEnumerable<CartLineView>? lines = null)
@@ -828,17 +1060,23 @@ public partial class MainWindow : Window
     }
 
     private sealed record SaleDraftResponse(Guid Id, Guid OperationId, int TicketNumber, DateTimeOffset UpdatedAtUtc, IReadOnlyList<SaleDraftLineResponse> Lines);
-    private sealed record SaleDraftLineResponse(Guid ProductId, string Code, string Description, decimal UnitPrice, decimal Stock, decimal Quantity);
+    private sealed record SaleDraftLineResponse(Guid ProductId, string Code, string Description, decimal UnitPrice, decimal Stock, decimal Quantity, string UnitOfMeasure = "Pieza");
     private sealed record PromotionPriceQuote(Guid ProductId, decimal BaseUnitPrice, decimal UnitPrice, decimal Quantity, decimal Total, decimal DiscountTotal, bool PromotionApplied);
+    private sealed record SaleTotalQuoteResponse(decimal Subtotal, decimal Total, decimal RoundingAdjustment, bool RoundingApplied, string? RoundingDescription);
     private sealed record SaleResponse(Guid SaleId, decimal Total, decimal Change, bool Existing);
-    private sealed record RegisterResponse(Guid Id, string Name);
+    private sealed record RegisterResponse(Guid Id, string Name, string? OpenShiftUserName = null, DateTimeOffset? OpenedAtUtc = null);
     private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
     private sealed record CutSettingsResponse(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, decimal CashLimit, string CashLimitMessage);
     private sealed record MercadoPagoStatus(bool Enabled);
     private sealed record CurrentShiftResponse(Guid ShiftId, Guid RegisterId, Guid UserId, decimal InitialCash, DateTimeOffset OpenedAtUtc);
     private sealed record LatestSaleRow(Guid SaleId, DateTimeOffset CreatedAtUtc, decimal Total, string Status);
 
-    private async void OnNewTicketClick(object sender, RoutedEventArgs e) => await CreateNewTicketAsync();
+    private async void OnNewTicketClick(object sender, RoutedEventArgs e)
+    {
+        var readiness = await EnsureShiftForNewTicketAsync();
+        if (!readiness.Ready || readiness.OpenedNow) return;
+        await CreateNewTicketAsync();
+    }
 
     private async Task LoadSaleDraftsAsync()
     {
@@ -871,6 +1109,7 @@ public partial class MainWindow : Window
 
     private async Task CreateNewTicketAsync(bool saveCurrentTicket = true)
     {
+        if (!EnsureSalesAvailable()) return;
         if (saveCurrentTicket
             && _activeTicket is { Lines.Count: > 0 } activeTicket
             && _tickets.Contains(activeTicket)
@@ -885,7 +1124,7 @@ public partial class MainWindow : Window
             using var response = await Client.PostAsync("/api/sale-drafts", null);
             if (!response.IsSuccessStatusCode)
             {
-                StatusText.Text = await ReadApiMessageAsync(response);
+                await HandleTicketAccessFailureAsync(response);
                 return;
             }
 
@@ -912,7 +1151,7 @@ public partial class MainWindow : Window
         draft.Id,
         draft.OperationId,
         draft.TicketNumber,
-        draft.Lines.Select(line => new CartLineView(line.ProductId, line.Code, line.Description, line.UnitPrice, line.Stock, line.Quantity)));
+        draft.Lines.Select(line => new CartLineView(line.ProductId, line.Code, line.Description, line.UnitPrice, 0m, 0m, line.Stock, line.Quantity, line.UnitOfMeasure)));
 
     private void OnTicketSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -937,7 +1176,7 @@ public partial class MainWindow : Window
         TicketTabs.SelectedIndex = (current + 1) % _tickets.Count;
     }
 
-    private void QueueActiveTicketSave() => _ = PersistActiveTicketAsync(showError: false);
+    private void QueueActiveTicketSave() => _ = PersistActiveTicketAsync(showError: true);
 
     private async Task<bool> PersistActiveTicketAsync(bool showError = true)
     {
@@ -950,7 +1189,7 @@ public partial class MainWindow : Window
         {
             using var response = await Client.PutAsJsonAsync($"/api/sale-drafts/{ticket.Id}", new { lines });
             if (response.IsSuccessStatusCode) return true;
-            if (showError) StatusText.Text = await ReadApiMessageAsync(response);
+            if (showError) await HandleTicketAccessFailureAsync(response);
             return false;
         }
         catch (HttpRequestException)
@@ -1015,12 +1254,25 @@ public partial class MainWindow : Window
 
     private async void OnChargeClick(object sender, RoutedEventArgs e)
     {
+        if (!EnsureSalesAvailable()) return;
         var ticket = _activeTicket;
         if (ticket is null || ticket.Lines.Count == 0) { StatusText.Text = "Agrega al menos un producto antes de cobrar."; return; }
         await using var saleAuthorization = await PermissionAuthorization.RequestAsync(this, "Sell", "Cobrar una venta requiere autorización.");
         if (saleAuthorization is null) return;
         if (!await PersistActiveTicketAsync()) return;
-        var cashWindow = new CashWindow(ticket.Lines.Sum(item => item.Total), ticket.Lines.Sum(item => item.Quantity), ticket.CustomerId, ticket.CustomerName) { Owner = this };
+        SaleTotalQuoteResponse? quote = null;
+        try
+        {
+            quote = await GetSaleTotalQuoteAsync(decimal.Round(ticket.Lines.Sum(item => item.Total), 2, MidpointRounding.AwayFromZero));
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            // El cálculo previo solo mejora la presentación del redondeo. El
+            // servicio de ventas sigue siendo la fuente de verdad al confirmar.
+        }
+        var saleTotal = quote?.Total ?? decimal.Round(ticket.Lines.Sum(item => item.Total), 2, MidpointRounding.AwayFromZero);
+        _displayedSaleTotal = saleTotal;
+        var cashWindow = new CashWindow(saleTotal, ticket.Lines.Sum(item => item.Quantity), ticket.CustomerId, ticket.CustomerName) { Owner = this };
         if (cashWindow.ShowDialog() != true || cashWindow.Received is null) return;
         await using var creditAuthorization = cashWindow.CreditRequested
             ? await PermissionAuthorization.RequestAsync(this, "SellOnCredit", "Cobrar una venta a crédito requiere autorización.")
@@ -1028,14 +1280,14 @@ public partial class MainWindow : Window
         if (cashWindow.CreditRequested && creditAuthorization is null) return;
         try
         {
-            var pointAmount = cashWindow.PaymentMethod == "Card" ? ticket.Lines.Sum(item => item.Total) : cashWindow.PaymentMethod == "Mixed" ? cashWindow.CardAmount : 0m;
+            var pointAmount = cashWindow.PaymentMethod == "Card" ? cashWindow.Total : cashWindow.PaymentMethod == "Mixed" ? cashWindow.CardAmount : 0m;
             if (pointAmount > 0m && await IsMercadoPagoEnabledAsync())
             {
                 var point = new MercadoPagoPaymentWindow(ticket.OperationId, pointAmount) { Owner = this };
                 if (point.ShowDialog() != true || !point.Approved) { StatusText.Text = "La venta sigue abierta porque el cobro con Mercado Pago no fue aprobado."; return; }
             }
             var cashReceived = cashWindow.CreditRequested || cashWindow.PaymentMethod is not ("Cash" or "Mixed") ? 0m : cashWindow.Received.Value;
-            var command = new { operationId = ticket.OperationId, draftId = ticket.Id, lines = ticket.Lines.Select(item => new { productId = item.ProductId, quantity = item.Quantity }).ToArray(), cashReceived, cardAmount = cashWindow.CreditRequested ? 0m : cashWindow.CardAmount, transferAmount = cashWindow.CreditRequested ? 0m : cashWindow.TransferAmount, customerId = cashWindow.CustomerId ?? ticket.CustomerId, paymentMethod = cashWindow.PaymentMethod, printRequested = cashWindow.PrintRequested };
+            var command = new { operationId = ticket.OperationId, draftId = ticket.Id, lines = ticket.Lines.Select(item => new { productId = item.ProductId, quantity = item.Quantity, useWholesale = item.UseWholesale }).ToArray(), cashReceived, cardAmount = cashWindow.CreditRequested ? 0m : cashWindow.CardAmount, transferAmount = cashWindow.CreditRequested ? 0m : cashWindow.TransferAmount, customerId = cashWindow.CustomerId ?? ticket.CustomerId, paymentMethod = cashWindow.PaymentMethod, printRequested = cashWindow.PrintRequested };
             using var response = await Client.PostAsJsonAsync("/api/sales/complete", command);
             if (!response.IsSuccessStatusCode) { StatusText.Text = await ReadApiMessageAsync(response); MessageBox.Show(StatusText.Text, "No se pudo confirmar la venta", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
             var result = await response.Content.ReadFromJsonAsync<SaleResponse>();
@@ -1058,7 +1310,16 @@ public partial class MainWindow : Window
             }
             FocusProductInput();
         }
-        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableNotConfirmed; }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            StatusText.Text = ConnectionHelp.ApiUnavailableNotConfirmed;
+            ShowApiRecoveryRequired("No se pudo confirmar la venta", StatusText.Text);
+        }
+    }
+
+    private void ShowApiRecoveryRequired(string title, string message)
+    {
+        MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
     private static async Task<bool> IsMercadoPagoEnabledAsync()
@@ -1171,11 +1432,26 @@ public partial class MainWindow : Window
         var currentShift = await GetCurrentShiftAsync();
         if (currentShift is not null)
         {
+            EnableSales();
             var window = new ShiftWindow { Owner = this };
             window.ShowAlreadyOpen(currentShift.InitialCash, currentShift.OpenedAtUtc);
             window.ShowDialog();
             StatusText.Text = "Caja abierta. Puedes continuar vendiendo.";
             await LoadSaleDraftsAsync();
+            return;
+        }
+
+        var register = await GetActiveRegisterAsync();
+        if (register is null)
+        {
+            _salesBlockedReason = "No hay una caja activa configurada. Pide a un administrador revisar Configuración > Datos de la tienda.";
+            SalesWorkspace.IsEnabled = false;
+            StatusText.Text = _salesBlockedReason;
+            return;
+        }
+        if (!string.IsNullOrWhiteSpace(register.OpenShiftUserName))
+        {
+            BlockSalesForOtherUser(register);
             return;
         }
 
@@ -1212,6 +1488,96 @@ public partial class MainWindow : Window
             StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
             return null;
         }
+    }
+
+    private async Task<RegisterResponse?> GetActiveRegisterAsync()
+    {
+        try
+        {
+            using var response = await Client.GetAsync("/api/shifts/register");
+            return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<RegisterResponse>() : null;
+        }
+        catch (HttpRequestException)
+        {
+            StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
+            return null;
+        }
+    }
+
+    private void EnableSales()
+    {
+        _salesBlockedReason = null;
+        SalesWorkspace.IsEnabled = true;
+    }
+
+    private void BlockSalesWithoutOpenShift()
+    {
+        _salesBlockedReason = "No hay un turno abierto. Para vender, abre la caja con el fondo inicial. Pulsa F6 o Nuevo ticket para abrir turno.";
+        SalesWorkspace.IsEnabled = true;
+        StatusText.Text = _salesBlockedReason;
+    }
+
+    private void BlockSalesForOtherUser(RegisterResponse register)
+    {
+        var openedAt = register.OpenedAtUtc is null ? string.Empty : $" desde {register.OpenedAtUtc.Value.LocalDateTime:g}";
+        _salesBlockedReason = $"La caja {register.Name} continúa abierta por {register.OpenShiftUserName}{openedAt}. Para proteger el efectivo, este usuario no puede crear tickets ni vender. Inicia sesión con {register.OpenShiftUserName} para continuar o realizar el corte.";
+        SalesWorkspace.IsEnabled = false;
+        StatusText.Text = _salesBlockedReason;
+        MessageBox.Show(_salesBlockedReason, "Caja en uso", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private bool EnsureSalesAvailable()
+    {
+        if (string.IsNullOrWhiteSpace(_salesBlockedReason)) return true;
+        StatusText.Text = _salesBlockedReason;
+        return false;
+    }
+
+    private async Task<(bool Ready, bool OpenedNow)> EnsureShiftForNewTicketAsync()
+    {
+        var currentShift = await GetCurrentShiftAsync();
+        if (currentShift is not null)
+        {
+            EnableSales();
+            return (true, false);
+        }
+
+        var register = await GetActiveRegisterAsync();
+        if (register is null)
+        {
+            _salesBlockedReason = "No hay una caja activa configurada. Pide a un administrador revisar Configuración > Datos de la tienda.";
+            SalesWorkspace.IsEnabled = false;
+            StatusText.Text = _salesBlockedReason;
+            return (false, false);
+        }
+        if (!string.IsNullOrWhiteSpace(register.OpenShiftUserName))
+        {
+            BlockSalesForOtherUser(register);
+            return (false, false);
+        }
+
+        BlockSalesWithoutOpenShift();
+        if (!await OpenShiftFromDialogAsync()) return (false, false);
+        await LoadSaleDraftsAsync();
+        return (_activeTicket is not null, true);
+    }
+
+    private async Task HandleTicketAccessFailureAsync(HttpResponseMessage response)
+    {
+        var message = await ReadApiMessageAsync(response);
+        StatusText.Text = message;
+
+        if (response.StatusCode != System.Net.HttpStatusCode.Conflict ||
+            !message.Contains("No hay un turno abierto", StringComparison.OrdinalIgnoreCase)) return;
+
+        var register = await GetActiveRegisterAsync();
+        if (register is null) return;
+        if (!string.IsNullOrWhiteSpace(register.OpenShiftUserName))
+        {
+            BlockSalesForOtherUser(register);
+            return;
+        }
+        BlockSalesWithoutOpenShift();
     }
 
     private async Task RequestExitAsync()
@@ -1298,8 +1664,16 @@ public partial class MainWindow : Window
         SessionContext.Clear();
         ApiClient.ApplySession(null);
 
+        // Durante el relevo, la ventana principal actual se cierra. Sin este
+        // modo WPF puede terminar el proceso antes de dejar visible el login.
+        var application = System.Windows.Application.Current;
+        application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
         var login = new LoginWindow();
-        System.Windows.Application.Current.MainWindow = login;
+        login.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(application.MainWindow, login)) application.Shutdown();
+        };
+        application.MainWindow = login;
         login.Show();
         Close();
     }

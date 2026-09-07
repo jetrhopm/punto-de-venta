@@ -10,9 +10,9 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <StackPanel>
-            <TextBlock Text="Producto no encontrado" FontSize="24" FontWeight="SemiBold" Foreground="#B42318"/>
+            <TextBlock x:Name="TitleText" Text="Producto no encontrado" FontSize="24" FontWeight="SemiBold" Foreground="#B42318"/>
             <TextBlock x:Name="CodeText" Margin="0,6,0,0" Foreground="#526577" TextWrapping="Wrap"/>
-            <TextBlock Text="Puedes registrarlo en el inventario o agregarlo solo a este ticket como articulo temporal. Solo pedimos lo indispensable." Margin="0,8,0,0" Foreground="#526577" TextWrapping="Wrap"/>
+            <TextBlock x:Name="InstructionText" Text="Puedes registrarlo en el inventario o agregarlo solo a este ticket como articulo temporal. Solo pedimos lo indispensable." Margin="0,8,0,0" Foreground="#526577" TextWrapping="Wrap"/>
         </StackPanel>
 
         <ScrollViewer Grid.Row="1" Margin="0,18,0,0" VerticalScrollBarVisibility="Auto">
@@ -32,6 +32,9 @@
                 <ComboBoxItem Content="Metro"/>
                 <ComboBoxItem Content="Servicio"/>
             </ComboBox>
+            <TextBlock Text="Cantidad" FontWeight="SemiBold" Margin="0,12,0,4"/>
+            <TextBlock Text="Para granel puedes escribir decimales, por ejemplo 0.350." Foreground="#526577" Margin="0,0,0,5"/>
+            <TextBox x:Name="QuantityBox" Height="36" Text="1"/>
             <TextBlock x:Name="MessageText" Margin="0,12,0,0" Foreground="#B42318" TextWrapping="Wrap"/>
             </StackPanel>
         </ScrollViewer>
@@ -43,8 +46,8 @@
             </Grid.ColumnDefinitions>
             <Button Width="110" Height="38" Click="OnCancelClick">Cancelar</Button>
             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button Width="210" Height="38" Margin="0,0,8,0" Click="OnCommonClick" ToolTip="Agrega un articulo temporal solo a este ticket; no modifica el inventario.">Producto comun (temporal)</Button>
-                <Button Width="155" Height="38" Background="#146CB0" Foreground="White" FontWeight="Bold" Click="OnRegisterClick">Registrar producto</Button>
+                <Button x:Name="CommonButton" Width="210" Height="38" Margin="0,0,8,0" Click="OnCommonClick" ToolTip="Agrega un articulo temporal solo a este ticket; no modifica el inventario.">Producto comun (temporal)</Button>
+                <Button x:Name="RegisterButton" Width="155" Height="38" Background="#146CB0" Foreground="White" FontWeight="Bold" Click="OnRegisterClick">Registrar producto</Button>
             </StackPanel>
         </Grid>
     </Grid>

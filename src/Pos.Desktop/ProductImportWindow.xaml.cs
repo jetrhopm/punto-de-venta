@@ -20,6 +20,9 @@ public partial class ProductImportWindow : Window
     private ListSortDirection _sortDirection = ListSortDirection.Ascending;
     private bool _refreshScheduled;
     private ImportResult? _lastImportResult;
+    private ProductImportSource? _source;
+    private ProductImportColumnMapping? _mapping;
+    private decimal _defaultWholesaleMinimum = 1m;
 
     public ProductImportWindow() => InitializeComponent();
 
@@ -27,26 +30,63 @@ public partial class ProductImportWindow : Window
     {
         var dialog = new OpenFileDialog { Title = "Seleccionar exportacion de productos", Filter = "Excel o CSV (*.xlsx;*.csv;*.txt)|*.xlsx;*.csv;*.txt|Excel (*.xlsx)|*.xlsx|CSV (*.csv;*.txt)|*.csv;*.txt" };
         if (dialog.ShowDialog() != true) return;
-        if (!decimal.TryParse(WholesaleMinimumBox.Text, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out var minimum) || minimum <= 0) { StatusText.Text = "Escribe una cantidad minima de mayoreo mayor que cero."; return; }
+        if (!TryGetWholesaleMinimum(out var minimum)) return;
         try
         {
-            _rows = ProductImportFileReader.Read(dialog.FileName, minimum).ToList();
-            _sortedRows = [.. _rows];
-            _lastImportResult = null;
-            SaveReportButton.IsEnabled = false;
-            _currentPage = 1;
+            var source = ProductImportFileReader.ReadSource(dialog.FileName);
+            var mappingWindow = new ProductImportMappingWindow(source, ProductImportFileReader.SuggestMapping(source)) { Owner = this };
+            if (mappingWindow.ShowDialog() != true) return;
+            _source = source;
+            _mapping = mappingWindow.Mapping;
+            _defaultWholesaleMinimum = minimum;
             FileBox.Text = dialog.FileName;
-            ApplySort();
-            UpdatePreviewPage();
-            var errors = RefreshPreviewStatus(focusFirstInvalid: true);
-            var wholesale = _rows.Count(item => item.WholesalePrice > 0);
-            StatusText.Text = $"{_rows.Count} fila(s), {errors} error(es). Puedes corregir campos en la vista previa antes de importar. {wholesale} precio(s) de mayoreo usaran minimo {minimum:0.###}. El archivo original no se modificara.";
+            AdjustColumnsButton.IsEnabled = true;
+            ApplyMapping();
         }
-        catch (Exception exception) { _rows = []; ImportButton.IsEnabled = false; StatusText.Text = $"No se pudo leer el archivo: {exception.Message}"; }
+        catch (Exception exception) { _rows = []; SetImportActionsEnabled(false); StatusText.Text = $"No se pudo leer el archivo: {exception.Message}"; }
+    }
+
+    private void OnAdjustColumnsClick(object sender, RoutedEventArgs e)
+    {
+        if (_source is null || _mapping is null) return;
+        if (!TryGetWholesaleMinimum(out var minimum)) return;
+        var mappingWindow = new ProductImportMappingWindow(_source, _mapping) { Owner = this };
+        if (mappingWindow.ShowDialog() != true) return;
+        _mapping = mappingWindow.Mapping;
+        _defaultWholesaleMinimum = minimum;
+        ApplyMapping();
+    }
+
+    private void ApplyMapping()
+    {
+        if (_source is null || _mapping is null) return;
+        _rows = ProductImportFileReader.Map(_source, _mapping, _defaultWholesaleMinimum).ToList();
+        _sortedRows = [.. _rows];
+        _lastImportResult = null;
+        SaveReportButton.IsEnabled = false;
+        _currentPage = 1;
+        ApplySort();
+        UpdatePreviewPage();
+        var errors = RefreshPreviewStatus(focusFirstInvalid: true);
+        var wholesale = _rows.Count(item => item.WholesalePrice > 0);
+        StatusText.Text = $"{_rows.Count} producto(s) seleccionados, {errors} error(es). Desmarca cualquier registro que quieras omitir o corrige sus datos. {wholesale} precio(s) de mayoreo usarán mínimo {_defaultWholesaleMinimum:0.###}.";
+    }
+
+    private bool TryGetWholesaleMinimum(out decimal minimum)
+    {
+        if (decimal.TryParse(WholesaleMinimumBox.Text, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out minimum) && minimum > 0) return true;
+        StatusText.Text = "Escribe una cantidad mínima de mayoreo mayor que cero.";
+        return false;
     }
 
     private void OnPreviewCellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
     {
+        SchedulePreviewRefresh();
+    }
+
+    private void OnRowSelectionClick(object sender, RoutedEventArgs e)
+    {
+        // Run after WPF applies the new check state, so omitted products leave validation immediately.
         SchedulePreviewRefresh();
     }
 
@@ -79,30 +119,80 @@ public partial class ProductImportWindow : Window
         UpdatePreviewPage();
     }
 
-    private async void OnImportClick(object sender, RoutedEventArgs e)
+    private void OnSelectAllClick(object sender, RoutedEventArgs e)
+    {
+        foreach (var row in _rows) row.IsSelected = true;
+        var errors = RefreshPreviewStatus(focusFirstInvalid: false);
+        StatusText.Text = $"Se seleccionaron {_rows.Count} producto(s). Corrige o desmarca los {errors} registro(s) con error antes de importar.";
+    }
+
+    private void OnOmitErrorsClick(object sender, RoutedEventArgs e)
+    {
+        RefreshPreviewStatus(focusFirstInvalid: false);
+        var omitted = _rows.Where(row => row.IsSelected && row.Status.StartsWith("ERROR", StringComparison.Ordinal)).ToList();
+        foreach (var row in omitted) row.IsSelected = false;
+        RefreshPreviewStatus(focusFirstInvalid: false);
+        StatusText.Text = omitted.Count == 0
+            ? "No había productos con error para omitir."
+            : $"Se omitieron {omitted.Count} producto(s) con error. Los demás están listos para importar.";
+    }
+
+    private async void OnImportNewClick(object sender, RoutedEventArgs e) => await ImportAsync("Skip");
+
+    private async void OnUpdateExistingClick(object sender, RoutedEventArgs e) => await ImportAsync("Update");
+
+    private async Task ImportAsync(string duplicateRule)
     {
         PreviewGrid.CommitEdit(DataGridEditingUnit.Cell, true);
         PreviewGrid.CommitEdit(DataGridEditingUnit.Row, true);
-        if (_rows.Count == 0 || RefreshPreviewStatus(focusFirstInvalid: true) > 0) return;
-        ImportButton.IsEnabled = false;
+        var selectedRows = _rows.Where(item => item.IsSelected).ToArray();
+        if (selectedRows.Length == 0)
+        {
+            StatusText.Text = "Selecciona al menos un producto para importar.";
+            return;
+        }
+        if (RefreshPreviewStatus(focusFirstInvalid: true) > 0) return;
+        if (!ConfirmImport(duplicateRule, selectedRows.Length)) return;
+        SetImportActionsEnabled(false);
         ImportProgressBar.Visibility = Visibility.Visible;
-        StatusText.Text = "Creando respaldo previo e importando en una sola transaccion...";
+        StatusText.Text = duplicateRule.Equals("Update", StringComparison.OrdinalIgnoreCase)
+            ? "Creando respaldo previo e importando productos nuevos y actualizando coincidencias..."
+            : "Creando respaldo previo e importando solamente productos nuevos...";
         try
         {
             using var backup = await ApiClient.Client.PostAsync("api/maintenance/backups", null);
-            if (!backup.IsSuccessStatusCode) { StatusText.Text = "No se importo nada porque no se pudo crear el respaldo previo: " + await backup.Content.ReadAsStringAsync(); return; }
-            var duplicateRule = (DuplicateRuleBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Skip";
+            if (!backup.IsSuccessStatusCode) { StatusText.Text = "No se importó nada porque no se pudo crear el respaldo previo: " + await backup.Content.ReadAsStringAsync(); return; }
             var operationId = Guid.NewGuid();
-            using var response = await ApiClient.Client.PostAsJsonAsync("api/products/import", new { operationId, sourceFileName = Path.GetFileName(FileBox.Text), duplicateRule, rows = _rows.Select(item => new { item.RowNumber, item.Code, item.Description, item.Price, item.Cost, item.Stock, item.WholesalePrice, item.WholesaleMinimumQuantity, item.Category, item.MinimumStock, item.MaximumStock, item.UnitOfMeasure, item.SupplierName }).ToArray() });
-            if (!response.IsSuccessStatusCode) { StatusText.Text = "La importacion se revirtio: " + await response.Content.ReadAsStringAsync(); return; }
+            using var response = await ApiClient.Client.PostAsJsonAsync("api/products/import", new { operationId, sourceFileName = Path.GetFileName(FileBox.Text), duplicateRule, rows = selectedRows.Select(item => new { item.RowNumber, item.Code, item.Description, item.Price, item.Cost, item.Stock, item.WholesalePrice, item.WholesaleMinimumQuantity, item.Category, item.MinimumStock, item.MaximumStock, item.UnitOfMeasure, item.SupplierName }).ToArray() });
+            if (!response.IsSuccessStatusCode) { StatusText.Text = "La importación se revirtió: " + await response.Content.ReadAsStringAsync(); return; }
             var result = await response.Content.ReadFromJsonAsync<ImportResult>();
-            StatusText.Text = result is null ? "Importacion terminada." : $"Importacion terminada: {result.Created} creados, {result.Updated} actualizados y {result.Skipped} omitidos.";
+            var omittedByUser = _rows.Count - selectedRows.Length;
+            StatusText.Text = result is null
+                ? "Importación terminada."
+                : duplicateRule.Equals("Update", StringComparison.OrdinalIgnoreCase)
+                    ? $"Actualización terminada: {result.Created} nuevos, {result.Updated} existentes actualizados y {omittedByUser} omitidos por el usuario."
+                    : $"Importación terminada: {result.Created} nuevos, {result.Skipped} existentes omitidos sin modificarse y {omittedByUser} omitidos por el usuario.";
             _lastImportResult = result;
             SaveReportButton.IsEnabled = true;
             StatusText.Text += " Puedes guardar el reporte cuando lo necesites.";
         }
-        catch (Exception exception) { StatusText.Text = $"La importacion no se completo: {exception.Message}"; }
-        finally { ImportProgressBar.Visibility = Visibility.Collapsed; ImportButton.IsEnabled = true; }
+        catch (Exception exception) { StatusText.Text = $"La importación no se completó: {exception.Message}"; }
+        finally { ImportProgressBar.Visibility = Visibility.Collapsed; RefreshPreviewStatus(focusFirstInvalid: false); }
+    }
+
+    private bool ConfirmImport(string duplicateRule, int selectedCount)
+    {
+        var isUpdate = duplicateRule.Equals("Update", StringComparison.OrdinalIgnoreCase);
+        var message = isUpdate
+            ? $"Se importarán {selectedCount} producto(s) seleccionado(s). Los códigos que ya existan se actualizarán con la descripción, precios, mayoreo, existencia, departamento, límites de inventario, unidad y proveedor del archivo. Los códigos nuevos se agregarán.\n\n¿Deseas continuar?"
+            : $"Se importarán {selectedCount} producto(s) seleccionado(s). Los códigos que ya existan se omitirán y no se modificarán ni actualizarán. Solo se agregarán productos nuevos.\n\n¿Deseas continuar?";
+        return MessageBox.Show(message, isUpdate ? "Actualizar inventario" : "Importar productos nuevos", MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK;
+    }
+
+    private void SetImportActionsEnabled(bool enabled)
+    {
+        ImportNewButton.IsEnabled = enabled;
+        UpdateExistingButton.IsEnabled = enabled;
     }
 
     private void OnSaveReportClick(object sender, RoutedEventArgs e) => SaveReport(_lastImportResult);
@@ -115,7 +205,7 @@ public partial class ProductImportWindow : Window
         using var csv = new CsvWriter(writer, CultureInfo.InvariantCulture);
         csv.WriteField("Fila"); csv.WriteField("Codigo"); csv.WriteField("Producto"); csv.WriteField("Estado"); csv.NextRecord();
         foreach (var row in _rows) { csv.WriteField(row.RowNumber); csv.WriteField(SafeForSpreadsheet(row.Code)); csv.WriteField(SafeForSpreadsheet(row.Description)); csv.WriteField(row.Status); csv.NextRecord(); }
-        csv.WriteField("Resumen"); csv.WriteField(result is null ? "Importacion terminada" : $"Creados {result.Created}; actualizados {result.Updated}; omitidos {result.Skipped}"); csv.NextRecord();
+        csv.WriteField("Resumen"); csv.WriteField(result is null ? "Importación terminada" : $"Creados {result.Created}; actualizados {result.Updated}; omitidos por duplicado {result.Skipped}; omitidos por el usuario {_rows.Count(item => !item.IsSelected)}"); csv.NextRecord();
     }
 
     private void SchedulePreviewRefresh()
@@ -130,7 +220,7 @@ public partial class ProductImportWindow : Window
             }
             catch (Exception exception)
             {
-                ImportButton.IsEnabled = false;
+                SetImportActionsEnabled(false);
                 ErrorDetailsText.Text = "No se pudo validar la vista previa. Revisa el ultimo dato editado: " + exception.Message;
             }
             finally
@@ -144,12 +234,12 @@ public partial class ProductImportWindow : Window
     {
         try
         {
-            var duplicateCodes = _rows.Where(item => !string.IsNullOrWhiteSpace(item.Code)).GroupBy(item => item.Code.Trim(), StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1).Select(group => group.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            foreach (var row in _rows) row.Status = Validate(row, duplicateCodes);
+            var duplicateCodes = _rows.Where(item => item.IsSelected && !string.IsNullOrWhiteSpace(item.Code)).GroupBy(item => item.Code.Trim(), StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1).Select(group => group.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in _rows) row.Status = row.IsSelected ? Validate(row, duplicateCodes) : "Omitido por el usuario";
             ApplySort();
             UpdatePreviewPage();
-            var invalidRows = _rows.Where(item => item.Status.StartsWith("ERROR", StringComparison.Ordinal)).ToList();
-            ImportButton.IsEnabled = _rows.Count > 0 && invalidRows.Count == 0;
+            var invalidRows = _rows.Where(item => item.IsSelected && item.Status.StartsWith("ERROR", StringComparison.Ordinal)).ToList();
+            SetImportActionsEnabled(_rows.Any(item => item.IsSelected) && invalidRows.Count == 0);
             ErrorDetailsText.Text = invalidRows.Count == 0
                 ? string.Empty
                 : string.Join(Environment.NewLine, invalidRows.Take(8).Select(item => $"Fila {item.RowNumber}: {item.Status[7..]}")) + (invalidRows.Count > 8 ? $"{Environment.NewLine}... y {invalidRows.Count - 8} error(es) mas." : string.Empty);
@@ -168,7 +258,7 @@ public partial class ProductImportWindow : Window
         }
         catch (Exception exception)
         {
-            ImportButton.IsEnabled = false;
+            SetImportActionsEnabled(false);
             ErrorDetailsText.Text = "No se pudo validar la vista previa. Revisa el ultimo dato editado: " + exception.Message;
             return 1;
         }
@@ -197,7 +287,7 @@ public partial class ProductImportWindow : Window
         NextPageButton.IsEnabled = _currentPage < TotalPages;
         var first = _sortedRows.Count == 0 ? 0 : ((_currentPage - 1) * PageSize) + 1;
         var last = Math.Min(_currentPage * PageSize, _sortedRows.Count);
-        PageInfoText.Text = _sortedRows.Count == 0 ? "Sin filas cargadas." : $"Pagina {_currentPage} de {TotalPages}. Mostrando {first}-{last} de {_sortedRows.Count} productos.";
+        PageInfoText.Text = _sortedRows.Count == 0 ? "Sin filas cargadas." : $"Página {_currentPage} de {TotalPages}. Mostrando {first}-{last} de {_sortedRows.Count}; {_rows.Count(item => item.IsSelected)} seleccionados.";
     }
 
     private void ApplySort()

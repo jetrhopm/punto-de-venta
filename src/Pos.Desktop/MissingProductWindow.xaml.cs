@@ -14,19 +14,31 @@ public enum MissingProductDecision
 public partial class MissingProductWindow : Window
 {
     private readonly string _scannedCode;
+    private readonly bool _commonOnly;
     public MissingProductDecision Decision { get; private set; } = MissingProductDecision.Cancel;
     public string ProductCode { get; private set; } = string.Empty;
     public string ProductDescription { get; private set; } = string.Empty;
     public decimal Price { get; private set; }
+    public decimal Quantity { get; private set; } = 1m;
     public string UnitOfMeasure { get; private set; } = "Pieza";
 
-    public MissingProductWindow(string scannedCode)
+    public MissingProductWindow(string scannedCode, bool commonOnly = false)
     {
         InitializeComponent();
         _scannedCode = scannedCode.Trim();
-        CodeText.Text = $"Codigo leido: {_scannedCode}";
+        _commonOnly = commonOnly;
+        CodeText.Text = commonOnly ? "Se agregará solo al ticket actual y no se registrará en el inventario." : $"Codigo leido: {_scannedCode}";
         DescriptionBox.Text = "";
         PriceBox.Text = "0.00";
+        if (commonOnly)
+        {
+            Title = "Artículo común";
+            TitleText.Text = "Artículo común";
+            TitleText.Foreground = System.Windows.Media.Brushes.DodgerBlue;
+            InstructionText.Text = "Captura nombre, unidad, cantidad y precio. Este artículo queda conservado en el ticket, pero no se agrega al catálogo ni modifica existencias.";
+            RegisterButton.Visibility = Visibility.Collapsed;
+            CommonButton.Content = "Agregar al ticket";
+        }
         Loaded += (_, _) =>
         {
             DescriptionBox.Focus();
@@ -36,6 +48,7 @@ public partial class MissingProductWindow : Window
 
     private void OnRegisterClick(object sender, RoutedEventArgs e)
     {
+        if (_commonOnly) return;
         if (!TryReadValues()) return;
         ProductCode = _scannedCode;
         ProductDescription = string.IsNullOrWhiteSpace(ProductDescription) ? "Producto sin nombre" : ProductDescription;
@@ -60,8 +73,7 @@ public partial class MissingProductWindow : Window
 
     private bool TryReadValues()
     {
-        if (!decimal.TryParse(PriceBox.Text, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out var price) &&
-            !decimal.TryParse(PriceBox.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out price))
+        if (!TryParse(PriceBox.Text, out var price))
         {
             MessageText.Text = "Escribe un precio valido.";
             return false;
@@ -73,10 +85,21 @@ public partial class MissingProductWindow : Window
             return false;
         }
 
+        if (!TryParse(QuantityBox.Text, out var quantity) || quantity <= 0m)
+        {
+            MessageText.Text = "Escribe una cantidad mayor a cero.";
+            return false;
+        }
+
         ProductDescription = DescriptionBox.Text.Trim();
         Price = decimal.Round(price, 2);
+        Quantity = decimal.Round(quantity, 3);
         var selectedUnit = UnitBox.SelectedItem as ComboBoxItem;
         UnitOfMeasure = selectedUnit?.Tag?.ToString() ?? selectedUnit?.Content?.ToString() ?? "Pieza";
         return true;
     }
+
+    private static bool TryParse(string value, out decimal result) =>
+        decimal.TryParse(value, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out result) ||
+        decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
 }

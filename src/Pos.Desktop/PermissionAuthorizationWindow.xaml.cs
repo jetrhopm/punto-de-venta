@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Input;
 
@@ -48,12 +49,12 @@ public partial class PermissionAuthorizationWindow : Window
     {
         if (UserComboBox.SelectedItem is not ActiveUser user)
         {
-            StatusText.Text = "Selecciona el usuario que autoriza esta acción.";
+            ShowAuthorizationError("Selecciona el usuario que autoriza esta acción.", MessageBoxImage.Warning);
             return;
         }
         if (string.IsNullOrEmpty(PasswordBox.Password))
         {
-            StatusText.Text = "Escribe la contraseña del usuario que autoriza.";
+            ShowAuthorizationError("Escribe la contraseña del usuario que autoriza.", MessageBoxImage.Warning);
             PasswordBox.Focus();
             return;
         }
@@ -63,7 +64,9 @@ public partial class PermissionAuthorizationWindow : Window
             using var response = await ApiClient.Client.PostAsJsonAsync("api/auth/temporary-permission", new { userName = user.UserName, password = PasswordBox.Password, permission = _permission });
             if (!response.IsSuccessStatusCode)
             {
-                StatusText.Text = "La cuenta o contraseña no son válidas, o esa cuenta no tiene el permiso requerido.";
+                var message = await ReadAuthorizationErrorAsync(response);
+                var image = response.StatusCode == System.Net.HttpStatusCode.Forbidden ? MessageBoxImage.Warning : MessageBoxImage.Error;
+                ShowAuthorizationError(message, image);
                 PasswordBox.SelectAll();
                 PasswordBox.Focus();
                 return;
@@ -75,17 +78,42 @@ public partial class PermissionAuthorizationWindow : Window
         }
         catch (Exception exception)
         {
-            StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo validar la autorización");
+            ShowAuthorizationError(ConnectionHelp.FromException(exception, "No se pudo validar la autorización"), MessageBoxImage.Error);
         }
     }
 
     private void OnCancelClick(object sender, RoutedEventArgs e) => DialogResult = false;
     private void OnPreviewKeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.Escape) { DialogResult = false; e.Handled = true; } }
 
+    private static async Task<string> ReadAuthorizationErrorAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var error = await response.Content.ReadFromJsonAsync<AuthorizationError>();
+            if (!string.IsNullOrWhiteSpace(error?.Detail)) return error.Detail;
+        }
+        catch (System.Text.Json.JsonException) { }
+        return response.StatusCode switch
+        {
+            System.Net.HttpStatusCode.Unauthorized => "La contraseña del usuario que autoriza no es correcta.",
+            System.Net.HttpStatusCode.Forbidden => "Ese usuario no tiene el permiso requerido para autorizar esta acción.",
+            System.Net.HttpStatusCode.NotFound => "El usuario que autoriza ya no está disponible.",
+            _ => "No se pudo validar la autorización temporal. Intenta nuevamente."
+        };
+    }
+
+    private void ShowAuthorizationError(string message, MessageBoxImage image)
+    {
+        StatusText.Text = message;
+        MessageBox.Show(message, "Autorización no concedida", MessageBoxButton.OK, image);
+    }
+
     private sealed record ActiveUser(string UserName, string DisplayName)
     {
         public string DisplayText => $"{DisplayName} ({UserName})";
     }
+
+    private sealed record AuthorizationError(string? Detail);
 
     public sealed record TemporaryAuthorizationResponse(Guid? GrantId, DateTimeOffset ExpiresAtUtc, string AuthorizedBy);
 }

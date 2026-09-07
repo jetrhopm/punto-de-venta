@@ -20,6 +20,7 @@ public partial class LoginWindow : Window
     private static readonly Brush ErrorStatusBorder = new SolidColorBrush(Color.FromRgb(232, 187, 183));
     private static HttpClient Client => ApiClient.Client;
     private bool _isBusy;
+    private bool _licenseBlocksLogin;
     private string? _licenseReminder;
     private List<LoginUserOption> _users = [];
 
@@ -46,21 +47,27 @@ public partial class LoginWindow : Window
         }
 
         var configured = await EnsureInitialSetupAsync();
-        SetBusy(false);
         if (configured)
         {
             await LoadActiveUsersAsync();
-            SetStatus("JetVenta está listo. Elige tu usuario e ingresa tu contraseña.", StatusKind.Success);
-            if (UserComboBox.SelectedItem is null) UserComboBox.Focus();
-            else PasswordBox.Focus();
+            await RefreshPublicLicenseStatusAsync(showTrialNotice: true);
+            if (!_licenseBlocksLogin)
+            {
+                SetStatus("JetVenta está listo. Elige tu usuario e ingresa tu contraseña.", StatusKind.Success);
+                if (UserComboBox.SelectedItem is null) UserComboBox.Focus();
+                else PasswordBox.Focus();
+            }
         }
+        SetBusy(false);
     }
 
     private void OnPasswordPreviewKeyUp(object sender, KeyEventArgs e) => UpdateCapsLockWarning();
 
     private void OnUserSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        if (UserComboBox.SelectedItem is LoginUserOption) PasswordBox.Focus();
+        if (UserComboBox.SelectedItem is not LoginUserOption selectedUser) return;
+        UserComboBox.Text = selectedUser.UserName.ToLowerInvariant();
+        PasswordBox.Focus();
     }
 
     private async Task LoadActiveUsersAsync()
@@ -96,13 +103,22 @@ public partial class LoginWindow : Window
     private async void OnLoginClick(object sender, RoutedEventArgs e)
     {
         if (_isBusy) return;
+        if (_licenseBlocksLogin)
+        {
+            SetStatus("La demo terminó o la licencia no es válida. Pulsa Activar licencia para continuar.", StatusKind.Error);
+            ActivateLicenseButton.Focus();
+            return;
+        }
 
         var typedUserName = UserComboBox.Text.Trim();
-        var selectedUser = _users.FirstOrDefault(user => string.Equals(user.UserName, typedUserName, StringComparison.OrdinalIgnoreCase))
-            ?? UserComboBox.SelectedItem as LoginUserOption;
+        var selectedUser = _users.FirstOrDefault(user =>
+            string.Equals(user.UserName, typedUserName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(user.DisplayText, typedUserName, StringComparison.OrdinalIgnoreCase));
         if (selectedUser is null)
         {
-            SetStatus("Elige un usuario de la lista o escribe un usuario válido.", StatusKind.Error);
+            SetStatus(string.IsNullOrWhiteSpace(typedUserName)
+                ? "Escribe o selecciona un usuario para continuar."
+                : "El usuario escrito no existe o está desactivado.", StatusKind.Error);
             UserComboBox.Focus();
             return;
         }
@@ -150,7 +166,6 @@ public partial class LoginWindow : Window
             SessionContext.IsAdministrator = result.IsAdministrator;
             SessionContext.Permissions.Clear();
             SessionContext.Permissions.UnionWith(result.Permissions);
-            // La consulta de licencia requiere la sesión recién creada.
             ApiClient.ApplySession(result.AccessToken);
             if (!await EnsureLicenseActiveAsync()) return;
             var mainWindow = new MainWindow();
@@ -181,29 +196,77 @@ public partial class LoginWindow : Window
     {
         try
         {
-            var status = await Client.GetFromJsonAsync<LicenseStatus>("api/license/status");
+            var status = await Client.GetFromJsonAsync<LicenseStatus>("api/license/public-status");
             if (status?.IsActive == true)
             {
                 _licenseReminder = string.Equals(status.State, "trial", StringComparison.OrdinalIgnoreCase) ? status.Message : null;
                 return true;
             }
 
-            var license = new LicenseWindow { Owner = this };
-            license.ShowDialog();
-            status = await Client.GetFromJsonAsync<LicenseStatus>("api/license/status");
-            if (status?.IsActive == true)
-            {
-                _licenseReminder = string.Equals(status.State, "trial", StringComparison.OrdinalIgnoreCase) ? status.Message : null;
-                return true;
-            }
-
-            SetStatus("JetVenta requiere una licencia válida. Un administrador debe cargar el archivo licencia.jv para este equipo.", StatusKind.Error);
+            await RefreshPublicLicenseStatusAsync(showTrialNotice: false);
+            SetStatus("JetVenta requiere una licencia válida. Pulsa Activar licencia para cargar el archivo licencia.jv.", StatusKind.Error);
             return false;
         }
         catch (HttpRequestException)
         {
             SetStatus(ConnectionHelp.ApiUnavailableRetry, StatusKind.Error);
             return false;
+        }
+    }
+
+    private async void OnActivateLicenseClick(object sender, RoutedEventArgs e)
+    {
+        if (_isBusy) return;
+        var license = new LicenseWindow(allowPreLoginActivation: true) { Owner = this };
+        license.ShowDialog();
+        await RefreshPublicLicenseStatusAsync(showTrialNotice: false);
+        SetBusy(false);
+        if (!_licenseBlocksLogin)
+        {
+            SetStatus("Licencia válida. Ya puedes iniciar sesión.", StatusKind.Success);
+            PasswordBox.Focus();
+        }
+    }
+
+    private async Task RefreshPublicLicenseStatusAsync(bool showTrialNotice)
+    {
+        try
+        {
+            var status = await Client.GetFromJsonAsync<LicenseStatus>("api/license/public-status");
+            if (status is null) throw new InvalidOperationException("JetVenta no devolvió el estado de la licencia.");
+
+            var trial = string.Equals(status.State, "trial", StringComparison.OrdinalIgnoreCase);
+            _licenseBlocksLogin = !status.IsActive;
+            LicenseStatusBorder.Visibility = status.IsActive && !trial ? Visibility.Collapsed : Visibility.Visible;
+            if (LicenseStatusBorder.Visibility == Visibility.Visible)
+            {
+                LicenseStatusBorder.Background = _licenseBlocksLogin ? ErrorStatusBackground : DefaultStatusBackground;
+                LicenseStatusBorder.BorderBrush = _licenseBlocksLogin ? ErrorStatusBorder : DefaultStatusBorder;
+                LicenseStatusIcon.Kind = _licenseBlocksLogin ? PackIconMaterialKind.AlertCircleOutline : PackIconMaterialKind.CalendarClockOutline;
+                LicenseStatusIcon.Foreground = _licenseBlocksLogin ? (Brush)FindResource("DangerBrush") : (Brush)FindResource("WarningBrush");
+                LicenseTitleText.Text = trial ? "Periodo de prueba activo" : "Activación requerida";
+                LicenseMessageText.Text = status.Message;
+                LicenseExpirationText.Text = status.ExpiresAtUtc is null ? string.Empty : $"Finaliza el {status.ExpiresAtUtc.Value.LocalDateTime:dd/MM/yyyy HH:mm}.";
+                ActivateLicenseButton.IsEnabled = true;
+            }
+
+            if (trial && showTrialNotice && status.ExpiresAtUtc is not null)
+            {
+                new TrialNoticeWindow(status.ExpiresAtUtc.Value) { Owner = this }.ShowDialog();
+            }
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            _licenseBlocksLogin = true;
+            LicenseStatusBorder.Visibility = Visibility.Visible;
+            LicenseStatusBorder.Background = ErrorStatusBackground;
+            LicenseStatusBorder.BorderBrush = ErrorStatusBorder;
+            LicenseStatusIcon.Kind = PackIconMaterialKind.AlertCircleOutline;
+            LicenseStatusIcon.Foreground = (Brush)FindResource("DangerBrush");
+            LicenseTitleText.Text = "No se pudo consultar la licencia";
+            LicenseMessageText.Text = ConnectionHelp.ApiUnavailableRetry;
+            LicenseExpirationText.Text = string.Empty;
+            ActivateLicenseButton.IsEnabled = false;
         }
     }
 
@@ -258,10 +321,11 @@ public partial class LoginWindow : Window
     private void SetBusy(bool isBusy, string? message = null)
     {
         _isBusy = isBusy;
-        LoginButton.IsEnabled = !isBusy;
+        LoginButton.IsEnabled = !isBusy && !_licenseBlocksLogin;
         ServerButton.IsEnabled = !isBusy;
         PairButton.IsEnabled = !isBusy;
         UserComboBox.IsEnabled = !isBusy;
+        ActivateLicenseButton.IsEnabled = !isBusy && LicenseStatusBorder.Visibility == Visibility.Visible;
         BusyProgress.Visibility = isBusy ? Visibility.Visible : Visibility.Collapsed;
         LoginButtonIcon.Kind = isBusy ? PackIconMaterialKind.ProgressClock : PackIconMaterialKind.LoginVariant;
         LoginButtonText.Text = isBusy ? "Espera un momento" : "Iniciar sesión";

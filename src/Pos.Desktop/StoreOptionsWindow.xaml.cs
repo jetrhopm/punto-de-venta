@@ -54,7 +54,11 @@ public partial class StoreOptionsWindow : Window
         {
             using var response = await ApiClient.Client.PutAsJsonAsync("/api/store-options", command);
             if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
-            StatusText.Text = "Opciones guardadas correctamente.";
+            var rounding = command.roundSaleAmounts ? $"redondeo {((string)command.roundingMode == "Whole" ? "a pesos cerrados" : "a décimas")}" : "redondeo desactivado";
+            var summary = $"Inventario: {(command.inventoryEnabled ? "activado" : "desactivado")}; crédito: {(command.creditSalesEnabled ? "activado" : "desactivado")}; producto común: {(command.commonProductsEnabled ? "activado" : "desactivado")}; {rounding}.";
+            StatusText.Text = summary;
+            MessageBox.Show(summary, "Opciones guardadas", MessageBoxButton.OK, MessageBoxImage.Information);
+            DialogResult = true;
         }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron guardar las opciones"); }
     }

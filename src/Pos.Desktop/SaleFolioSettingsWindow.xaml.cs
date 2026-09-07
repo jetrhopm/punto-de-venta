@@ -60,7 +60,8 @@ public partial class SaleFolioSettingsWindow : Window
             CurrentNextFolioText.Text = settings.NextFolio.ToString("N0");
             LastFolioText.Text = settings.LastIssuedFolio == 0 ? "Sin ventas" : settings.LastIssuedFolio.ToString("N0");
             NextFolioBox.Text = settings.NextFolio.ToString();
-            StatusText.Text = "El siguiente folio fue actualizado correctamente.";
+            StatusText.Text = "El siguiente folio fue actualizado correctamente y se aplicará a la siguiente venta.";
+            DialogResult = true;
         }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar el consecutivo"); }
     }

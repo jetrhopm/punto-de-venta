@@ -3,6 +3,8 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 
 namespace Pos.Desktop;
 
@@ -25,6 +27,7 @@ public partial class ProductCatalogWindow : UserControl
         InitializeComponent();
         Loaded += async (_, _) =>
         {
+            RenameCatalogActions();
             await LoadStoreOptionsAsync();
             ClearForm();
             await LoadMeasureSettingsAsync();
@@ -47,6 +50,7 @@ public partial class ProductCatalogWindow : UserControl
         SortBox.SelectionChanged += OnFilterSelectionChanged;
         DescendingBox.Checked += OnFilterCheckedChanged;
         DescendingBox.Unchecked += OnFilterCheckedChanged;
+        ProductsGrid.MouseDoubleClick += OnProductGridDoubleClick;
     }
 
     private async Task LoadStoreOptionsAsync()
@@ -182,7 +186,44 @@ public partial class ProductCatalogWindow : UserControl
         _loadingForm = false;
     }
 
-    private void OnNewClick(object sender, RoutedEventArgs e) => ClearForm();
+    private void OnNewClick(object sender, RoutedEventArgs e) => OpenEditor(null);
+
+    private void OnProductGridDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (_selected is not null) OpenEditor(ToEditorModel(_selected));
+    }
+
+    private void OpenEditor(ProductEditorModel? product)
+    {
+        var window = new ProductEditorWindow(product) { Owner = Window.GetWindow(this) };
+        window.Saved += async (_, _) =>
+        {
+            await LoadCatalogAsync();
+            ClearForm();
+            StatusText.Text = product is null ? "Producto creado correctamente." : "Producto actualizado correctamente.";
+        };
+        window.ShowDialog();
+    }
+
+    private static ProductEditorModel ToEditorModel(CatalogProductRow row) => new(row.Id, row.Code, row.Description, row.DepartmentId, row.UnitOfMeasure, row.Cost, row.ProfitPercent, row.Price, row.WholesalePrice, row.WholesaleProfitPercent, row.WholesaleMinimumQuantity, row.Stock, row.MinimumStock, row.MaximumStock, row.IsKit);
+
+    private void RenameCatalogActions()
+    {
+        foreach (var text in FindVisualChildren<TextBlock>(this).Where(item => string.Equals(item.Text, "Desactivar", StringComparison.Ordinal)))
+        {
+            text.Text = "Retirar catálogo";
+        }
+    }
+
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            if (child is T typed) yield return typed;
+            foreach (var nested in FindVisualChildren<T>(child)) yield return nested;
+        }
+    }
     private void OnPricingChanged(object sender, RoutedEventArgs e) { if (!_loadingForm) CalculateSalePrice(); }
     private void OnWholesalePricingChanged(object sender, RoutedEventArgs e) { if (!_loadingForm) CalculateWholesalePrice(); }
     private void OnPriceChanged(object sender, TextChangedEventArgs e) { UpdateProfitAmount(); }
@@ -215,13 +256,13 @@ public partial class ProductCatalogWindow : UserControl
 
     private async void OnDeactivateClick(object sender, RoutedEventArgs e)
     {
-        if (_selected is null) { StatusText.Text = "Selecciona un producto para desactivarlo."; return; }
-        if (MessageBox.Show($"Se desactivará {_selected.Code} - {_selected.Description}. El historial se conservará.", "Desactivar producto", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        if (_selected is null) { StatusText.Text = "Selecciona un producto para retirarlo del catálogo."; return; }
+        if (MessageBox.Show($"{_selected.Code} - {_selected.Description} dejará de aparecer para venta y búsqueda. Sus ventas, existencias y reportes históricos se conservarán.", "Retirar producto del catálogo", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         try
         {
             using var response = await ApiClient.Client.DeleteAsync($"/api/products/{_selected.Id}");
             if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
-            ClearForm(); await LoadCatalogAsync(); StatusText.Text = "Producto desactivado. El historial se conserva.";
+            ClearForm(); await LoadCatalogAsync(); StatusText.Text = "Producto retirado del catálogo. El historial se conserva.";
         }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo desactivar el producto"); }
     }

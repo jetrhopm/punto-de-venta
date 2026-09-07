@@ -9,6 +9,52 @@ namespace Pos.IntegrationTests;
 public sealed class CashRegisterIntegrationTests
 {
     [Fact]
+    public async Task DoesNotOpenTheSameRegisterForAnotherCashierAndIdentifiesTheOpenShiftOwner()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var firstToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var secondToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda relevo " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow };
+        var firstCashier = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "PRIMERO_" + suffix, DisplayName = "Cajero que dejó la caja", PasswordHash = "test", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var secondCashier = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "SEGUNDO_" + suffix, DisplayName = "Cajero que intenta entrar", PasswordHash = "test", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja relevo " + suffix, IsActive = true };
+        database.AddRange(
+            store,
+            firstCashier,
+            secondCashier,
+            register,
+            new SessionRecord { Id = Guid.NewGuid(), UserId = firstCashier.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(firstToken))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) },
+            new SessionRecord { Id = Guid.NewGuid(), UserId = secondCashier.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(secondToken))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) });
+        await database.SaveChangesAsync();
+
+        try
+        {
+            var shifts = new ShiftService(database);
+            Assert.NotNull(await shifts.OpenAsync(firstToken, new OpenShiftCommand(register.Id, 0m), CancellationToken.None));
+
+            var availability = await shifts.GetRegisterAvailabilityAsync(register.Id, CancellationToken.None);
+            Assert.NotNull(availability);
+            Assert.Equal(firstCashier.DisplayName, availability!.OpenShiftUserName);
+            Assert.NotNull(availability.OpenedAtUtc);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => shifts.OpenAsync(secondToken, new OpenShiftCommand(register.Id, 0m), CancellationToken.None));
+            Assert.Contains(firstCashier.DisplayName, exception.Message);
+        }
+        finally
+        {
+            database.Shifts.RemoveRange(database.Shifts.Where(item => item.RegisterId == register.Id));
+            database.Sessions.RemoveRange(database.Sessions.Where(item => item.UserId == firstCashier.Id || item.UserId == secondCashier.Id));
+            database.Registers.Remove(register);
+            database.Users.RemoveRange(firstCashier, secondCashier);
+            database.Stores.Remove(store);
+            await database.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
     public async Task CashierCanReadCutSettingsAndCloseWithTemporaryCloseShiftPermission()
     {
         await using var database = new PosDbContextFactory().CreateDbContext([]);
@@ -38,14 +84,15 @@ public sealed class CashRegisterIntegrationTests
                 new TemporaryPermissionAuthorizationCommand(administrator.NormalizedUserName, "clave-admin", "CloseShift"),
                 CancellationToken.None);
 
-            Assert.NotNull(grant);
+            Assert.True(grant.Succeeded);
+            Assert.NotNull(grant.Authorization);
             Assert.DoesNotContain("ConfigureStore", await database.Permissions.Where(item => item.UserId == cashier.Id).Select(item => item.Code).ToListAsync());
             Assert.NotNull(await new CutSettingsService(database).GetAsync(token, CancellationToken.None));
             Assert.Null(await new CashRegisterService(database).CloseAsync(token, new CloseShiftCommand(250m), CancellationToken.None));
             Assert.True(await database.Shifts.AnyAsync(item => item.RegisterId == register.Id && item.Status == "Open"));
-            Assert.NotNull(await new CashRegisterService(database).CloseAsync(token, new CloseShiftCommand(250m, grant!.GrantId), CancellationToken.None));
+            Assert.NotNull(await new CashRegisterService(database).CloseAsync(token, new CloseShiftCommand(250m, grant.Authorization!.GrantId), CancellationToken.None));
             Assert.False(await database.Shifts.AnyAsync(item => item.RegisterId == register.Id && item.Status == "Open"));
-            Assert.False(await database.Permissions.IgnoreQueryFilters().AnyAsync(item => item.Id == grant!.GrantId));
+            Assert.False(await database.Permissions.IgnoreQueryFilters().AnyAsync(item => item.Id == grant.Authorization.GrantId));
 
             Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(register.Id, 100m), CancellationToken.None));
             var expiredGrant = new PermissionRecord

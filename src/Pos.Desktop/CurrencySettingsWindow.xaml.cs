@@ -28,7 +28,9 @@ public partial class CurrencySettingsWindow : Window
         try
         {
             using var response = await ApiClient.Client.PutAsJsonAsync("api/currency-settings", new { currencySymbol = symbol });
-            StatusText.Text = response.IsSuccessStatusCode ? "Símbolo de moneda guardado correctamente." : await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
+            StatusText.Text = "Símbolo guardado. Se aplicará a los nuevos tickets y comprobantes.";
+            DialogResult = true;
         }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar el símbolo"); }
     }

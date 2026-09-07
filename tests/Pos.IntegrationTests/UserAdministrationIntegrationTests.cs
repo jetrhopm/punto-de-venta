@@ -69,11 +69,24 @@ public sealed class UserAdministrationIntegrationTests
         try
         {
             var authentication = new AuthenticationService(database, hasher);
+            var missingUser = await authentication.GrantTemporaryPermissionAsync(actorToken, new TemporaryPermissionAuthorizationCommand("NO_EXISTE_" + suffix, "clave-admin", "CloseShift"), CancellationToken.None);
+            Assert.False(missingUser.Succeeded);
+            Assert.Equal("approver-not-found", missingUser.FailureCode);
+
+            var invalidPassword = await authentication.GrantTemporaryPermissionAsync(actorToken, new TemporaryPermissionAuthorizationCommand(administrator.NormalizedUserName, "incorrecta", "CloseShift"), CancellationToken.None);
+            Assert.False(invalidPassword.Succeeded);
+            Assert.Equal("invalid-password", invalidPassword.FailureCode);
+
+            var missingPermission = await authentication.GrantTemporaryPermissionAsync(actorToken, new TemporaryPermissionAuthorizationCommand(cashier.NormalizedUserName, "clave-cajero", "CloseShift"), CancellationToken.None);
+            Assert.False(missingPermission.Succeeded);
+            Assert.Equal("approver-missing-permission", missingPermission.FailureCode);
+
             var grant = await authentication.GrantTemporaryPermissionAsync(actorToken, new TemporaryPermissionAuthorizationCommand(administrator.NormalizedUserName, "clave-admin", "CloseShift"), CancellationToken.None);
 
-            Assert.NotNull(grant);
-            Assert.NotNull(grant.GrantId);
-            Assert.True(grant.ExpiresAtUtc > DateTimeOffset.UtcNow);
+            Assert.True(grant.Succeeded);
+            Assert.NotNull(grant.Authorization);
+            Assert.NotNull(grant.Authorization.GrantId);
+            Assert.True(grant.Authorization.ExpiresAtUtc > DateTimeOffset.UtcNow);
             Assert.True(await database.Permissions.AnyAsync(item => item.UserId == cashier.Id && item.Code == "CloseShift"));
 
             var users = await new UserAdministrationService(database, hasher).ListAsync(administratorToken, CancellationToken.None);

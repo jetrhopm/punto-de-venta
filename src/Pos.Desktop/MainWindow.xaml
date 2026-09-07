@@ -53,12 +53,20 @@
         <Border Grid.Row="0" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1">
             <Grid Margin="16,0">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="210"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Image Source="/Assets/jetventa-icon.png" Width="44" Height="44" Margin="0,0,11,0"/>
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="JetVenta" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextBrush}"/>
-                        <TextBlock x:Name="StoreNameText" Text="Conectando..." FontSize="12" Foreground="{StaticResource TextMutedBrush}" TextTrimming="CharacterEllipsis" MaxWidth="165"/>
-                    </StackPanel>
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <Image Source="/Assets/jetventa-banner.png"
+                           Width="150" Height="50"
+                           Stretch="Uniform"
+                           RenderOptions.BitmapScalingMode="HighQuality"
+                           UseLayoutRounding="True"
+                           SnapsToDevicePixels="True"/>
+                    <TextBlock x:Name="StoreNameText"
+                               Text="Conectando..."
+                               FontSize="12"
+                               Foreground="{StaticResource TextMutedBrush}"
+                               TextTrimming="CharacterEllipsis"
+                               MaxWidth="195"
+                               HorizontalAlignment="Center"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -84,7 +92,7 @@
                         </StackPanel>
                     </StackPanel>
                     <Button Style="{StaticResource IconOnlyButton}" ToolTip="Minimizar" Click="OnMinimizeClick"><icons:PackIconMaterial Kind="WindowMinimize" Width="19" Height="19"/></Button>
-                    <Button Style="{StaticResource IconOnlyButton}" ToolTip="Salir" Click="OnExitClick"><icons:PackIconMaterial Kind="LogoutVariant" Width="20" Height="20" Foreground="{StaticResource DangerBrush}"/></Button>
+                    <Button Style="{StaticResource IconOnlyButton}" ToolTip="Salir de JetVenta" Click="OnExitClick"><icons:PackIconMaterial Kind="LogoutVariant" Width="20" Height="20" Foreground="{StaticResource DangerBrush}"/></Button>
                 </StackPanel>
             </Grid>
         </Border>
@@ -121,6 +129,7 @@
                         <Button Style="{StaticResource SalesToolbarButton}" Click="OnWholesaleClick" ToolTip="F11 - Mayoreo"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="Cash" Width="18" Height="18" Margin="0,0,5,0" Foreground="{StaticResource WarningBrush}"/><TextBlock Text="F11 Mayoreo"/></StackPanel></Button>
                         <Button Style="{StaticResource SalesToolbarButton}" Click="OnCashInClick" ToolTip="F7 - Entrada de efectivo"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="CashPlus" Width="18" Height="18" Margin="0,0,5,0" Foreground="{StaticResource SuccessBrush}"/><TextBlock Text="F7 Entradas"/></StackPanel></Button>
                         <Button Style="{StaticResource SalesToolbarButton}" Click="OnCashOutClick" ToolTip="F8 - Salida de efectivo"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="CashMinus" Width="18" Height="18" Margin="0,0,5,0" Foreground="{StaticResource DangerBrush}"/><TextBlock Text="F8 Salidas"/></StackPanel></Button>
+                        <Button Style="{StaticResource SalesToolbarButton}" Click="OnEditSelectedLineClick" ToolTip="Enter o doble clic - Cambiar cantidad"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="PencilOutline" Width="18" Height="18" Margin="0,0,5,0" Foreground="{StaticResource WarningBrush}"/><TextBlock Text="ENTER Cantidad"/></StackPanel></Button>
                         <Button Style="{StaticResource SalesToolbarButton}" Click="OnDeleteSelectedLineClick" ToolTip="DEL - Borrar partida"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="DeleteOutline" Width="18" Height="18" Margin="0,0,5,0" Foreground="{StaticResource DangerBrush}"/><TextBlock Text="DEL Borrar"/></StackPanel></Button>
                         <Button Style="{StaticResource SalesToolbarButton}" Click="OnPriceVerifierClick" ToolTip="F9 - Verificador"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="BarcodeScan" Width="18" Height="18" Margin="0,0,5,0" Foreground="#7C5799"/><TextBlock Text="F9 Verificador"/></StackPanel></Button>
                     </DockPanel>
@@ -145,13 +154,14 @@
                         </TabControl>
                     </Grid>
 
-                    <ListView Grid.Row="3" x:Name="CartList" Margin="0,10,0,14" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Background="#FBFDFF" KeyDown="OnCartKeyDown">
+                    <ListView Grid.Row="3" x:Name="CartList" Margin="0,10,0,14" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Background="#FBFDFF" KeyDown="OnCartKeyDown" MouseDoubleClick="OnCartLineDoubleClick">
                         <ListView.View>
                             <GridView AllowsColumnReorder="True">
                                 <GridViewColumn Header="Código de barras" DisplayMemberBinding="{Binding Code}" Width="125" />
                                 <GridViewColumn Header="Descripción" DisplayMemberBinding="{Binding Description}" Width="220" />
                                 <GridViewColumn Header="Precio venta" DisplayMemberBinding="{Binding UnitPrice, StringFormat={}{0:C2}}" Width="105" />
-                                <GridViewColumn Header="Cantidad" DisplayMemberBinding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="80" />
+                                <GridViewColumn Header="Tarifa" DisplayMemberBinding="{Binding PricingMode}" Width="95" />
+                                <GridViewColumn Header="Cantidad" DisplayMemberBinding="{Binding QuantityWithUnit}" Width="100" />
                                 <GridViewColumn Header="Descuento" DisplayMemberBinding="{Binding DiscountTotal, StringFormat={}{0:C2}}" Width="95" />
                                 <GridViewColumn Header="Importe" DisplayMemberBinding="{Binding Total, StringFormat={}{0:C2}}" Width="100" />
                                 <GridViewColumn Header="Existencia" DisplayMemberBinding="{Binding Stock, StringFormat={}{0:0.###}}" Width="90" />
@@ -167,7 +177,7 @@
                                 <icons:PackIconMaterial Kind="BarcodeScan" Width="23" Height="23" Foreground="{StaticResource PrimaryBrush}" Margin="11,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False"/>
                                 <TextBox x:Name="ProductSearchTextBox" Height="46" FontSize="17" Padding="43,7,10,7" TextChanged="OnProductSearchTextChanged" KeyDown="OnProductSearchKeyDown" ToolTip="Código de barras o descripción"/>
                             </Grid>
-                            <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Background="White"><ListBox x:Name="ProductResultsList" Height="140" DisplayMemberPath="DisplayText" Visibility="Collapsed" MouseDoubleClick="OnProductSelected"/></Border>
+                            <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Background="White"><ListBox x:Name="ProductResultsList" Height="140" DisplayMemberPath="DisplayText" Visibility="Collapsed" MouseDoubleClick="OnProductSelected" KeyDown="OnProductResultsKeyDown"/></Border>
                         </StackPanel>
                         <Button Grid.Column="1" Style="{StaticResource PrimaryButtonStyle}" Height="46" Width="104" Margin="10,24,0,0" Click="OnSearchButtonClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="Magnify" Width="20" Height="20" Margin="0,0,5,0"/><TextBlock Text="Buscar" VerticalAlignment="Center"/></StackPanel></Button>
                     </Grid>
@@ -181,6 +191,7 @@
                         <TextBlock Text="Venta en curso" FontSize="18" FontWeight="SemiBold"/>
                         <TextBlock Text="Total de la venta" Margin="0,22,0,2" HorizontalAlignment="Center" Foreground="{StaticResource TextMutedBrush}"/>
                         <TextBlock x:Name="SaleTotalText" Text="$0.00" FontSize="38" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
+                        <TextBlock x:Name="RoundingText" Visibility="Collapsed" HorizontalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" Margin="0,2,0,0" FontSize="11"/>
                         <TextBlock x:Name="SaleItemsText" Text="Artículos: 0" HorizontalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" Margin="0,2,0,15"/>
                     </StackPanel>
                     <StackPanel Grid.Row="2" Margin="0,18,0,0">

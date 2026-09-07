@@ -40,6 +40,74 @@ public sealed class ProductImportFileReaderTests
     }
 
     [Fact]
+    public void ReadsAllEleventaColumnsAndKeepsThreeExamplesPerColumn()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"eleventa-columns-{Guid.NewGuid():N}.csv");
+        try
+        {
+            File.WriteAllText(path,
+                "Código;Producto;P. Costo;P. Venta;P. Mayoreo;Departamento;Existencia;Inv. Mínimo;Inv. Máximo;Tipo de Venta;Proveedor\r\n" +
+                "001;Arroz;10;15;14;Abarrotes;8;1;20;Pieza;Proveedor A\r\n" +
+                "002;Frijol;12;18;16;Abarrotes;6;1;20;Pieza;Proveedor B\r\n" +
+                "003;Azúcar;9;14;13;Abarrotes;5;1;20;Pieza;Proveedor C\r\n" +
+                "004;Sal;4;7;6;Abarrotes;9;1;20;Pieza;Proveedor D\r\n", new UTF8Encoding(true));
+
+            var source = ProductImportFileReader.ReadSource(path);
+            var mapping = ProductImportFileReader.SuggestMapping(source);
+
+            Assert.Equal(11, source.Columns.Count);
+            Assert.Equal("Código", source.Columns[0].Header);
+            Assert.Equal(new[] { "001", "002", "003" }, source.Columns[0].Examples);
+            Assert.Equal(0, mapping.CodeColumn);
+            Assert.Equal(1, mapping.DescriptionColumn);
+            Assert.Equal(3, mapping.PriceColumn);
+            Assert.Equal(10, mapping.SupplierColumn);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void MapsUnknownAndDisorderedColumnsSelectedByUser()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"mapped-{Guid.NewGuid():N}.xlsx");
+        try
+        {
+            using (var workbook = new XLWorkbook())
+            {
+                var sheet = workbook.AddWorksheet("Productos");
+                sheet.Cell(1, 1).Value = "Dato A";
+                sheet.Cell(1, 2).Value = "Dato B";
+                sheet.Cell(1, 3).Value = "Dato C";
+                sheet.Cell(1, 4).Value = "Dato D";
+                sheet.Cell(2, 1).Value = 27.50m;
+                sheet.Cell(2, 2).Value = "Producto fuera de orden";
+                sheet.Cell(2, 3).Value = "000045";
+                sheet.Cell(2, 4).Value = 8m;
+                workbook.SaveAs(path);
+            }
+
+            var source = ProductImportFileReader.ReadSource(path);
+            var mapping = new ProductImportColumnMapping
+            {
+                PriceColumn = 0,
+                DescriptionColumn = 1,
+                CodeColumn = 2,
+                StockColumn = 3
+            };
+
+            var row = Assert.Single(ProductImportFileReader.Map(source, mapping, 1m));
+
+            Assert.Equal("000045", row.Code);
+            Assert.Equal("Producto fuera de orden", row.Description);
+            Assert.Equal(27.50m, row.Price);
+            Assert.Equal(8m, row.Stock);
+            Assert.True(row.IsSelected);
+            Assert.Equal("Válido", row.Status);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void ConvertsNonNumericInventoryFieldsToZero()
     {
         var path = Path.Combine(Path.GetTempPath(), $"eleventa-{Guid.NewGuid():N}.xlsx");

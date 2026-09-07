@@ -9,6 +9,7 @@ namespace Pos.Desktop;
 
 public sealed class ProductImportPreviewRow
 {
+    public bool IsSelected { get; set; } = true;
     public int RowNumber { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
@@ -55,37 +56,127 @@ public sealed class ProductImportPreviewRow
     private static string FormatNumber(decimal value) => value == decimal.MinValue ? string.Empty : value.ToString("0.###", CultureInfo.GetCultureInfo("es-MX"));
 }
 
+public sealed record ProductImportSourceColumn(int Index, string Header, IReadOnlyList<string> Examples)
+{
+    public string Sample => Examples.FirstOrDefault() ?? string.Empty;
+    public string ExampleText => Examples.Count == 0 ? string.Empty : string.Join(" | ", Examples);
+    public string DisplayText => string.IsNullOrWhiteSpace(ExampleText) ? Header : $"{Header}  |  Ejemplos: {ExampleText}";
+}
+
+public sealed record ProductImportSourceRow(int RowNumber, IReadOnlyList<string> Values);
+
+public sealed record ProductImportSource(IReadOnlyList<ProductImportSourceColumn> Columns, IReadOnlyList<ProductImportSourceRow> Rows);
+
+public sealed class ProductImportColumnMapping
+{
+    public int? CodeColumn { get; set; }
+    public int? DescriptionColumn { get; set; }
+    public int? CostColumn { get; set; }
+    public int? PriceColumn { get; set; }
+    public int? WholesalePriceColumn { get; set; }
+    public int? StockColumn { get; set; }
+    public int? CategoryColumn { get; set; }
+    public int? MinimumStockColumn { get; set; }
+    public int? MaximumStockColumn { get; set; }
+    public int? UnitOfMeasureColumn { get; set; }
+    public int? SupplierColumn { get; set; }
+
+    public ProductImportColumnMapping Clone() => new()
+    {
+        CodeColumn = CodeColumn,
+        DescriptionColumn = DescriptionColumn,
+        CostColumn = CostColumn,
+        PriceColumn = PriceColumn,
+        WholesalePriceColumn = WholesalePriceColumn,
+        StockColumn = StockColumn,
+        CategoryColumn = CategoryColumn,
+        MinimumStockColumn = MinimumStockColumn,
+        MaximumStockColumn = MaximumStockColumn,
+        UnitOfMeasureColumn = UnitOfMeasureColumn,
+        SupplierColumn = SupplierColumn
+    };
+}
+
 public static class ProductImportFileReader
 {
     public static IReadOnlyList<ProductImportPreviewRow> Read(string path, decimal defaultWholesaleMinimum)
     {
+        var source = ReadSource(path);
+        return Map(source, SuggestMapping(source), defaultWholesaleMinimum);
+    }
+
+    public static ProductImportSource ReadSource(string path)
+    {
         var extension = Path.GetExtension(path);
-        var rows = extension.Equals(".xlsx", StringComparison.OrdinalIgnoreCase) ? ReadXlsx(path, defaultWholesaleMinimum) : ReadCsv(path, defaultWholesaleMinimum);
+        return extension.Equals(".xlsx", StringComparison.OrdinalIgnoreCase) ? ReadXlsxSource(path) : ReadCsvSource(path);
+    }
+
+    public static ProductImportColumnMapping SuggestMapping(ProductImportSource source) => new()
+    {
+        // These aliases match the export headers used by Eleventa and common variants from spreadsheet edits.
+        CodeColumn = Find(source, "codigo", "codigodebarras", "codigoproducto", "codigodeproducto", "clave"),
+        DescriptionColumn = Find(source, "producto", "descripcion", "descripcionproducto", "nombre", "nombreproducto"),
+        CostColumn = Find(source, "pcosto", "costo", "preciocosto", "preciodecosto", "preciocompra"),
+        PriceColumn = Find(source, "pventa", "precioventa", "preciodeventa", "precio", "preciopublico"),
+        WholesalePriceColumn = Find(source, "pmayoreo", "preciomayoreo", "preciodemayoreo", "mayoreo"),
+        StockColumn = Find(source, "existencia", "existenciaactual", "stock", "inventario"),
+        CategoryColumn = Find(source, "departamento", "departamentoprincipal", "categoria"),
+        MinimumStockColumn = Find(source, "invminimo", "inventariominimo", "minimo", "stockminimo"),
+        MaximumStockColumn = Find(source, "invmaximo", "inventariomaximo", "maximo", "stockmaximo"),
+        UnitOfMeasureColumn = Find(source, "tipodeventa", "unidad", "unidaddemedida", "unidadmedida"),
+        SupplierColumn = Find(source, "proveedor", "proveedorprincipal")
+    };
+
+    public static IReadOnlyList<ProductImportPreviewRow> Map(ProductImportSource source, ProductImportColumnMapping mapping, decimal defaultWholesaleMinimum)
+    {
+        var rows = new List<ProductImportPreviewRow>();
+        foreach (var sourceRow in source.Rows)
+        {
+            var wholesale = Number(sourceRow, mapping.WholesalePriceColumn);
+            rows.Add(new ProductImportPreviewRow
+            {
+                RowNumber = sourceRow.RowNumber,
+                Code = Text(sourceRow, mapping.CodeColumn),
+                Description = Text(sourceRow, mapping.DescriptionColumn),
+                Cost = Number(sourceRow, mapping.CostColumn),
+                Price = Number(sourceRow, mapping.PriceColumn),
+                WholesalePrice = wholesale,
+                WholesaleMinimumQuantity = wholesale > 0 ? defaultWholesaleMinimum : 0m,
+                Stock = InventoryNumber(sourceRow, mapping.StockColumn),
+                Category = Text(sourceRow, mapping.CategoryColumn),
+                MinimumStock = InventoryNumber(sourceRow, mapping.MinimumStockColumn),
+                MaximumStock = InventoryNumber(sourceRow, mapping.MaximumStockColumn),
+                UnitOfMeasure = NormalizeUnit(Text(sourceRow, mapping.UnitOfMeasureColumn)),
+                SupplierName = Text(sourceRow, mapping.SupplierColumn)
+            });
+        }
+
         var duplicateCodes = rows.Where(item => !string.IsNullOrWhiteSpace(item.Code)).GroupBy(item => item.Code.Trim(), StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1).Select(group => group.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows) row.Status = Validate(row, duplicateCodes);
         return rows;
     }
 
-    private static IReadOnlyList<ProductImportPreviewRow> ReadXlsx(string path, decimal defaultWholesaleMinimum)
+    private static ProductImportSource ReadXlsxSource(string path)
     {
         using var workbook = new XLWorkbook(path);
         var sheet = workbook.Worksheets.First();
         var used = sheet.RangeUsed() ?? throw new InvalidDataException("La hoja está vacía.");
-        var headerRow = used.FirstRow();
-        var headers = headerRow.Cells(1, used.ColumnCount()).Select((cell, index) => (Name: NormalizeHeader(cell.GetString()), Column: index + 1)).ToDictionary(item => item.Name, item => item.Column, StringComparer.OrdinalIgnoreCase);
-        var result = new List<ProductImportPreviewRow>();
-        foreach (var row in used.RowsUsed().Skip(1))
+        var firstColumn = used.FirstColumn().ColumnNumber();
+        var lastColumn = used.LastColumn().ColumnNumber();
+        // Eleventa exports the column names in row 1. Keep them even when the used range starts later.
+        var headerRow = sheet.Row(1);
+        var headers = headerRow.Cells(firstColumn, lastColumn).Select((cell, index) => HeaderOrDefault(cell.GetString(), index)).ToArray();
+        var rows = new List<ProductImportSourceRow>();
+        foreach (var row in used.RowsUsed().Where(row => row.RowNumber() > 1))
         {
-            var code = Text(row, headers, "codigo", "codigodebarras", "clave");
-            var description = Text(row, headers, "producto", "descripcion", "nombre");
-            if (string.IsNullOrWhiteSpace(code) && string.IsNullOrWhiteSpace(description)) continue;
-            var wholesale = Number(row, headers, "pmayoreo", "preciomayoreo", "mayoreo");
-            result.Add(new ProductImportPreviewRow { RowNumber = row.RowNumber(), Code = code, Description = description, Price = Number(row, headers, "pventa", "precioventa", "precio"), Cost = Number(row, headers, "pcosto", "costo", "preciocosto"), Stock = InventoryNumber(row, headers, "existencia", "stock", "inventario"), WholesalePrice = wholesale, WholesaleMinimumQuantity = wholesale > 0 ? defaultWholesaleMinimum : 0m, Category = Text(row, headers, "departamento", "categoria"), MinimumStock = InventoryNumber(row, headers, "invminimo", "inventariominimo", "minimo"), MaximumStock = InventoryNumber(row, headers, "invmaximo", "inventariomaximo", "maximo"), UnitOfMeasure = NormalizeUnit(Text(row, headers, "tipodeventa", "unidad", "unidaddemedida")), SupplierName = Text(row, headers, "proveedor", "proveedorprincipal") });
+            var values = row.Cells(firstColumn, lastColumn).Select(cell => cell.GetFormattedString().Trim()).ToArray();
+            if (values.All(string.IsNullOrWhiteSpace)) continue;
+            rows.Add(new ProductImportSourceRow(row.RowNumber(), values));
         }
-        return result;
+        return BuildSource(headers, rows);
     }
 
-    private static IReadOnlyList<ProductImportPreviewRow> ReadCsv(string path, decimal defaultWholesaleMinimum)
+    private static ProductImportSource ReadCsvSource(string path)
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         var bytes = File.ReadAllBytes(path);
@@ -95,26 +186,43 @@ public static class ProductImportFileReader
         var configuration = new CsvConfiguration(CultureInfo.GetCultureInfo("es-MX")) { DetectDelimiter = true, BadDataFound = null, MissingFieldFound = null, TrimOptions = TrimOptions.Trim };
         using var csv = new CsvReader(new StringReader(text), configuration);
         if (!csv.Read() || !csv.ReadHeader()) throw new InvalidDataException("El CSV no contiene encabezados.");
-        var headers = (csv.HeaderRecord ?? []).Select((name, index) => (Name: NormalizeHeader(name), Column: index)).ToDictionary(item => item.Name, item => item.Column, StringComparer.OrdinalIgnoreCase);
-        var result = new List<ProductImportPreviewRow>();
+        var headers = (csv.HeaderRecord ?? []).Select(HeaderOrDefault).ToArray();
+        var rows = new List<ProductImportSourceRow>();
         while (csv.Read())
         {
-            var code = Text(csv, headers, "codigo", "codigodebarras", "clave");
-            var description = Text(csv, headers, "producto", "descripcion", "nombre");
-            if (string.IsNullOrWhiteSpace(code) && string.IsNullOrWhiteSpace(description)) continue;
-            var wholesale = Number(csv, headers, "pmayoreo", "preciomayoreo", "mayoreo");
-            result.Add(new ProductImportPreviewRow { RowNumber = csv.Parser.Row, Code = code, Description = description, Price = Number(csv, headers, "pventa", "precioventa", "precio"), Cost = Number(csv, headers, "pcosto", "costo", "preciocosto"), Stock = InventoryNumber(csv, headers, "existencia", "stock", "inventario"), WholesalePrice = wholesale, WholesaleMinimumQuantity = wholesale > 0 ? defaultWholesaleMinimum : 0m, Category = Text(csv, headers, "departamento", "categoria"), MinimumStock = InventoryNumber(csv, headers, "invminimo", "inventariominimo", "minimo"), MaximumStock = InventoryNumber(csv, headers, "invmaximo", "inventariomaximo", "maximo"), UnitOfMeasure = NormalizeUnit(Text(csv, headers, "tipodeventa", "unidad", "unidaddemedida")), SupplierName = Text(csv, headers, "proveedor", "proveedorprincipal") });
+            var values = Enumerable.Range(0, headers.Length).Select(index => csv.GetField(index)?.Trim() ?? string.Empty).ToArray();
+            if (values.All(string.IsNullOrWhiteSpace)) continue;
+            rows.Add(new ProductImportSourceRow(csv.Parser.Row, values));
         }
-        return result;
+        return BuildSource(headers, rows);
     }
 
-    private static string Text(IXLRangeRow row, Dictionary<string, int> headers, params string[] aliases) => Find(headers, aliases) is int column ? row.Cell(column).GetFormattedString().Trim() : string.Empty;
-    private static decimal Number(IXLRangeRow row, Dictionary<string, int> headers, params string[] aliases) => Find(headers, aliases) is int column ? ParseNumber(row.Cell(column).GetFormattedString()) : 0m;
-    private static decimal InventoryNumber(IXLRangeRow row, Dictionary<string, int> headers, params string[] aliases) => Find(headers, aliases) is int column ? ParseInventoryNumber(row.Cell(column).GetFormattedString()) : 0m;
-    private static string Text(CsvReader csv, Dictionary<string, int> headers, params string[] aliases) => Find(headers, aliases) is int column ? csv.GetField(column)?.Trim() ?? string.Empty : string.Empty;
-    private static decimal Number(CsvReader csv, Dictionary<string, int> headers, params string[] aliases) => ParseNumber(Text(csv, headers, aliases));
-    private static decimal InventoryNumber(CsvReader csv, Dictionary<string, int> headers, params string[] aliases) => ParseInventoryNumber(Text(csv, headers, aliases));
-    private static int? Find(Dictionary<string, int> headers, params string[] aliases) { foreach (var alias in aliases) if (headers.TryGetValue(alias, out var column)) return column; return null; }
+    private static ProductImportSource BuildSource(IReadOnlyList<string> headers, IReadOnlyList<ProductImportSourceRow> rows)
+    {
+        var columns = headers.Select((header, index) => new ProductImportSourceColumn(
+            index,
+            header,
+            rows.Select(row => Text(row, index))
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(3)
+                .ToArray())).ToArray();
+        return new ProductImportSource(columns, rows);
+    }
+
+    private static string HeaderOrDefault(string? value, int index)
+    {
+        var header = value?.Trim().TrimStart('\uFEFF') ?? string.Empty;
+        return string.IsNullOrWhiteSpace(header) ? $"Columna {index + 1}" : header;
+    }
+    private static string Text(ProductImportSourceRow row, int? column) => column is >= 0 && column < row.Values.Count ? row.Values[column.Value].Trim() : string.Empty;
+    private static decimal Number(ProductImportSourceRow row, int? column) => ParseNumber(Text(row, column));
+    private static decimal InventoryNumber(ProductImportSourceRow row, int? column) => ParseInventoryNumber(Text(row, column));
+    private static int? Find(ProductImportSource source, params string[] aliases)
+    {
+        var normalizedAliases = aliases.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return source.Columns.FirstOrDefault(column => normalizedAliases.Contains(NormalizeHeader(column.Header)))?.Index;
+    }
 
     private static decimal ParseNumber(string value)
     {

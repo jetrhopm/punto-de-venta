@@ -19,48 +19,30 @@ public partial class ServerConnectionWindow : Window
     private async void OnTestClick(object sender, RoutedEventArgs e)
     {
         if (!TryRead(out var host, out var port)) return;
-        var previous = new Uri(ApiClient.BaseUrl);
-        try
-        {
-            ApiClient.SetServer(host, port, persist: false);
-            using var health = await ApiClient.Client.GetAsync("health");
-            if (!health.IsSuccessStatusCode)
-            {
-                MessageText.Text = $"El servicio respondió {health.StatusCode}. Revisa la dirección y el puerto.";
-                return;
-            }
-
-            using var setup = await ApiClient.Client.GetAsync("api/setup/status");
-            if (setup.IsSuccessStatusCode)
-            {
-                MessageText.Text = "Conexión correcta: el servicio y la base de datos responden.";
-                return;
-            }
-
-            var errorBody = await setup.Content.ReadAsStringAsync();
-            var code = TryReadErrorCode(errorBody);
-            MessageText.Text = code switch
-            {
-                "pending_migrations" => "El servidor responde, pero necesita actualizar la base de datos. Usa Reparar servicios en esta ventana.",
-                "database_unavailable" => "El servidor responde, pero su base de datos no está lista. Usa Reparar servicios en esta ventana.",
-                _ => "El servidor responde, pero no se pudo consultar la tienda. Usa Reparar servicios o revisa PostgreSQL en el servidor."
-            };
-        }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or UriFormatException)
-        {
-            MessageText.Text = "No se pudo conectar. Revisa IP, puerto y Firewall de Windows.";
-        }
-        finally
-        {
-            ApiClient.SetServer(previous.Host, previous.Port, persist: false);
-        }
+        SetBusy(true);
+        try { MessageText.Text = (await TestConnectionAsync(host, port)).Message; }
+        finally { SetBusy(false); }
     }
 
-    private void OnSaveClick(object sender, RoutedEventArgs e)
+    private async void OnSaveClick(object sender, RoutedEventArgs e)
     {
         if (!TryRead(out var host, out var port)) return;
-        ApiClient.SetServer(host, port);
-        DialogResult = true;
+        SetBusy(true);
+        try
+        {
+            var result = await TestConnectionAsync(host, port);
+            MessageText.Text = result.Message;
+            if (!result.IsReady)
+            {
+                MessageBox.Show("La conexión no se guardó porque JetVenta no pudo comprobar el servicio y la base de datos en la dirección indicada. Corrige la conexión o repara los servicios antes de continuar.", "Conexión sin verificar", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            ApiClient.SetServer(host, port);
+            MessageBox.Show("La conexión se verificó y quedó guardada para esta caja.", "Conexión guardada", MessageBoxButton.OK, MessageBoxImage.Information);
+            DialogResult = true;
+        }
+        finally { SetBusy(false); }
     }
 
     private void OnRepairClick(object sender, RoutedEventArgs e)
@@ -71,6 +53,8 @@ public partial class ServerConnectionWindow : Window
             MessageText.Text = "La reparación automática solo está disponible para el servidor de esta computadora. Para otro equipo, revisa que esté encendido y que JetVenta esté instalado allí.";
             return;
         }
+
+        if (MessageBox.Show(ConnectionHelp.LocalRepairConfirmation, "Reparar servicios", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
 
         RepairRequested = true;
         MessageText.Text = "JetVenta cerrará esta ventana y revisará PostgreSQL, la API y las migraciones. No se borrarán productos ni ventas.";
@@ -95,6 +79,50 @@ public partial class ServerConnectionWindow : Window
         }
     }
 
+    private static async Task<ConnectionTestResult> TestConnectionAsync(string host, int port)
+    {
+        var previousAddress = ApiClient.BaseUrl;
+        try
+        {
+            ApiClient.SetServer(host, port, persist: false);
+            using var health = await ApiClient.Client.GetAsync("health");
+            if (!health.IsSuccessStatusCode)
+            {
+                return new(false, $"El servicio respondió {health.StatusCode}. Revisa la dirección y el puerto.");
+            }
+
+            using var setup = await ApiClient.Client.GetAsync("api/setup/status");
+            if (setup.IsSuccessStatusCode)
+            {
+                return new(true, "Conexión correcta: el servicio y la base de datos responden.");
+            }
+
+            var errorBody = await setup.Content.ReadAsStringAsync();
+            var code = TryReadErrorCode(errorBody);
+            return new(false, code switch
+            {
+                "pending_migrations" => "El servidor responde, pero necesita actualizar la base de datos. Usa Reparar servicios en esta ventana.",
+                "database_unavailable" => "El servidor responde, pero su base de datos no está lista. Usa Reparar servicios en esta ventana.",
+                _ => "El servidor responde, pero no se pudo consultar la tienda. Usa Reparar servicios o revisa PostgreSQL en el servidor."
+            });
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or UriFormatException or ArgumentException)
+        {
+            return new(false, "No se pudo conectar. Revisa IP, puerto y Firewall de Windows.");
+        }
+        finally
+        {
+            ApiClient.SetServerUrl(previousAddress, persist: false);
+        }
+    }
+
+    private void SetBusy(bool isBusy)
+    {
+        TestButton.IsEnabled = !isBusy;
+        RepairButton.IsEnabled = !isBusy;
+        SaveButton.IsEnabled = !isBusy;
+    }
+
     private bool TryRead(out string host, out int port)
     {
         host = HostTextBox.Text.Trim();
@@ -106,4 +134,6 @@ public partial class ServerConnectionWindow : Window
         if (host.Length == 0) { MessageText.Text = "Escribe la IP o el nombre del servidor."; return false; }
         return true;
     }
+
+    private sealed record ConnectionTestResult(bool IsReady, string Message);
 }

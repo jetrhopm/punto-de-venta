@@ -9,6 +9,10 @@ public sealed record LoginCommand(string UserName, string Password);
 public sealed record LoginResult(Guid SessionId, string AccessToken, Guid UserId, string DisplayName, bool IsAdministrator, DateTimeOffset ExpiresAtUtc, IReadOnlyList<string> Permissions);
 public sealed record TemporaryPermissionAuthorizationCommand(string UserName, string Password, string Permission);
 public sealed record TemporaryPermissionAuthorizationResult(Guid? GrantId, DateTimeOffset ExpiresAtUtc, string AuthorizedBy);
+public sealed record TemporaryPermissionAuthorizationAttempt(TemporaryPermissionAuthorizationResult? Authorization, string? FailureCode)
+{
+    public bool Succeeded => Authorization is not null;
+}
 
 public sealed class AuthenticationService(PosDbContext database, PasswordHasher<UserRecord> passwordHasher)
 {
@@ -51,29 +55,30 @@ public sealed class AuthenticationService(PosDbContext database, PasswordHasher<
         return true;
     }
 
-    public async Task<TemporaryPermissionAuthorizationResult?> GrantTemporaryPermissionAsync(
+    public async Task<TemporaryPermissionAuthorizationAttempt> GrantTemporaryPermissionAsync(
         string actorToken,
         TemporaryPermissionAuthorizationCommand command,
         CancellationToken cancellationToken)
     {
         if (!Enum.TryParse<Pos.Domain.Permission>(command.Permission, ignoreCase: false, out _) ||
-            string.IsNullOrWhiteSpace(command.UserName) || string.IsNullOrEmpty(command.Password)) return null;
+            string.IsNullOrWhiteSpace(command.UserName) || string.IsNullOrEmpty(command.Password)) return new(null, "invalid-request");
 
         var actor = await GetActiveSessionUserAsync(actorToken, cancellationToken);
-        if (actor is null) return null;
+        if (actor is null) return new(null, "session-expired");
 
         var normalized = InitialSetupService.NormalizeUserName(command.UserName);
         var approver = await database.Users.SingleOrDefaultAsync(item => item.NormalizedUserName == normalized && item.IsActive, cancellationToken);
-        if (approver is null || passwordHasher.VerifyHashedPassword(approver, approver.PasswordHash, command.Password) == PasswordVerificationResult.Failed) return null;
+        if (approver is null) return new(null, "approver-not-found");
+        if (passwordHasher.VerifyHashedPassword(approver, approver.PasswordHash, command.Password) == PasswordVerificationResult.Failed) return new(null, "invalid-password");
 
         var approverCanAuthorize = approver.IsAdministrator || await database.Permissions
             .IgnoreQueryFilters()
             .AnyAsync(item => item.UserId == approver.Id && item.Code == command.Permission && item.ExpiresAtUtc == null, cancellationToken);
-        if (!approverCanAuthorize) return null;
+        if (!approverCanAuthorize) return new(null, "approver-missing-permission");
 
         var current = await database.Permissions.IgnoreQueryFilters()
             .SingleOrDefaultAsync(item => item.UserId == actor.Id && item.Code == command.Permission, cancellationToken);
-        if (current is { ExpiresAtUtc: null }) return new TemporaryPermissionAuthorizationResult(null, DateTimeOffset.UtcNow, approver.DisplayName);
+        if (current is { ExpiresAtUtc: null }) return new(new TemporaryPermissionAuthorizationResult(null, DateTimeOffset.UtcNow, approver.DisplayName), null);
 
         // El permiso cubre el tiempo de contar efectivo y se revoca al terminar la acción.
         // La expiración es únicamente el respaldo de seguridad si el cliente pierde conexión.
@@ -97,7 +102,7 @@ public sealed class AuthenticationService(PosDbContext database, PasswordHasher<
         }
 
         await database.SaveChangesAsync(cancellationToken);
-        return new TemporaryPermissionAuthorizationResult(current.Id, expiresAtUtc, approver.DisplayName);
+        return new(new TemporaryPermissionAuthorizationResult(current.Id, expiresAtUtc, approver.DisplayName), null);
     }
 
     public async Task<bool> RevokeTemporaryPermissionAsync(string actorToken, Guid grantId, CancellationToken cancellationToken)

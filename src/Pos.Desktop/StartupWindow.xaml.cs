@@ -34,7 +34,17 @@ public partial class StartupWindow : Window
 
     private async void OnRetryClick(object sender, RoutedEventArgs e) => await RunStartupCheckAsync();
 
-    private async void OnRepairClick(object sender, RoutedEventArgs e) => await RunStartupCheckAsync(forceRepair: true);
+    private async void OnRepairClick(object sender, RoutedEventArgs e)
+    {
+        if (_isChecking) return;
+        if (!IsLocalApi())
+        {
+            MessageBox.Show("La reparación automática sólo está disponible cuando JetVenta usa los servicios de esta computadora. Para un servidor remoto, verifica que el otro equipo esté encendido, conectado y con JetVenta instalado; después usa Configurar conexión.", "Servidor remoto", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (MessageBox.Show(ConnectionHelp.LocalRepairConfirmation, "Reparar servicios", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        await RunStartupCheckAsync(forceRepair: true);
+    }
 
     private async void OnConfigureClick(object sender, RoutedEventArgs e)
     {

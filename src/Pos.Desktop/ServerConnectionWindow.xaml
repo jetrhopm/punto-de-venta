@@ -8,6 +8,6 @@
         <TextBlock Grid.Row="1" Margin="0,8,0,16" Text="Escribe el nombre o la IP de la computadora servidor." Foreground="#526577" TextWrapping="Wrap" />
         <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="100"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,8,0"><TextBlock Text="IP o nombre"/><TextBox x:Name="HostTextBox" Height="32" Margin="0,4,0,0" /></StackPanel><StackPanel Grid.Column="1"><TextBlock Text="Puerto"/><TextBox x:Name="PortTextBox" Height="32" Margin="0,4,0,0" Text="5000" /></StackPanel></Grid>
         <TextBlock Grid.Row="3" x:Name="MessageText" Margin="0,14,0,0" TextWrapping="Wrap" Foreground="#526577" />
-        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right"><Button Width="135" Margin="0,0,8,0" Click="OnTestClick">Probar conexion</Button><Button Width="145" Margin="0,0,8,0" Click="OnRepairClick">Reparar servicios</Button><Button Width="90" IsDefault="True" Click="OnSaveClick">Guardar</Button></StackPanel>
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right"><Button x:Name="TestButton" Width="135" Margin="0,0,8,0" Click="OnTestClick">Probar conexion</Button><Button x:Name="RepairButton" Width="145" Margin="0,0,8,0" Click="OnRepairClick">Reparar servicios</Button><Button x:Name="SaveButton" Width="90" IsDefault="True" Click="OnSaveClick">Guardar</Button></StackPanel>
     </Grid>
 </Window>
