@@ -454,9 +454,9 @@ app.MapGet("/api/products/catalog", async (string? q, Guid? departmentId, decima
     var result = await catalog.CatalogAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), q, departmentId, minimumPrice, maximumPrice, minimumProfit, sort ?? "description", descending, page ?? 1, 500, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
-app.MapGet("/api/departments", async (ProductCatalogService catalog, HttpRequest request, CancellationToken cancellationToken) =>
+app.MapGet("/api/departments", async (bool? includeInactive, ProductCatalogService catalog, HttpRequest request, CancellationToken cancellationToken) =>
 {
-    var result = await catalog.ListDepartmentsAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    var result = await catalog.ListDepartmentsAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), includeInactive == true, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
 app.MapPost("/api/departments", async (DepartmentCommand command, ProductCatalogService catalog, HttpRequest request, CancellationToken cancellationToken) =>
@@ -818,6 +818,11 @@ app.MapPost("/api/auth/temporary-permission", async (HttpRequest request, Tempor
         _ => StatusCodes.Status401Unauthorized
     };
     return Results.Json(new { code = attempt.FailureCode, message = attempt.FailureMessage }, statusCode: statusCode);
+});
+app.MapPut("/api/departments/{id:guid}/status", async (Guid id, DepartmentStatusCommand command, ProductCatalogService catalog, HttpRequest request, CancellationToken cancellationToken) =>
+{
+    try { var result = await catalog.SetDepartmentStatusAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), id, command.IsActive, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { updated = true }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
 app.MapPost("/api/inventory/department", async (HttpRequest request, InventoryDepartmentChangeCommand command, InventoryService inventory, CancellationToken cancellationToken) =>
 {

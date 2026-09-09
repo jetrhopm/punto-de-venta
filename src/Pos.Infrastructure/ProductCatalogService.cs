@@ -7,6 +7,7 @@ namespace Pos.Infrastructure;
 
 public sealed record ProductCommand(string Code, string Description, decimal Price, decimal Cost = 0m, decimal ProfitPercent = 20m, decimal WholesalePrice = 0m, decimal WholesaleProfitPercent = 0m, decimal WholesaleMinimumQuantity = 0m, bool IsKit = false, string UnitOfMeasure = "Pieza", Guid? DepartmentId = null, bool IsCommonProduct = false, decimal InitialStock = 0m, decimal MinimumStock = 0m, decimal MaximumStock = 0m);
 public sealed record DepartmentCommand(string Name);
+public sealed record DepartmentStatusCommand(bool IsActive);
 public sealed record ProductResult(Guid Id, string Code, string Description, decimal Price, decimal Cost, decimal ProfitPercent, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleMinimumQuantity, Guid? DepartmentId, bool IsKit, string UnitOfMeasure, bool IsActive);
 public sealed record CatalogProductResult(Guid Id, string Code, string Description, string Department, Guid? DepartmentId, decimal Cost, decimal Price, decimal ProfitPercent, decimal ProfitAmount, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleProfitAmount, decimal WholesaleMinimumQuantity, decimal Stock, decimal MinimumStock, decimal MaximumStock, string UnitOfMeasure, bool IsKit, bool IsActive);
 public sealed record CatalogPageResult(IReadOnlyList<CatalogProductResult> Items, int Page, int PageSize, int TotalCount, int TotalPages);
@@ -58,7 +59,13 @@ public sealed class ProductCatalogService(PosDbContext database)
         return true;
     }
     public static string NormalizeCode(string code) => code.Trim().ToUpperInvariant();
-    public async Task<IReadOnlyList<DepartmentResult>?> ListDepartmentsAsync(string accessToken, CancellationToken cancellationToken) => await GetAuthorizedUserAsync(accessToken, "ViewProducts", cancellationToken) is null ? null : await database.Departments.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.Name).Select(item => new DepartmentResult(item.Id, item.Name, item.IsActive)).ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<DepartmentResult>?> ListDepartmentsAsync(string accessToken, bool includeInactive, CancellationToken cancellationToken)
+    {
+        if (await GetAuthorizedUserAsync(accessToken, "ViewProducts", cancellationToken) is null) return null;
+        var departments = database.Departments.AsNoTracking();
+        if (!includeInactive) departments = departments.Where(item => item.IsActive);
+        return await departments.OrderBy(item => item.Name).Select(item => new DepartmentResult(item.Id, item.Name, item.IsActive)).ToListAsync(cancellationToken);
+    }
     public async Task<DepartmentResult?> CreateDepartmentAsync(string accessToken, string name, CancellationToken cancellationToken)
     {
         if (await GetAuthorizedUserAsync(accessToken, "ManageProducts", cancellationToken) is null) return null;
@@ -75,6 +82,14 @@ public sealed class ProductCatalogService(PosDbContext database)
     public async Task<bool?> DeactivateDepartmentAsync(string accessToken, Guid id, CancellationToken cancellationToken)
     {
         if (await GetAuthorizedUserAsync(accessToken, "ManageProducts", cancellationToken) is null) return null; var item = await database.Departments.SingleOrDefaultAsync(department => department.Id == id && department.IsActive, cancellationToken) ?? throw new KeyNotFoundException("Departamento no encontrado."); item.IsActive = false; await database.SaveChangesAsync(cancellationToken); return true;
+    }
+    public async Task<bool?> SetDepartmentStatusAsync(string accessToken, Guid id, bool isActive, CancellationToken cancellationToken)
+    {
+        if (await GetAuthorizedUserAsync(accessToken, "ManageProducts", cancellationToken) is null) return null;
+        var item = await database.Departments.SingleOrDefaultAsync(department => department.Id == id, cancellationToken) ?? throw new KeyNotFoundException("Departamento no encontrado.");
+        item.IsActive = isActive;
+        await database.SaveChangesAsync(cancellationToken);
+        return true;
     }
     public async Task<CatalogPageResult?> CatalogAsync(string accessToken, string? query, Guid? departmentId, decimal? minimumPrice, decimal? maximumPrice, decimal? minimumProfit, string sort, bool descending, int page, int pageSize, CancellationToken cancellationToken)
     {

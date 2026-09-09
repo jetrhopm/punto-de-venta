@@ -10,11 +10,11 @@ public partial class DepartmentManagerWindow : Window
     public DepartmentManagerWindow() { InitializeComponent(); Loaded += async (_, _) => await LoadAsync(); }
     private async Task LoadAsync()
     {
-        try { DepartmentsGrid.ItemsSource = await ApiClient.Client.GetFromJsonAsync<List<DepartmentRow>>("/api/departments") ?? []; StatusText.Text = "Los departamentos se pueden cambiar sin afectar el historial."; }
+        try { DepartmentsGrid.ItemsSource = await ApiClient.Client.GetFromJsonAsync<List<DepartmentRow>>("/api/departments?includeInactive=true") ?? []; StatusText.Text = "Los departamentos inactivos se conservan y pueden reactivarse sin afectar el historial."; }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron cargar los departamentos"); }
     }
-    private void OnSelectionChanged(object sender, SelectionChangedEventArgs e) { if (DepartmentsGrid.SelectedItem is DepartmentRow row) { _selected = row; NameBox.Text = row.Name; } }
-    private void OnNewClick(object sender, RoutedEventArgs e) { _selected = null; DepartmentsGrid.SelectedItem = null; NameBox.Clear(); NameBox.Focus(); }
+    private void OnSelectionChanged(object sender, SelectionChangedEventArgs e) { if (DepartmentsGrid.SelectedItem is DepartmentRow row) { _selected = row; NameBox.Text = row.Name; SaveButton.IsEnabled = row.IsActive; DeactivateButton.Visibility = row.IsActive ? Visibility.Visible : Visibility.Collapsed; ReactivateButton.Visibility = row.IsActive ? Visibility.Collapsed : Visibility.Visible; StatusText.Text = row.IsActive ? "Departamento activo." : "Departamento inactivo. Reactívalo para volver a asignarlo a productos."; } }
+    private void OnNewClick(object sender, RoutedEventArgs e) { _selected = null; DepartmentsGrid.SelectedItem = null; NameBox.Clear(); SaveButton.IsEnabled = true; DeactivateButton.Visibility = Visibility.Visible; ReactivateButton.Visibility = Visibility.Collapsed; NameBox.Focus(); }
     private async void OnSaveClick(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(NameBox.Text)) { StatusText.Text = "Escribe un nombre."; return; }
@@ -33,5 +33,11 @@ public partial class DepartmentManagerWindow : Window
         try { using var response = await ApiClient.Client.DeleteAsync($"/api/departments/{_selected.Id}"); if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; } await LoadAsync(); OnNewClick(sender, e); StatusText.Text = "Departamento desactivado."; }
         catch (Exception exception) { StatusText.Text = $"No se pudo desactivar: {exception.Message}"; }
     }
-    private sealed record DepartmentRow(Guid Id, string Name, bool IsActive);
+    private async void OnReactivateClick(object sender, RoutedEventArgs e)
+    {
+        if (_selected is null) { StatusText.Text = "Selecciona un departamento inactivo."; return; }
+        try { using var response = await ApiClient.Client.PutAsJsonAsync($"/api/departments/{_selected.Id}/status", new { isActive = true }); if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; } await LoadAsync(); OnNewClick(sender, e); StatusText.Text = "Departamento reactivado. Ya puede asignarse a productos."; }
+        catch (Exception exception) { StatusText.Text = $"No se pudo reactivar: {exception.Message}"; }
+    }
+    private sealed record DepartmentRow(Guid Id, string Name, bool IsActive) { public string Status => IsActive ? "Activo" : "Inactivo"; }
 }

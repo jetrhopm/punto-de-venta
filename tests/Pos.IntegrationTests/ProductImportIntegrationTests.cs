@@ -25,6 +25,12 @@ public sealed class ProductImportIntegrationTests
             var catalog = new ProductCatalogService(database);
             var first = await catalog.CreateDepartmentAsync(token, firstName, CancellationToken.None);
             Assert.NotNull(first);
+            Assert.True(await catalog.DeactivateDepartmentAsync(token, first.Id, CancellationToken.None));
+            Assert.DoesNotContain((await catalog.ListDepartmentsAsync(token, false, CancellationToken.None))!, item => item.Id == first.Id);
+            var includingInactive = await catalog.ListDepartmentsAsync(token, true, CancellationToken.None);
+            Assert.Contains(includingInactive!, item => item.Id == first.Id && !item.IsActive);
+            Assert.True(await catalog.SetDepartmentStatusAsync(token, first.Id, true, CancellationToken.None));
+            Assert.Contains((await catalog.ListDepartmentsAsync(token, false, CancellationToken.None))!, item => item.Id == first.Id && item.IsActive);
             await Assert.ThrowsAsync<InvalidOperationException>(() => catalog.CreateDepartmentAsync(token, equivalentName, CancellationToken.None));
 
             var second = await catalog.CreateDepartmentAsync(token, "Bebidas " + suffix, CancellationToken.None);
