@@ -46,11 +46,7 @@ public sealed class ProductImportPreviewRow
 
     private static decimal? ParseDecimal(string value)
     {
-        var cleaned = (value ?? string.Empty).Trim().Replace("$", string.Empty).Replace(" ", string.Empty);
-        if (string.IsNullOrEmpty(cleaned) || cleaned == "-") return 0m;
-        if (decimal.TryParse(cleaned, NumberStyles.Number | NumberStyles.AllowCurrencySymbol, CultureInfo.GetCultureInfo("es-MX"), out var mexican)) return mexican;
-        if (decimal.TryParse(cleaned, NumberStyles.Number | NumberStyles.AllowCurrencySymbol, CultureInfo.InvariantCulture, out var invariant)) return invariant;
-        return null;
+        return ProductImportFileReader.TryParseFlexibleNumber(value, out var parsed) ? parsed : null;
     }
 
     private static string FormatNumber(decimal value) => value == decimal.MinValue ? string.Empty : value.ToString("0.###", CultureInfo.GetCultureInfo("es-MX"));
@@ -74,6 +70,7 @@ public sealed class ProductImportColumnMapping
     public int? CostColumn { get; set; }
     public int? PriceColumn { get; set; }
     public int? WholesalePriceColumn { get; set; }
+    public int? WholesaleMinimumQuantityColumn { get; set; }
     public int? StockColumn { get; set; }
     public int? CategoryColumn { get; set; }
     public int? MinimumStockColumn { get; set; }
@@ -88,6 +85,7 @@ public sealed class ProductImportColumnMapping
         CostColumn = CostColumn,
         PriceColumn = PriceColumn,
         WholesalePriceColumn = WholesalePriceColumn,
+        WholesaleMinimumQuantityColumn = WholesaleMinimumQuantityColumn,
         StockColumn = StockColumn,
         CategoryColumn = CategoryColumn,
         MinimumStockColumn = MinimumStockColumn,
@@ -119,6 +117,7 @@ public static class ProductImportFileReader
         CostColumn = Find(source, "pcosto", "costo", "preciocosto", "preciodecosto", "preciocompra"),
         PriceColumn = Find(source, "pventa", "precioventa", "preciodeventa", "precio", "preciopublico"),
         WholesalePriceColumn = Find(source, "pmayoreo", "preciomayoreo", "preciodemayoreo", "mayoreo"),
+        WholesaleMinimumQuantityColumn = Find(source, "minimomayoreo", "cantidadminimamayoreo", "minimoarticulosmayoreo", "minimodearticulos"),
         StockColumn = Find(source, "existencia", "existenciaactual", "stock", "inventario"),
         CategoryColumn = Find(source, "departamento", "departamentoprincipal", "categoria"),
         MinimumStockColumn = Find(source, "invminimo", "inventariominimo", "minimo", "stockminimo"),
@@ -133,6 +132,7 @@ public static class ProductImportFileReader
         foreach (var sourceRow in source.Rows)
         {
             var wholesale = Number(sourceRow, mapping.WholesalePriceColumn);
+            var wholesaleMinimum = InventoryNumber(sourceRow, mapping.WholesaleMinimumQuantityColumn);
             rows.Add(new ProductImportPreviewRow
             {
                 RowNumber = sourceRow.RowNumber,
@@ -141,7 +141,7 @@ public static class ProductImportFileReader
                 Cost = Number(sourceRow, mapping.CostColumn),
                 Price = Number(sourceRow, mapping.PriceColumn),
                 WholesalePrice = wholesale,
-                WholesaleMinimumQuantity = wholesale > 0 ? defaultWholesaleMinimum : 0m,
+                WholesaleMinimumQuantity = wholesale > 0 ? (wholesaleMinimum > 0 ? wholesaleMinimum : defaultWholesaleMinimum) : 0m,
                 Stock = InventoryNumber(sourceRow, mapping.StockColumn),
                 Category = Text(sourceRow, mapping.CategoryColumn),
                 MinimumStock = InventoryNumber(sourceRow, mapping.MinimumStockColumn),
@@ -226,11 +226,7 @@ public static class ProductImportFileReader
 
     private static decimal ParseNumber(string value)
     {
-        var cleaned = value.Trim().Replace("$", string.Empty).Replace(" ", string.Empty);
-        if (string.IsNullOrEmpty(cleaned)) return 0m;
-        if (decimal.TryParse(cleaned, NumberStyles.Number | NumberStyles.AllowCurrencySymbol, CultureInfo.GetCultureInfo("es-MX"), out var mexican)) return mexican;
-        if (decimal.TryParse(cleaned, NumberStyles.Number | NumberStyles.AllowCurrencySymbol, CultureInfo.InvariantCulture, out var invariant)) return invariant;
-        return decimal.MinValue;
+        return TryParseFlexibleNumber(value, out var parsed) ? parsed : decimal.MinValue;
     }
 
     private static decimal ParseInventoryNumber(string value)
@@ -254,6 +250,47 @@ public static class ProductImportFileReader
     {
         var normalized = value.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD);
         return new string(normalized.Where(character => CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark && char.IsLetterOrDigit(character)).ToArray());
+    }
+
+    public static bool TryParseFlexibleNumber(string? value, out decimal result)
+    {
+        var cleaned = (value ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(cleaned) || cleaned == "-")
+        {
+            result = 0m;
+            return true;
+        }
+
+        cleaned = cleaned
+            .Replace("$", string.Empty, StringComparison.Ordinal)
+            .Replace("MXN", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("USD", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace(" ", string.Empty, StringComparison.Ordinal);
+        var comma = cleaned.LastIndexOf(',');
+        var point = cleaned.LastIndexOf('.');
+        if (comma >= 0 && point >= 0)
+        {
+            // The rightmost separator is decimal: $1,000.00 and 1.000,00.
+            cleaned = comma > point
+                ? cleaned.Replace(".", string.Empty).Replace(',', '.')
+                : cleaned.Replace(",", string.Empty);
+        }
+        else if (comma >= 0)
+        {
+            cleaned = IsThousandsSeparator(cleaned, comma) ? cleaned.Replace(",", string.Empty) : cleaned.Replace(',', '.');
+        }
+        else if (point >= 0 && IsThousandsSeparator(cleaned, point))
+        {
+            cleaned = cleaned.Replace(".", string.Empty);
+        }
+
+        return decimal.TryParse(cleaned, NumberStyles.Number | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out result);
+    }
+
+    private static bool IsThousandsSeparator(string value, int separatorIndex)
+    {
+        var decimals = value.Length - separatorIndex - 1;
+        return decimals == 3 && value.Count(character => character == value[separatorIndex]) == 1;
     }
 
     public static string NormalizeUnit(string value)

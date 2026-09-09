@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -14,12 +15,12 @@ public sealed class ProductImportService(PosDbContext database)
     {
         var userId = await AuthorizedAsync(token, cancellationToken);
         if (userId is null) return null;
-        var existing = await database.ImportBatches.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
-        if (existing is not null) return new(existing.Id, existing.CreatedCount, existing.UpdatedCount, existing.SkippedCount, true);
         Validate(command);
         var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
 
-        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        var existing = await database.ImportBatches.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
+        if (existing is not null) return new(existing.Id, existing.CreatedCount, existing.UpdatedCount, existing.SkippedCount, true);
         var normalizedCodes = command.Rows.Select(item => ProductCatalogService.NormalizeCode(item.Code)).ToArray();
         var products = await database.Products.Where(item => normalizedCodes.Contains(item.NormalizedCode)).ToDictionaryAsync(item => item.NormalizedCode, cancellationToken);
         var suppliers = (await database.Suppliers.ToListAsync(cancellationToken)).GroupBy(item => NormalizeName(item.Name), StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);

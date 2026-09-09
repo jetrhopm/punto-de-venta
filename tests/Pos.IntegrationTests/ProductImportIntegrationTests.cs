@@ -8,6 +8,45 @@ namespace Pos.IntegrationTests;
 public sealed class ProductImportIntegrationTests
 {
     [Fact]
+    public async Task RejectsWholeBatchWhenAnySelectedRowIsInvalid()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var suffix = Guid.NewGuid().ToString("N");
+        var user = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "ATOMIC_" + suffix, DisplayName = "Atomic import", PasswordHash = "test", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        var createdStore = !await database.Stores.AnyAsync();
+        var store = createdStore ? new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda atomic " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow } : null;
+        database.AddRange(user, session);
+        if (store is not null) database.Stores.Add(store);
+        await database.SaveChangesAsync();
+        var operationId = Guid.NewGuid();
+        var validCode = "ATOMIC-" + suffix;
+        try
+        {
+            var command = new ProductImportCommand(operationId, "lote.xlsx", "Skip",
+            [
+                new ProductImportRow(2, validCode, "Fila válida", 10m, 5m, 4m, 0m, 0m),
+                new ProductImportRow(3, "INVALID-" + suffix, "Fila inválida", 10m, 5m, 4m, 0m, 0m, MinimumStock: 8m, MaximumStock: 2m)
+            ]);
+
+            await Assert.ThrowsAsync<ArgumentException>(() => new ProductImportService(database).ImportAsync(token, command, CancellationToken.None));
+
+            Assert.False(await database.Products.AnyAsync(item => item.NormalizedCode == ProductCatalogService.NormalizeCode(validCode)));
+            Assert.False(await database.ImportBatches.AnyAsync(item => item.OperationId == operationId));
+            Assert.False(await database.InventoryMovements.AnyAsync(item => item.OperationId == operationId));
+        }
+        finally
+        {
+            database.Sessions.RemoveRange(database.Sessions.Where(item => item.UserId == user.Id));
+            database.Users.Remove(user);
+            if (store is not null) database.Stores.Remove(store);
+            await database.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
     public async Task CreatesRealPostgreSqlBackupWithChecksum()
     {
         await using var database = new PosDbContextFactory().CreateDbContext([]);
@@ -76,6 +115,14 @@ public sealed class ProductImportIntegrationTests
             Assert.Equal("Producto actualizado", updatedProduct.Description); Assert.Equal(33m, updatedProduct.Price); Assert.Equal(17m, updatedProduct.Cost); Assert.Equal(28m, updatedProduct.WholesalePrice); Assert.Equal(2m, updatedProduct.WholesaleMinimumQuantity); Assert.Equal(9m, updatedProduct.Stock); Assert.Equal("Bebidas", updatedProduct.Category); Assert.Equal("Kilogramo", updatedProduct.UnitOfMeasure);
             Assert.Equal(2, await database.InventoryMovements.CountAsync(item => item.ProductId == productId));
             Assert.Equal(updatedSupplierName, await database.Products.Where(item => item.Id == productId).Select(item => item.PrimarySupplierId).Join(database.Suppliers, id => id, supplier => supplier.Id, (_, supplier) => supplier.Name).SingleAsync());
+
+            var exported = await new InventoryService(database).ExportCsvAsync(token, CancellationToken.None);
+            Assert.NotNull(exported);
+            var csv = Encoding.UTF8.GetString(exported);
+            Assert.Contains("PrecioMayoreo,MinimoMayoreo", csv, StringComparison.Ordinal);
+            Assert.Contains($"\"{code}\"", csv, StringComparison.Ordinal);
+            Assert.Contains("28,2,9,3,15", csv, StringComparison.Ordinal);
+            Assert.Contains($"\"{updatedSupplierName}\"", csv, StringComparison.Ordinal);
         }
         finally
         {

@@ -66,9 +66,16 @@ public sealed class InventoryService(PosDbContext database)
     public async Task<byte[]?> ExportCsvAsync(string token, CancellationToken cancellationToken)
     {
         if (await GetAuthorizedUserAsync(token, "ViewInventory", cancellationToken) is null) return null;
-        var rows = await database.Products.AsNoTracking().Where(item => item.IsActive && !item.IsTemporary).Include(item => item.Department).OrderBy(item => item.Description).Select(item => new { item.Code, item.Description, Department = item.Department == null ? string.Empty : item.Department.Name, item.UnitOfMeasure, item.Cost, item.Price, item.Stock, item.MinimumStock, item.MaximumStock }).ToListAsync(cancellationToken);
-        var builder = new StringBuilder("Codigo,Descripcion,Departamento,TipoVenta,Costo,PrecioVenta,Existencia,InventarioMinimo,InventarioMaximo\r\n");
-        foreach (var row in rows) builder.Append(string.Join(',', Csv(row.Code), Csv(row.Description), Csv(row.Department), Csv(row.UnitOfMeasure), row.Cost.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), row.Price.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture), row.Stock.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), row.MinimumStock.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), row.MaximumStock.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))).Append("\r\n");
+        var rows = await (from product in database.Products.AsNoTracking().Where(item => item.IsActive && !item.IsTemporary)
+                          join supplier in database.Suppliers.AsNoTracking() on product.PrimarySupplierId equals supplier.Id into suppliers
+                          from supplier in suppliers.DefaultIfEmpty()
+                          join department in database.Departments.AsNoTracking() on product.DepartmentId equals department.Id into departments
+                          from department in departments.DefaultIfEmpty()
+                          orderby product.Description
+                          select new { product.Code, product.Description, Department = department == null ? string.Empty : department.Name, product.UnitOfMeasure, product.Cost, product.Price, product.WholesalePrice, product.WholesaleMinimumQuantity, product.Stock, product.MinimumStock, product.MaximumStock, Supplier = supplier == null ? string.Empty : supplier.Name })
+            .ToListAsync(cancellationToken);
+        var builder = new StringBuilder("Codigo,Descripcion,Departamento,TipoVenta,Costo,PrecioVenta,PrecioMayoreo,MinimoMayoreo,Existencia,InventarioMinimo,InventarioMaximo,Proveedor\r\n");
+        foreach (var row in rows) builder.Append(string.Join(',', Csv(row.Code), Csv(row.Description), Csv(row.Department), Csv(row.UnitOfMeasure), Numeric(row.Cost), Numeric(row.Price), Numeric(row.WholesalePrice), Numeric(row.WholesaleMinimumQuantity), Numeric(row.Stock), Numeric(row.MinimumStock), Numeric(row.MaximumStock), Csv(row.Supplier))).Append("\r\n");
         return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(builder.ToString())).ToArray();
     }
 
@@ -158,6 +165,7 @@ public sealed class InventoryService(PosDbContext database)
     }
 
     private static string Csv(string value) => value.StartsWith('=') || value.StartsWith('+') || value.StartsWith('-') || value.StartsWith('@') ? $"'\"{value.Replace("\"", "\"\"")}\"" : $"\"{value.Replace("\"", "\"\"")}\"";
+    private static string Numeric(decimal value) => value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
 
     private static string LocalizeMovementReason(string reason) => reason switch
     {

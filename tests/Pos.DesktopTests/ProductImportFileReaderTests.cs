@@ -175,6 +175,37 @@ public sealed class ProductImportFileReaderTests
     }
 
     [Theory]
+    [InlineData("$1,000.00", 1000)]
+    [InlineData("$1.000,50", 1000.50)]
+    [InlineData("MXN 25,50", 25.50)]
+    public void ParsesCommercialCurrencyFormats(string text, decimal expected)
+    {
+        Assert.True(ProductImportFileReader.TryParseFlexibleNumber(text, out var parsed));
+        Assert.Equal(expected, parsed);
+
+        var preview = new ProductImportPreviewRow { PriceText = text };
+        Assert.Equal(expected, preview.Price);
+    }
+
+    [Fact]
+    public void MapsWholesaleMinimumFromExportedColumn()
+    {
+        var source = new ProductImportSource(
+        [
+            new ProductImportSourceColumn(0, "Codigo", ["001"]),
+            new ProductImportSourceColumn(1, "Descripcion", ["Producto"]),
+            new ProductImportSourceColumn(2, "PrecioMayoreo", ["$90.00"]),
+            new ProductImportSourceColumn(3, "MinimoMayoreo", ["6"])
+        ],
+        [new ProductImportSourceRow(2, ["001", "Producto", "$90.00", "6"])]);
+
+        var row = Assert.Single(ProductImportFileReader.Map(source, ProductImportFileReader.SuggestMapping(source), 3m));
+
+        Assert.Equal(90m, row.WholesalePrice);
+        Assert.Equal(6m, row.WholesaleMinimumQuantity);
+    }
+
+    [Theory]
     [InlineData("", "Pieza")]
     [InlineData("pieza", "Pieza")]
     [InlineData("kg", "Kilogramo")]

@@ -32,6 +32,7 @@ public partial class ProductImportMappingWindow : Window
         new("Costo", "Opcional", mapping.CostColumn, _source),
         new("Precio de venta", "Opcional", mapping.PriceColumn, _source),
         new("Precio de mayoreo", "Opcional", mapping.WholesalePriceColumn, _source),
+        new("Mínimo de mayoreo", "Opcional", mapping.WholesaleMinimumQuantityColumn, _source),
         new("Existencia", "Opcional", mapping.StockColumn, _source),
         new("Departamento", "Opcional", mapping.CategoryColumn, _source),
         new("Inventario mínimo", "Opcional", mapping.MinimumStockColumn, _source),
@@ -78,12 +79,13 @@ public partial class ProductImportMappingWindow : Window
         CostColumn = MappingRows[2].SelectedColumnIndex,
         PriceColumn = MappingRows[3].SelectedColumnIndex,
         WholesalePriceColumn = MappingRows[4].SelectedColumnIndex,
-        StockColumn = MappingRows[5].SelectedColumnIndex,
-        CategoryColumn = MappingRows[6].SelectedColumnIndex,
-        MinimumStockColumn = MappingRows[7].SelectedColumnIndex,
-        MaximumStockColumn = MappingRows[8].SelectedColumnIndex,
-        UnitOfMeasureColumn = MappingRows[9].SelectedColumnIndex,
-        SupplierColumn = MappingRows[10].SelectedColumnIndex
+        WholesaleMinimumQuantityColumn = MappingRows[5].SelectedColumnIndex,
+        StockColumn = MappingRows[6].SelectedColumnIndex,
+        CategoryColumn = MappingRows[7].SelectedColumnIndex,
+        MinimumStockColumn = MappingRows[8].SelectedColumnIndex,
+        MaximumStockColumn = MappingRows[9].SelectedColumnIndex,
+        UnitOfMeasureColumn = MappingRows[10].SelectedColumnIndex,
+        SupplierColumn = MappingRows[11].SelectedColumnIndex
     };
 
     private void ApplyToRows(ProductImportColumnMapping mapping)
@@ -91,9 +93,9 @@ public partial class ProductImportMappingWindow : Window
         var values = new int?[]
         {
             mapping.CodeColumn, mapping.DescriptionColumn, mapping.CostColumn, mapping.PriceColumn,
-            mapping.WholesalePriceColumn, mapping.StockColumn, mapping.CategoryColumn,
-            mapping.MinimumStockColumn, mapping.MaximumStockColumn, mapping.UnitOfMeasureColumn,
-            mapping.SupplierColumn
+            mapping.WholesalePriceColumn, mapping.WholesaleMinimumQuantityColumn, mapping.StockColumn,
+            mapping.CategoryColumn, mapping.MinimumStockColumn, mapping.MaximumStockColumn,
+            mapping.UnitOfMeasureColumn, mapping.SupplierColumn
         };
         for (var index = 0; index < MappingRows.Count; index++) MappingRows[index].SelectedColumnIndex = values[index];
     }

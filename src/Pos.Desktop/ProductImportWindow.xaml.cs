@@ -184,7 +184,7 @@ public partial class ProductImportWindow : Window
     {
         var isUpdate = duplicateRule.Equals("Update", StringComparison.OrdinalIgnoreCase);
         var message = isUpdate
-            ? $"Se importarán {selectedCount} producto(s) seleccionado(s). Los códigos que ya existan se actualizarán con la descripción, precios, mayoreo, existencia, departamento, límites de inventario, unidad y proveedor del archivo. Los códigos nuevos se agregarán.\n\n¿Deseas continuar?"
+            ? $"Se importarán {selectedCount} producto(s) seleccionado(s). Los códigos que ya existan se actualizarán con la descripción, precios, mayoreo, departamento, límites, unidad y proveedor. La existencia quedará exactamente como aparece en el archivo y el cambio quedará registrado en movimientos. Los códigos nuevos se agregarán.\n\n¿Deseas continuar?"
             : $"Se importarán {selectedCount} producto(s) seleccionado(s). Los códigos que ya existan se omitirán y no se modificarán ni actualizarán. Solo se agregarán productos nuevos.\n\n¿Deseas continuar?";
         return MessageBox.Show(message, isUpdate ? "Actualizar inventario" : "Importar productos nuevos", MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK;
     }
