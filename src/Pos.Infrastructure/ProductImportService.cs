@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -24,6 +25,7 @@ public sealed class ProductImportService(PosDbContext database)
         var normalizedCodes = command.Rows.Select(item => ProductCatalogService.NormalizeCode(item.Code)).ToArray();
         var products = await database.Products.Where(item => normalizedCodes.Contains(item.NormalizedCode)).ToDictionaryAsync(item => item.NormalizedCode, cancellationToken);
         var suppliers = (await database.Suppliers.ToListAsync(cancellationToken)).GroupBy(item => NormalizeName(item.Name), StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var departments = (await database.Departments.ToListAsync(cancellationToken)).GroupBy(item => NormalizeDepartmentName(item.Name), StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         var created = 0;
         var updated = 0;
         var skipped = 0;
@@ -38,14 +40,14 @@ public sealed class ProductImportService(PosDbContext database)
                 product.Cost = decimal.Round(row.Cost, 2);
                 product.WholesalePrice = decimal.Round(row.WholesalePrice, 2);
                 product.WholesaleMinimumQuantity = decimal.Round(row.WholesaleMinimumQuantity, 3);
-                ApplyCatalogFields(product, row, ResolveSupplier(row.SupplierName, suppliers));
+                ApplyCatalogFields(product, row, ResolveSupplier(row.SupplierName, suppliers), ResolveDepartment(row.Category, departments));
                 if (store.InventoryEnabled) AddStockMovement(product, row.Stock, userId.Value, command.OperationId, row.RowNumber);
                 updated++;
             }
             else
             {
                 product = new ProductRecord { Id = Guid.NewGuid(), Code = row.Code.Trim(), NormalizedCode = normalized, Description = row.Description.Trim(), Price = ResolvePrice(row.Price, row.Cost, store.DefaultProfitPercent, store), Cost = decimal.Round(row.Cost, 2), WholesalePrice = decimal.Round(row.WholesalePrice, 2), WholesaleMinimumQuantity = decimal.Round(row.WholesaleMinimumQuantity, 3), Stock = 0m, ProfitPercent = store.DefaultProfitPercent, IsActive = true };
-                ApplyCatalogFields(product, row, ResolveSupplier(row.SupplierName, suppliers));
+                ApplyCatalogFields(product, row, ResolveSupplier(row.SupplierName, suppliers), ResolveDepartment(row.Category, departments));
                 database.Products.Add(product);
                 products.Add(normalized, product);
                 if (store.InventoryEnabled) AddStockMovement(product, row.Stock, userId.Value, command.OperationId, row.RowNumber);
@@ -80,9 +82,28 @@ public sealed class ProductImportService(PosDbContext database)
         return supplier;
     }
 
-    private static void ApplyCatalogFields(ProductRecord product, ProductImportRow row, SupplierRecord? supplier)
+    private DepartmentRecord? ResolveDepartment(string departmentName, Dictionary<string, DepartmentRecord> departments)
     {
-        product.Category = row.Category.Trim();
+        if (string.IsNullOrWhiteSpace(departmentName)) return null;
+        var key = NormalizeDepartmentName(departmentName);
+        if (departments.TryGetValue(key, out var existing)) return existing;
+        var department = new DepartmentRecord
+        {
+            Id = Guid.NewGuid(),
+            Name = departmentName.Trim(),
+            NormalizedName = departmentName.Trim().ToUpperInvariant(),
+            IsActive = true,
+            CreatedAtUtc = DateTimeOffset.UtcNow
+        };
+        database.Departments.Add(department);
+        departments.Add(key, department);
+        return department;
+    }
+
+    private static void ApplyCatalogFields(ProductRecord product, ProductImportRow row, SupplierRecord? supplier, DepartmentRecord? department)
+    {
+        product.Category = department?.Name ?? row.Category.Trim();
+        product.DepartmentId = department?.Id;
         product.UnitOfMeasure = string.IsNullOrWhiteSpace(row.UnitOfMeasure) ? "Pieza" : row.UnitOfMeasure.Trim();
         product.MinimumStock = decimal.Round(row.MinimumStock, 3);
         product.MaximumStock = decimal.Round(row.MaximumStock, 3);
@@ -90,6 +111,11 @@ public sealed class ProductImportService(PosDbContext database)
     }
 
     private static string NormalizeName(string value) => value.Trim().ToUpperInvariant();
+    private static string NormalizeDepartmentName(string value)
+    {
+        var normalized = value.Trim().Normalize(NormalizationForm.FormD);
+        return new string(normalized.Where(character => CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark).ToArray()).ToUpperInvariant();
+    }
     private static decimal ResolvePrice(decimal price, decimal cost, decimal profit, StoreRecord store) => price > 0m || !store.AutoPriceWithProfit ? decimal.Round(price, 2) : decimal.Round(cost * (1m + (profit > 0m ? profit : store.DefaultProfitPercent) / 100m), 2, MidpointRounding.AwayFromZero);
 
     private static Guid RowOperationId(Guid operationId, int rowNumber)

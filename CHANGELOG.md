@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se prepara la versión 2.5.9: la importación vincula productos con departamentos reales, reutiliza el mismo departamento sin distinguir mayúsculas, minúsculas ni acentos y conserva el nombre ya existente del catálogo.
 - Se prepara la versión 2.5.8: importación y exportación de inventario aceptan importes comerciales con moneda y separadores, validan lotes completos antes de escribir datos y conservan mayoreo, mínimos y proveedor al exportar y reimportar.
 - Se prepara la versión 2.5.7: mayoreo automático por cantidad, correcciones de integridad para cancelaciones y devoluciones con pagos mixtos, y estados operativos en español para ventas y movimientos.
 - Se prepara la versión 2.5.6: la demo conserva su inicio y la última hora observada al desinstalar y reinstalar JetVenta en el mismo equipo. La desinstalación elimina la activación local pagada, pero no reinicia el periodo de prueba.

@@ -95,10 +95,12 @@ public sealed class ProductImportIntegrationTests
         var normalizedCode = ProductCatalogService.NormalizeCode(code);
         var supplierName = "Proveedor " + Guid.NewGuid().ToString("N");
         var updatedSupplierName = "Proveedor actualizado " + Guid.NewGuid().ToString("N");
+        var departmentName = "Lácteos " + Guid.NewGuid().ToString("N");
+        var equivalentDepartmentName = "LACTEOS " + departmentName.Split(' ')[1];
         try
         {
             var service = new ProductImportService(database);
-            var command = new ProductImportCommand(operationId, "productos.xlsx", "Skip", [new ProductImportRow(2, code, "Producto importado", 20m, 10m, 5m, 0m, 0m, "Abarrotes", 2m, 10m, "Pieza", supplierName)]);
+            var command = new ProductImportCommand(operationId, "productos.xlsx", "Skip", [new ProductImportRow(2, code, "Producto importado", 20m, 10m, 5m, 0m, 0m, departmentName, 2m, 10m, "Pieza", supplierName)]);
             var first = await service.ImportAsync(token, command, CancellationToken.None);
             var repeated = await service.ImportAsync(token, command, CancellationToken.None);
             Assert.NotNull(first); Assert.NotNull(repeated); Assert.False(first.ExistingResult); Assert.True(repeated.ExistingResult); Assert.Equal(first.ImportId, repeated.ImportId);
@@ -106,13 +108,16 @@ public sealed class ProductImportIntegrationTests
             var productId = await database.Products.Where(item => item.NormalizedCode == normalizedCode).Select(item => item.Id).SingleAsync();
             Assert.Equal(1, await database.InventoryMovements.CountAsync(item => item.ProductId == productId));
             Assert.Equal(5m, await database.Products.Where(item => item.Id == productId).Select(item => item.Stock).SingleAsync());
-            Assert.Equal("Abarrotes", await database.Products.Where(item => item.Id == productId).Select(item => item.Category).SingleAsync());
+            Assert.Equal(departmentName, await database.Products.Where(item => item.Id == productId).Select(item => item.Category).SingleAsync());
             Assert.Equal(supplierName, await database.Products.Where(item => item.Id == productId).Select(item => item.PrimarySupplierId).Join(database.Suppliers, id => id, supplier => supplier.Id, (_, supplier) => supplier.Name).SingleAsync());
 
-            var update = await service.ImportAsync(token, new ProductImportCommand(updateOperationId, "productos-actualizados.xlsx", "Update", [new ProductImportRow(2, code, "Producto actualizado", 33m, 17m, 9m, 28m, 2m, "Bebidas", 3m, 15m, "Kilogramo", updatedSupplierName)]), CancellationToken.None);
+            var update = await service.ImportAsync(token, new ProductImportCommand(updateOperationId, "productos-actualizados.xlsx", "Update", [new ProductImportRow(2, code, "Producto actualizado", 33m, 17m, 9m, 28m, 2m, equivalentDepartmentName, 3m, 15m, "Kilogramo", updatedSupplierName)]), CancellationToken.None);
             Assert.NotNull(update); Assert.Equal(0, update.Created); Assert.Equal(1, update.Updated); Assert.Equal(0, update.Skipped);
             var updatedProduct = await database.Products.SingleAsync(item => item.Id == productId);
-            Assert.Equal("Producto actualizado", updatedProduct.Description); Assert.Equal(33m, updatedProduct.Price); Assert.Equal(17m, updatedProduct.Cost); Assert.Equal(28m, updatedProduct.WholesalePrice); Assert.Equal(2m, updatedProduct.WholesaleMinimumQuantity); Assert.Equal(9m, updatedProduct.Stock); Assert.Equal("Bebidas", updatedProduct.Category); Assert.Equal("Kilogramo", updatedProduct.UnitOfMeasure);
+            Assert.Equal("Producto actualizado", updatedProduct.Description); Assert.Equal(33m, updatedProduct.Price); Assert.Equal(17m, updatedProduct.Cost); Assert.Equal(28m, updatedProduct.WholesalePrice); Assert.Equal(2m, updatedProduct.WholesaleMinimumQuantity); Assert.Equal(9m, updatedProduct.Stock); Assert.Equal(departmentName, updatedProduct.Category); Assert.Equal("Kilogramo", updatedProduct.UnitOfMeasure);
+            var matchingDepartments = await database.Departments.Where(item => item.Name.EndsWith(departmentName.Split(' ')[1])).ToListAsync();
+            var importedDepartment = Assert.Single(matchingDepartments);
+            Assert.Equal(importedDepartment.Id, updatedProduct.DepartmentId);
             Assert.Equal(2, await database.InventoryMovements.CountAsync(item => item.ProductId == productId));
             Assert.Equal(updatedSupplierName, await database.Products.Where(item => item.Id == productId).Select(item => item.PrimarySupplierId).Join(database.Suppliers, id => id, supplier => supplier.Id, (_, supplier) => supplier.Name).SingleAsync());
 
@@ -129,6 +134,7 @@ public sealed class ProductImportIntegrationTests
             var product = await database.Products.SingleOrDefaultAsync(item => item.NormalizedCode == normalizedCode);
             if (product is not null) { database.InventoryMovements.RemoveRange(database.InventoryMovements.Where(item => item.ProductId == product.Id)); database.Products.Remove(product); }
             database.Suppliers.RemoveRange(database.Suppliers.Where(item => item.Name == supplierName || item.Name == updatedSupplierName));
+            database.Departments.RemoveRange(database.Departments.Where(item => item.Name.EndsWith(departmentName.Split(' ')[1])));
             database.ImportBatches.RemoveRange(database.ImportBatches.Where(item => item.OperationId == operationId || item.OperationId == updateOperationId));
             database.Sessions.RemoveRange(database.Sessions.Where(item => item.UserId == user.Id)); database.Users.Remove(user); await database.SaveChangesAsync();
         }
