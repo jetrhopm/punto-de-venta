@@ -85,6 +85,7 @@ public sealed class InventoryService(PosDbContext database)
         if (!string.IsNullOrWhiteSpace(text)) movements = movements.Where(item => item.product.NormalizedCode.Contains(text) || item.product.Description.ToUpper().Contains(text) || item.movement.Reason.ToUpper().Contains(text));
         var total = await movements.CountAsync(cancellationToken);
         var rows = await movements.OrderByDescending(item => item.movement.CreatedAtUtc).Skip((page - 1) * pageSize).Take(pageSize).Select(item => new InventoryMovementRow(item.movement.Id, item.product.Code, item.product.Description, item.movement.Quantity, item.movement.StockBefore, item.movement.StockAfter, item.movement.Reason, item.user.DisplayName, item.movement.CreatedAtUtc)).ToListAsync(cancellationToken);
+        rows = rows.Select(item => item with { Reason = LocalizeMovementReason(item.Reason) }).ToList();
         return new InventoryMovementPageResult(rows, page, pageSize, total, Math.Max(1, (int)Math.Ceiling(total / (double)pageSize)));
     }
 
@@ -157,4 +158,15 @@ public sealed class InventoryService(PosDbContext database)
     }
 
     private static string Csv(string value) => value.StartsWith('=') || value.StartsWith('+') || value.StartsWith('-') || value.StartsWith('@') ? $"'\"{value.Replace("\"", "\"\"")}\"" : $"\"{value.Replace("\"", "\"\"")}\"";
+
+    private static string LocalizeMovementReason(string reason) => reason switch
+    {
+        "Sale" => "Venta",
+        "KitSale" => "Venta de kit",
+        "SaleCancellation" => "Cancelación de venta",
+        "KitCancellation" => "Cancelación de kit",
+        "SaleReturn" => "Devolución de venta",
+        "KitReturn" => "Devolución de kit",
+        _ => reason
+    };
 }

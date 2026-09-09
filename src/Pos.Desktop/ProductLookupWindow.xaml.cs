@@ -100,7 +100,7 @@ public partial class ProductLookupWindow : Window
             return;
         }
 
-        SelectedProduct = new ProductLookupSelection(row.Product.Id, row.Product.Code, row.Product.Description, row.Product.Price, row.Product.Stock);
+        SelectedProduct = new ProductLookupSelection(row.Product.Id, row.Product.Code, row.Product.Description, row.Product.Price, row.Product.Stock, row.Product.UnitOfMeasure, row.Product.WholesalePrice, row.Product.WholesaleMinimumQuantity);
         DialogResult = true;
     }
 
@@ -118,4 +118,4 @@ public partial class ProductLookupWindow : Window
     }
 }
 
-public sealed record ProductLookupSelection(Guid Id, string Code, string Description, decimal Price, decimal Stock);
+public sealed record ProductLookupSelection(Guid Id, string Code, string Description, decimal Price, decimal Stock, string UnitOfMeasure, decimal WholesalePrice, decimal WholesaleMinimumQuantity);

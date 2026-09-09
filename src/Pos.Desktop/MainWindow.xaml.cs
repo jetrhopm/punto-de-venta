@@ -352,7 +352,7 @@ public partial class MainWindow : Window
             if (lookup.ShowDialog() != true || lookup.SelectedProduct is null) return;
 
             var product = lookup.SelectedProduct;
-            await AddProductToCartAsync(new ProductSearchResult(product.Id, product.Code, product.Description, product.Price, product.Stock));
+            await AddProductToCartAsync(new ProductSearchResult(product.Id, product.Code, product.Description, product.Price, product.Stock, product.UnitOfMeasure, false, product.WholesalePrice, product.WholesaleMinimumQuantity));
         }
         finally
         {
@@ -801,7 +801,7 @@ public partial class MainWindow : Window
         var existing = cart.FirstOrDefault(item => item.ProductId == product.Id);
         if (existing is null)
         {
-            cart.Add(new CartLineView(product.Id, product.Code, product.Description, product.Price, product.Stock, quantity, product.UnitOfMeasure));
+            cart.Add(new CartLineView(product.Id, product.Code, product.Description, product.Price, product.Stock, quantity, product.UnitOfMeasure, product.WholesalePrice, product.WholesaleMinimumQuantity));
         }
         else
         {
@@ -868,7 +868,7 @@ public partial class MainWindow : Window
 
         var cart = _activeTicket.Lines;
         var existing = cart.FirstOrDefault(item => item.ProductId == product.Id);
-        if (existing is null) cart.Add(new CartLineView(product.Id, product.Code, product.Description, product.Price, product.Stock, quantity, product.UnitOfMeasure));
+        if (existing is null) cart.Add(new CartLineView(product.Id, product.Code, product.Description, product.Price, product.Stock, quantity, product.UnitOfMeasure, product.WholesalePrice, product.WholesaleMinimumQuantity));
         else { existing.Quantity += quantity; }
         var line = existing ?? cart[^1];
         await ApplyPromotionQuoteAsync(line);
@@ -880,7 +880,9 @@ public partial class MainWindow : Window
         SystemSounds.Asterisk.Play();
         StatusText.Text = line.DiscountTotal > 0m
             ? $"Producto agregado. Promoción aplicada: {line.DiscountTotal:C2} de descuento."
-            : "Producto agregado a la venta.";
+            : line.UsesWholesalePrice
+                ? $"Producto agregado con precio de mayoreo desde {line.WholesaleMinimumQuantity:0.###} unidad(es)."
+                : "Producto agregado a la venta.";
         FocusProductInput();
     }
 
@@ -1046,15 +1048,15 @@ public partial class MainWindow : Window
         }
     }
 
-    private sealed record ProductSearchResult(Guid Id, string Code, string Description, decimal Price, decimal Stock = 0m, string UnitOfMeasure = "Pieza", bool IsCommonProduct = false);
+    private sealed record ProductSearchResult(Guid Id, string Code, string Description, decimal Price, decimal Stock = 0m, string UnitOfMeasure = "Pieza", bool IsCommonProduct = false, decimal WholesalePrice = 0m, decimal WholesaleMinimumQuantity = 0m);
     private sealed record ProductSearchRow(ProductSearchResult Product)
     {
         public string DisplayText => $"{Product.Code} | {Product.Description} | ${Product.Price:0.00}";
     }
 
-    private sealed class CartLineView(Guid productId, string code, string description, decimal unitPrice, decimal stock, decimal quantity, string unitOfMeasure = "Pieza")
+    private sealed class CartLineView(Guid productId, string code, string description, decimal unitPrice, decimal stock, decimal quantity, string unitOfMeasure = "Pieza", decimal wholesalePrice = 0m, decimal wholesaleMinimumQuantity = 0m)
     {
-        public Guid ProductId { get; } = productId; public string Code { get; } = code; public string Description { get; } = description; public string UnitOfMeasure { get; } = unitOfMeasure; public decimal BaseUnitPrice { get; } = unitPrice; public decimal UnitPrice { get; set; } = unitPrice; public decimal Stock { get; } = stock; public decimal Quantity { get; set; } = quantity; public decimal DiscountTotal { get; set; } public decimal? PromotionalTotal { get; set; } public decimal Total => PromotionalTotal ?? decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Code} | {Description} x {Quantity:0.###} = ${Total:0.00}";
+        public Guid ProductId { get; } = productId; public string Code { get; } = code; public string Description { get; } = description; public string UnitOfMeasure { get; } = unitOfMeasure; public decimal RetailUnitPrice { get; } = unitPrice; public decimal WholesalePrice { get; } = wholesalePrice; public decimal WholesaleMinimumQuantity { get; } = wholesaleMinimumQuantity; public bool UsesWholesalePrice => WholesalePrice > 0m && WholesaleMinimumQuantity > 0m && Quantity >= WholesaleMinimumQuantity; public decimal BaseUnitPrice => UsesWholesalePrice ? WholesalePrice : RetailUnitPrice; public decimal UnitPrice { get; set; } = unitPrice; public decimal Stock { get; } = stock; public decimal Quantity { get; set; } = quantity; public decimal DiscountTotal { get; set; } public decimal? PromotionalTotal { get; set; } public decimal Total => PromotionalTotal ?? decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Code} | {Description} x {Quantity:0.###} · {(UsesWholesalePrice ? "Mayoreo" : "Menudeo")} = ${Total:0.00}";
     }
 
     private sealed class TicketTabView(Guid id, Guid operationId, int ticketNumber, IEnumerable<CartLineView>? lines = null)

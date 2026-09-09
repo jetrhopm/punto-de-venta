@@ -5,6 +5,8 @@ using System.Text;
 
 namespace Pos.Infrastructure;
 
+// UseWholesale is retained for compatibility with existing clients. The price is
+// always determined by the configured wholesale threshold on the server.
 public sealed record SaleLineCommand(Guid ProductId, decimal Quantity, bool UseWholesale = false);
 public sealed record CompleteSaleCommand(Guid OperationId, IReadOnlyList<SaleLineCommand> Lines, decimal CashReceived, Guid? CustomerId = null, string PaymentMethod = "Cash", decimal CardAmount = 0m, decimal TransferAmount = 0m, Guid? DraftId = null, bool PrintRequested = true);
 public sealed record CompleteSaleResult(Guid SaleId, Guid OperationId, decimal Total, decimal CashReceived, decimal Change, bool Existing);
@@ -61,10 +63,9 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
             if (line.Quantity <= 0m) throw new ArgumentException("La cantidad debe ser mayor que cero.");
             var product = products[line.ProductId];
             var stockBefore = stockBeforeByProduct.GetValueOrDefault(line.ProductId, product.Stock);
-            var unitPrice = product.Price;
             var originalLine = command.Lines.SingleOrDefault(item => item.ProductId == line.ProductId);
             var requestedQuantity = originalLine?.Quantity ?? line.Quantity;
-            unitPrice = originalLine is not null && originalLine.UseWholesale && product.WholesalePrice > 0m && requestedQuantity >= product.WholesaleMinimumQuantity ? product.WholesalePrice : product.Price;
+            var unitPrice = UsesWholesalePrice(product, requestedQuantity) ? product.WholesalePrice : product.Price;
             // El borrador solo conserva la cantidad y la composición del ticket. El precio autoritativo se recalcula al cobrar para aplicar promociones vigentes.
             var promotionCalculation = await promotions.CalculateAsync(product.Id, unitPrice, DateTimeOffset.UtcNow, cancellationToken, requestedQuantity);
             unitPrice = promotionCalculation.UnitPrice;
@@ -151,6 +152,11 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         if (card > 0m && !store.CardPaymentEnabled) throw new InvalidOperationException("El pago con tarjeta está desactivado en esta tienda.");
         if (transfer > 0m && !store.TransferPaymentEnabled) throw new InvalidOperationException("El pago por transferencia está desactivado en esta tienda.");
     }
+
+    private static bool UsesWholesalePrice(ProductRecord product, decimal quantity) =>
+        product.WholesalePrice > 0m &&
+        product.WholesaleMinimumQuantity > 0m &&
+        quantity >= product.WholesaleMinimumQuantity;
 
     private static decimal RoundSaleAmount(decimal amount, StoreRecord store)
     {

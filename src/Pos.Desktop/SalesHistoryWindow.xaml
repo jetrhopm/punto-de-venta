@@ -23,7 +23,7 @@
                     <GridViewColumn Header="Cajero" DisplayMemberBinding="{Binding Cashier}" Width="170"/>
                     <GridViewColumn Header="Artículos" DisplayMemberBinding="{Binding Items}" Width="70"/>
                     <GridViewColumn Header="Total" DisplayMemberBinding="{Binding TotalText}" Width="95"/>
-                    <GridViewColumn Header="Estado" DisplayMemberBinding="{Binding Status}" Width="100"/>
+                    <GridViewColumn Header="Estado" DisplayMemberBinding="{Binding StatusText}" Width="120"/>
                 </GridView></ListView.View>
             </ListView>
             <Border Grid.Column="1" Background="White" BorderBrush="#D9E3EA" BorderThickness="1" CornerRadius="7" Padding="16">

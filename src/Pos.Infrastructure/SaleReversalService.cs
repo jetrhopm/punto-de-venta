@@ -28,9 +28,10 @@ public sealed class SaleReversalService(PosDbContext database, KitService kits)
             var parts = await kits.ExpandAsync(line.ProductId, line.Quantity, cancellationToken) ?? throw new KeyNotFoundException("Producto de la venta no encontrado.");
             foreach (var part in parts) { var product = await database.Products.SingleAsync(item => item.Id == part.ProductId, cancellationToken); if (product.IsTemporary) continue; var before = product.Stock; product.Stock = decimal.Round(before + part.Quantity, 3, MidpointRounding.AwayFromZero); database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = part.Quantity, StockBefore = before, StockAfter = product.Stock, Reason = line.ProductId == part.ProductId ? "SaleCancellation" : "KitCancellation", CreatedAtUtc = DateTimeOffset.UtcNow }); }
         }
-        var payment = await database.Payments.SingleOrDefaultAsync(item => item.SaleId == sale.Id, cancellationToken);
-        if (payment?.Method == "Cash") database.CashMovements.Add(new CashMovementRecord { Id = Guid.NewGuid(), ShiftId = shift.Id, Type = "Out", Amount = payment.Amount, Reason = $"Cancelacion de venta {sale.Id}", CreatedAtUtc = DateTimeOffset.UtcNow });
-        if (payment?.Method == "Credit" && sale.CustomerId is not null)
+        var payments = await database.Payments.Where(item => item.SaleId == sale.Id).ToListAsync(cancellationToken);
+        var cashRefund = payments.Where(item => item.Method == "Cash").Sum(item => item.Amount);
+        if (cashRefund > 0m) database.CashMovements.Add(new CashMovementRecord { Id = Guid.NewGuid(), ShiftId = shift.Id, Type = "Out", Amount = cashRefund, Reason = $"Cancelacion de venta {sale.Folio}", CreatedAtUtc = DateTimeOffset.UtcNow });
+        if (payments.Any(item => item.Method == "Credit") && sale.CustomerId is not null)
         {
             var balance = await database.CreditTransactions.Where(item => item.CustomerId == sale.CustomerId).SumAsync(item => item.Amount, cancellationToken);
             if (balance < sale.Total) throw new InvalidOperationException("No se puede cancelar: el cliente ya tiene abonos relacionados por un importe superior al saldo disponible.");

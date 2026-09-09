@@ -40,9 +40,16 @@ public sealed class SaleReturnService(PosDbContext database, KitService kits)
             var parts = await kits.ExpandAsync(line.ProductId, line.Quantity, cancellationToken) ?? throw new KeyNotFoundException("Producto de devolucion no encontrado.");
             foreach (var part in parts) { var product = await database.Products.SingleAsync(item => item.Id == part.ProductId, cancellationToken); if (product.IsTemporary) continue; var before = product.Stock; product.Stock = decimal.Round(before + part.Quantity, 3, MidpointRounding.AwayFromZero); database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = part.ProductId, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = part.Quantity, StockBefore = before, StockAfter = product.Stock, Reason = line.ProductId == part.ProductId ? "SaleReturn" : "KitReturn", CreatedAtUtc = record.CreatedAtUtc }); }
         }
-        var payment = await database.Payments.SingleOrDefaultAsync(item => item.SaleId == sale.Id, cancellationToken);
-        if (payment?.Method == "Cash") database.CashMovements.Add(new CashMovementRecord { Id = Guid.NewGuid(), ShiftId = shift.Id, Type = "Out", Amount = record.Amount, Reason = $"Devolucion de venta {sale.Id}", CreatedAtUtc = record.CreatedAtUtc });
-        if (payment?.Method == "Credit" && sale.CustomerId is not null)
+        var payments = await database.Payments.Where(item => item.SaleId == sale.Id).ToListAsync(cancellationToken);
+        var cashPaid = payments.Where(item => item.Method == "Cash").Sum(item => item.Amount);
+        // Una devolución no puede regresar más efectivo que el componente en efectivo
+        // de la venta, aun si se procesa en más de una operación.
+        var previouslyReturnedAmount = await database.Returns
+            .Where(item => item.SaleId == sale.Id)
+            .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+        var cashRefund = Math.Min(record.Amount, Math.Max(0m, cashPaid - previouslyReturnedAmount));
+        if (cashRefund > 0m) database.CashMovements.Add(new CashMovementRecord { Id = Guid.NewGuid(), ShiftId = shift.Id, Type = "Out", Amount = cashRefund, Reason = $"Devolucion de venta {sale.Folio}", CreatedAtUtc = record.CreatedAtUtc });
+        if (payments.Any(item => item.Method == "Credit") && sale.CustomerId is not null)
         {
             var balance = await database.CreditTransactions.Where(item => item.CustomerId == sale.CustomerId).SumAsync(item => item.Amount, cancellationToken); if (balance < record.Amount) throw new InvalidOperationException("El saldo del cliente no permite devolver este importe.");
             database.CreditTransactions.Add(new CreditTransactionRecord { Id = Guid.NewGuid(), CustomerId = sale.CustomerId.Value, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Type = "SaleReturn", Amount = -record.Amount, BalanceBefore = balance, BalanceAfter = balance - record.Amount, Reason = command.Reason.Trim(), CreatedAtUtc = record.CreatedAtUtc });
