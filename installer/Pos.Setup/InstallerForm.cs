@@ -329,7 +329,7 @@ public sealed class InstallerForm : Form
         UnregisterLicenseFileType();
         DeleteShortcuts();
         ConfigureAutomaticStart(false);
-        SetProgress(100, "Desinstalación terminada. Los datos y respaldos se conservaron.");
+        SetProgress(100, "Desinstalación terminada. Se conservaron datos, respaldos y el historial de demo.");
     }
 
     private static void ShowTerms()

@@ -8,7 +8,7 @@ Las instalaciones sin `licencia.jv` comienzan automáticamente en modo de prueba
 
 JetVenta muestra el tiempo restante al iniciar sesión y en `Configuración > Licencia`. Cuando termina la prueba, la API bloquea las operaciones comerciales y permite consultar la activación para que un administrador cargue una licencia válida. Los respaldos se mantienen disponibles como función de continuidad, sujetos a los permisos administrativos normales.
 
-El estado de la prueba se guarda cifrado con DPAPI en `C:\ProgramData\PuntoDeVenta\license\demo.jv.dpapi`, ligado al equipo. También se conserva la última hora observada para detectar retrocesos del reloj. Esto evita reinicios accidentales del contador, aunque un usuario con control administrativo total de Windows puede alterar archivos locales; la protección remota se reservará para una fase posterior.
+El estado de la prueba se guarda cifrado con DPAPI en `C:\ProgramData\PuntoDeVenta\license\demo.jv.dpapi` y se replica en un registro protegido de Windows, ambos ligados al equipo. Se conserva también la última hora observada para detectar retrocesos del reloj. La desinstalación normal no elimina esta evidencia, por lo que reinstalar JetVenta no inicia otros 30 días.
 
 ## Seguridad y operación
 
@@ -19,7 +19,7 @@ El estado de la prueba se guarda cifrado con DPAPI en `C:\ProgramData\PuntoDeVen
 - Las licencias con vencimiento conservan un reloj local cifrado; si el reloj de Windows retrocede después de una validación, JetVenta bloquea la operación hasta corregirlo.
 - El instalador registra `.jv` como archivo de licencia y le asigna un icono propio de llave con la identidad de JetVenta. El archivo se activa únicamente desde la pantalla de Licencia, después de verificar firma, equipo y vigencia.
 - La llave privada del emisor vive fuera del repositorio y fuera del instalador. Nunca debe enviarse al cliente, copiarse a carpetas compartidas ni incluirse en respaldos de la tienda.
-- Al desinstalar JetVenta se elimina la activación local. La desinstalación normal sigue conservando base de datos, configuración operativa y respaldos.
+- Al desinstalar JetVenta se elimina la activación local y su reloj de vigencia. La desinstalación normal conserva el historial de demo, la base de datos, la configuración operativa y los respaldos. El mismo archivo `.jv` puede volver a cargarse únicamente en la misma computadora.
 
 Una licencia local reduce el uso no autorizado, pero ningún control puramente local puede impedir de forma absoluta que alguien con control administrativo del equipo modifique binarios. Mantener la llave privada aislada, firmar ejecutables, validar en la API y, en una fase posterior, añadir validación remota eleva significativamente el costo de un parche.
 

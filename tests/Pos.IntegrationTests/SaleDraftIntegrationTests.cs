@@ -27,6 +27,19 @@ public sealed class SaleDraftIntegrationTests
     }
 
     [Fact]
+    public void TrialStateReconciliationKeepsTheStrictestObservedDates()
+    {
+        var started = new DateTimeOffset(2026, 9, 1, 8, 0, 0, TimeSpan.Zero);
+        var first = new TrialStateSnapshot(started.AddHours(3), started.AddDays(4));
+        var second = new TrialStateSnapshot(started, started.AddDays(7));
+
+        var reconciled = TrialStatePolicy.Reconcile(first, second);
+
+        Assert.Equal(started, reconciled.StartedAtUtc);
+        Assert.Equal(started.AddDays(7), reconciled.LastSeenAtUtc);
+    }
+
+    [Fact]
     public async Task SavesAndRecoversTicketWithoutAffectingInventoryOrCashUntilItIsConfirmed()
     {
         await using var database = new PosDbContextFactory().CreateDbContext([]);

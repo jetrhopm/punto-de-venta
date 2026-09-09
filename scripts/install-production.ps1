@@ -98,6 +98,7 @@ $pgData = Join-Path $DataRoot 'postgresql\data'
 $secretPath = Join-Path $DataRoot 'config\connection.bin'
 $adminSecretPath = Join-Path $DataRoot 'config\postgres-admin.bin'
 $licenseDirectory = Join-Path $DataRoot 'license'
+$trialPath = Join-Path $licenseDirectory 'demo.jv.dpapi'
 $logPath = Join-Path $DataRoot 'logs\postgresql.log'
 $pgCtl = Join-Path $postgresBin 'pg_ctl.exe'
 $initDb = Join-Path $postgresBin 'initdb.exe'
@@ -109,7 +110,7 @@ $apiBinaryPath = "`"$api`" --Pos:ConnectionFile=`"$secretPath`" --Pos:Urls=http:
 [Environment]::SetEnvironmentVariable('POS_LICENSE_BYPASS', $null, 'Machine')
 
 if ($Uninstall) {
-    Write-InstallLog 'Modo desinstalacion: deteniendo y eliminando servicios. Los datos se conservan y la activacion local se elimina.'
+    Write-InstallLog 'Modo desinstalacion: deteniendo y eliminando servicios. Se conservan datos, respaldos y el historial protegido de demostracion.'
     Stop-Service $apiService -ErrorAction SilentlyContinue
     Stop-Service $postgresService -ErrorAction SilentlyContinue
     sc.exe delete $apiService | Out-Null
@@ -117,8 +118,19 @@ if ($Uninstall) {
     [Environment]::SetEnvironmentVariable('POS_CONNECTION_FILE', $null, 'Machine')
     [Environment]::SetEnvironmentVariable('POS_LICENSE_BYPASS', $null, 'Machine')
     if (Test-Path $licenseDirectory) {
-        Remove-Item -LiteralPath $licenseDirectory -Recurse -Force
-        Write-InstallLog 'Activacion local eliminada: se borro la carpeta protegida de licencia.'
+        foreach ($licenseFile in @('licencia.jv.dpapi', 'licencia-reloj.jv.dpapi')) {
+            $licensePath = Join-Path $licenseDirectory $licenseFile
+            if (Test-Path $licensePath) {
+                Remove-Item -LiteralPath $licensePath -Force
+                Write-InstallLog "Activacion local eliminada: $licenseFile"
+            }
+        }
+        if (Test-Path $trialPath) {
+            Write-InstallLog 'El estado protegido de demostracion demo.jv.dpapi se conserva para evitar que una reinstalacion reinicie el periodo.'
+        }
+        else {
+            Write-InstallLog 'No existe aun un estado de demostracion local; la siguiente instalacion lo creara al primer inicio.'
+        }
     }
     Write-InstallLog 'Desinstalacion de servicios finalizada.'
     exit 0

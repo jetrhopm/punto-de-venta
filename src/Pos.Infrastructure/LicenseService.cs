@@ -49,6 +49,22 @@ public static class TrialClockPolicy
     }
 }
 
+public sealed record TrialStateSnapshot(DateTimeOffset StartedAtUtc, DateTimeOffset LastSeenAtUtc);
+
+public static class TrialStatePolicy
+{
+    public static TrialStateSnapshot Reconcile(TrialStateSnapshot first, TrialStateSnapshot second)
+    {
+        if (first.StartedAtUtc == default || first.LastSeenAtUtc == default || second.StartedAtUtc == default || second.LastSeenAtUtc == default ||
+            first.LastSeenAtUtc < first.StartedAtUtc || second.LastSeenAtUtc < second.StartedAtUtc)
+            throw new ArgumentException("El estado de demostración no contiene fechas válidas.");
+
+        return new TrialStateSnapshot(
+            first.StartedAtUtc <= second.StartedAtUtc ? first.StartedAtUtc : second.StartedAtUtc,
+            first.LastSeenAtUtc >= second.LastSeenAtUtc ? first.LastSeenAtUtc : second.LastSeenAtUtc);
+    }
+}
+
 public sealed class LicenseService(PosDbContext database)
 {
     private static readonly byte[] StorageEntropy = SHA256.HashData(Encoding.UTF8.GetBytes("JetVenta license storage v1"));
@@ -58,6 +74,8 @@ public sealed class LicenseService(PosDbContext database)
     private static readonly string LicensePath = Path.Combine(LicenseDirectory, "licencia.jv.dpapi");
     private static readonly string TrialPath = Path.Combine(LicenseDirectory, "demo.jv.dpapi");
     private static readonly string LicenseClockPath = Path.Combine(LicenseDirectory, "licencia-reloj.jv.dpapi");
+    private const string TrialRegistryPath = @"SOFTWARE\JetVenta\Licensing";
+    private const string TrialRegistryValueName = "DemoStateV1";
     private static readonly object StateLock = new();
 
     public LicenseStatusResult GetRuntimeStatus()
@@ -126,13 +144,14 @@ public sealed class LicenseService(PosDbContext database)
     private static LicenseStatusResult GetTrialStatus(string fingerprint, string request)
     {
         var now = DateTimeOffset.UtcNow;
-        if (!TryReadTrial(out var trial, out var error))
+        var readState = ReadTrial(out var trial, out var needsRepair, out var error);
+        if (readState == TrialReadState.Invalid)
         {
-            if (File.Exists(TrialPath))
-            {
-                return new(false, "trial_invalid", error, fingerprint, request, null, null, null);
-            }
+            return new(false, "trial_invalid", error, fingerprint, request, null, null, null);
+        }
 
+        if (readState == TrialReadState.Missing)
+        {
             trial = new TrialState(1, fingerprint, now, now);
             if (!TryWriteTrial(trial, out error))
             {
@@ -158,6 +177,10 @@ public sealed class LicenseService(PosDbContext database)
             {
                 return new(false, "trial_unavailable", error, fingerprint, request, null, clock.ExpiresAtUtc, null);
             }
+        }
+        else if (needsRepair && !TryWriteTrial(trial, out error))
+        {
+            return new(false, "trial_unavailable", error, fingerprint, request, null, clock.ExpiresAtUtc, null);
         }
 
         if (!clock.IsActive)
@@ -276,17 +299,102 @@ public sealed class LicenseService(PosDbContext database)
         }
     }
 
-    private static bool TryReadTrial(out TrialState? trial, out string error)
+    private static TrialReadState ReadTrial(out TrialState? trial, out bool needsRepair, out string error)
+    {
+        trial = null;
+        needsRepair = false;
+        var fileState = TryReadTrialFile(out var fileTrial, out var fileExists, out var fileError);
+        var registryState = TryReadTrialRegistry(out var registryTrial, out var registryExists, out var registryError);
+
+        if (fileState && registryState)
+        {
+            if (!string.Equals(fileTrial!.MachineFingerprint, registryTrial!.MachineFingerprint, StringComparison.Ordinal))
+            {
+                error = "Las copias locales de la demostración no corresponden al mismo equipo.";
+                return TrialReadState.Invalid;
+            }
+
+            var reconciled = TrialStatePolicy.Reconcile(
+                new TrialStateSnapshot(fileTrial.StartedAtUtc, fileTrial.LastSeenAtUtc),
+                new TrialStateSnapshot(registryTrial.StartedAtUtc, registryTrial.LastSeenAtUtc));
+            trial = fileTrial with { StartedAtUtc = reconciled.StartedAtUtc, LastSeenAtUtc = reconciled.LastSeenAtUtc };
+            needsRepair = trial != fileTrial || trial != registryTrial;
+            error = string.Empty;
+            return TrialReadState.Valid;
+        }
+
+        if (fileState)
+        {
+            trial = fileTrial;
+            needsRepair = true;
+            error = string.Empty;
+            return TrialReadState.Valid;
+        }
+
+        if (registryState)
+        {
+            trial = registryTrial;
+            needsRepair = true;
+            error = string.Empty;
+            return TrialReadState.Valid;
+        }
+
+        if (!fileExists && !registryExists)
+        {
+            error = "No se encontró el estado de la prueba.";
+            return TrialReadState.Missing;
+        }
+
+        error = fileExists ? fileError : registryError;
+        return TrialReadState.Invalid;
+    }
+
+    private static bool TryReadTrialFile(out TrialState? trial, out bool exists, out string error)
     {
         trial = null;
         error = "No se encontró el estado de la prueba.";
-        if (!File.Exists(TrialPath)) return false;
+        exists = File.Exists(TrialPath);
+        if (!exists) return false;
 
         try
         {
             var bytes = ProtectedData.Unprotect(File.ReadAllBytes(TrialPath), TrialEntropy, DataProtectionScope.LocalMachine);
+            return TryDeserializeTrial(bytes, out trial, out error);
+        }
+        catch (CryptographicException) { error = "El estado local de la prueba no pudo validarse en este equipo."; return false; }
+        catch (IOException) { error = "No se pudo leer el estado local de la prueba."; return false; }
+        catch (UnauthorizedAccessException) { error = "JetVenta no tiene permiso para consultar el estado de la prueba."; return false; }
+    }
+
+    private static bool TryReadTrialRegistry(out TrialState? trial, out bool exists, out string error)
+    {
+        trial = null;
+        exists = false;
+        error = "No se encontró el respaldo local de la demostración.";
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(TrialRegistryPath, writable: false);
+            var value = key?.GetValue(TrialRegistryValueName, null, RegistryValueOptions.DoNotExpandEnvironmentNames)?.ToString();
+            if (string.IsNullOrWhiteSpace(value)) return false;
+            exists = true;
+            var protectedBytes = Convert.FromBase64String(value);
+            var bytes = ProtectedData.Unprotect(protectedBytes, TrialEntropy, DataProtectionScope.LocalMachine);
+            return TryDeserializeTrial(bytes, out trial, out error);
+        }
+        catch (FormatException) { error = "El respaldo local de la demostración no es válido."; return false; }
+        catch (CryptographicException) { error = "El respaldo local de la demostración no pudo validarse en este equipo."; return false; }
+        catch (UnauthorizedAccessException) { error = "JetVenta no tiene permiso para consultar el respaldo local de la demostración."; return false; }
+        catch (System.Security.SecurityException) { error = "Windows no permitió consultar el respaldo local de la demostración."; return false; }
+    }
+
+    private static bool TryDeserializeTrial(byte[] bytes, out TrialState? trial, out string error)
+    {
+        trial = null;
+        error = "El estado local de la prueba no es válido.";
+        try
+        {
             trial = JsonSerializer.Deserialize<TrialState>(bytes);
-            if (trial is null || trial.Version != 1 || trial.StartedAtUtc == default || trial.LastSeenAtUtc == default)
+            if (trial is null || trial.Version != 1 || string.IsNullOrWhiteSpace(trial.MachineFingerprint) || trial.StartedAtUtc == default || trial.LastSeenAtUtc == default || trial.LastSeenAtUtc < trial.StartedAtUtc)
             {
                 error = "El estado local de la prueba no es válido.";
                 return false;
@@ -294,24 +402,9 @@ public sealed class LicenseService(PosDbContext database)
 
             return true;
         }
-        catch (CryptographicException)
-        {
-            error = "El estado local de la prueba no pudo validarse en este equipo.";
-            return false;
-        }
         catch (JsonException)
         {
             error = "El estado local de la prueba está dañado.";
-            return false;
-        }
-        catch (IOException)
-        {
-            error = "No se pudo leer el estado local de la prueba.";
-            return false;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            error = "JetVenta no tiene permiso para consultar el estado de la prueba.";
             return false;
         }
     }
@@ -327,6 +420,10 @@ public sealed class LicenseService(PosDbContext database)
             var temporary = TrialPath + ".new";
             File.WriteAllBytes(temporary, protectedBytes);
             File.Move(temporary, TrialPath, true);
+            // La copia en registro sobrevive a una desinstalación normal. Si Windows
+            // impide crearla en un entorno de desarrollo, el archivo protegido sigue
+            // siendo la fuente válida y la aplicación no bloquea la operación.
+            TryWriteTrialRegistry(trial);
             return true;
         }
         catch (CryptographicException)
@@ -344,6 +441,20 @@ public sealed class LicenseService(PosDbContext database)
             error = "JetVenta no tiene permiso para guardar el estado de la prueba.";
             return false;
         }
+    }
+
+    private static void TryWriteTrialRegistry(TrialState trial)
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.CreateSubKey(TrialRegistryPath, writable: true);
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(trial);
+            var protectedBytes = ProtectedData.Protect(bytes, TrialEntropy, DataProtectionScope.LocalMachine);
+            key.SetValue(TrialRegistryValueName, Convert.ToBase64String(protectedBytes), RegistryValueKind.String);
+        }
+        catch (CryptographicException) { }
+        catch (UnauthorizedAccessException) { }
+        catch (System.Security.SecurityException) { }
     }
 
     private static bool TryReadLicenseClock(out LicenseClockState? clock, out string error)
@@ -389,6 +500,7 @@ public sealed class LicenseService(PosDbContext database)
         catch (UnauthorizedAccessException) { error = "JetVenta no tiene permiso para guardar la vigencia de la licencia."; return false; }
     }
 
+    private enum TrialReadState { Missing, Valid, Invalid }
     private sealed record TrialState(int Version, string MachineFingerprint, DateTimeOffset StartedAtUtc, DateTimeOffset LastSeenAtUtc);
     private sealed record LicenseClockState(int Version, string LicenseId, string MachineFingerprint, DateTimeOffset LastSeenAtUtc);
 

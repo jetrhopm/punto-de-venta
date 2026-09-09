@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se prepara la versión 2.5.6: la demo conserva su inicio y la última hora observada al desinstalar y reinstalar JetVenta en el mismo equipo. La desinstalación elimina la activación local pagada, pero no reinicia el periodo de prueba.
 - Se prepara la versión 2.5.5: Reportes incorpora una vista de gráficas de pastel para formas de pago y departamentos, con leyendas, porcentajes, colores consistentes y estados vacíos sin error. Las consultas y cálculos existentes se conservan.
 - Se prepara la versión 2.5.4: se rediseña la vista de Compras con secciones visuales para proveedor, búsqueda, producto seleccionado y recepción; se conservan los flujos de lector, Enter, actualización de costo, precio y margen.
 - Se prepara la versión 2.5.3: el redondeo se refresca al volver a ventas y antes de cobrar; la vista muestra subtotal, ajuste y total a cobrar; los tickets conservan e imprimen el subtotal previo al redondeo.
