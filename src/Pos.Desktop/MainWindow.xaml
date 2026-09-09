@@ -97,7 +97,15 @@
             </Grid>
         </Border>
 
-        <Border x:Name="LicenseDemoBanner" Grid.Row="1" Margin="14,10,14,0" Padding="13,9"
+        <StackPanel Grid.Row="1" Margin="14,10,14,0">
+        <Border x:Name="ApiStatusBanner" Padding="13,9" Margin="0,0,0,7" Background="#FCE8E8" BorderBrush="#C44343" BorderThickness="1" CornerRadius="5" Visibility="Collapsed">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <icons:PackIconMaterial x:Name="ApiStatusIcon" Kind="LanDisconnect" Width="21" Height="21" Margin="0,1,10,0" Foreground="#A32424"/>
+                <StackPanel Grid.Column="1"><TextBlock x:Name="ApiStatusTitle" Text="No hay comunicación con JetVenta" FontWeight="Bold" Foreground="#7A2020"/><TextBlock x:Name="ApiStatusText" Text="Ve a Configuración > Diagnóstico > Levantar API." Margin="0,1,0,0" FontSize="12" Foreground="#7A2020" TextWrapping="Wrap"/></StackPanel>
+            </Grid>
+        </Border>
+        <Border x:Name="LicenseDemoBanner" Padding="13,9"
                 Background="#FFF7E2" BorderBrush="#E9C770" BorderThickness="1" CornerRadius="5" Visibility="Collapsed">
             <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -106,6 +114,7 @@
                 <Button Grid.Column="2" Margin="12,0,0,0" Padding="12,6" MinHeight="32" Style="{StaticResource NextButtonStyle}" Click="OnOpenLicenseClick">Activar licencia</Button>
             </Grid>
         </Border>
+        </StackPanel>
 
         <Grid x:Name="SalesWorkspace" Grid.Row="2" Margin="14,12">
             <Grid.ColumnDefinitions><ColumnDefinition Width="132"/><ColumnDefinition Width="*"/><ColumnDefinition Width="310"/></Grid.ColumnDefinitions>

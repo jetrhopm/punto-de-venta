@@ -4,8 +4,8 @@ using System.Text;
 
 namespace Pos.Infrastructure;
 
-public sealed record CutSettingsResult(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, decimal CashLimit, string CashLimitMessage);
-public sealed record SetCutSettingsCommand(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, decimal CashLimit, string CashLimitMessage);
+public sealed record CutSettingsResult(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, bool BlockSalesWhenCashLimitReached, decimal CashLimit, string CashLimitMessage);
+public sealed record SetCutSettingsCommand(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, bool BlockSalesWhenCashLimitReached, decimal CashLimit, string CashLimitMessage);
 
 public sealed class CutSettingsService(PosDbContext database)
 {
@@ -25,13 +25,14 @@ public sealed class CutSettingsService(PosDbContext database)
         store.RequireCashCountOnClose = command.RequireCashCountOnClose;
         store.AutoAdjustCashDifference = command.RequireCashCountOnClose && command.AutoAdjustCashDifference;
         store.CashLimitEnabled = command.CashLimitEnabled;
+        store.BlockSalesWhenCashLimitReached = command.CashLimitEnabled && command.BlockSalesWhenCashLimitReached;
         store.CashLimit = decimal.Round(command.CashLimit, 2);
         store.CashLimitMessage = string.IsNullOrWhiteSpace(command.CashLimitMessage) ? "Realiza un retiro de efectivo (F8); se superó el límite permitido en caja." : command.CashLimitMessage.Trim();
         await database.SaveChangesAsync(cancellationToken);
         return ToResult(store);
     }
 
-    private static CutSettingsResult ToResult(StoreRecord store) => new(store.RequireCashCountOnClose, store.AutoAdjustCashDifference, store.CashLimitEnabled, store.CashLimit, store.CashLimitMessage);
+    private static CutSettingsResult ToResult(StoreRecord store) => new(store.RequireCashCountOnClose, store.AutoAdjustCashDifference, store.CashLimitEnabled, store.BlockSalesWhenCashLimitReached, store.CashLimit, store.CashLimitMessage);
     private async Task<bool> AuthorizedAsync(string token, CancellationToken cancellationToken, params string[] permissions)
     {
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty)));

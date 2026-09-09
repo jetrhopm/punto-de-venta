@@ -100,13 +100,14 @@ public static class TicketWindowsPrinter
         AddOptionalCentered(root, string.IsNullOrWhiteSpace(ticket.Phone) ? string.Empty : $"Tel: {ticket.Phone}", baseSize);
         AddOptionalCentered(root, ticket.Header, baseSize);
         root.Children.Add(Rule());
-        root.Children.Add(Text("COMPROBANTE DE VENTA", baseSize + 1d, FontWeights.SemiBold, TextAlignment.Center, new Thickness(0, 1, 0, 4)));
+        var isShiftCut = ticket.Header.StartsWith("CORTE DE CAJA", StringComparison.OrdinalIgnoreCase);
+        root.Children.Add(Text(isShiftCut ? "COMPROBANTE DE CORTE" : "COMPROBANTE DE VENTA", baseSize + 1d, FontWeights.SemiBold, TextAlignment.Center, new Thickness(0, 1, 0, 4)));
 
         root.Children.Add(Metadata("Fecha", ticket.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss"), baseSize));
         root.Children.Add(Metadata("Caja", ValueOrDefault(ticket.RegisterName, "Caja principal"), baseSize));
         root.Children.Add(Metadata("Cajero", ValueOrDefault(ticket.CashierName, "Administrador"), baseSize));
         root.Children.Add(Metadata("Turno", FormatShiftNumber(ticket.ShiftNumber), baseSize));
-        root.Children.Add(Metadata("Venta", FormatFolio(ticket.Folio, ticket.SaleId), baseSize));
+        root.Children.Add(Metadata(isShiftCut ? "Cierre" : "Venta", isShiftCut ? "Turno cerrado" : FormatFolio(ticket.Folio, ticket.SaleId), baseSize));
         root.Children.Add(Rule());
 
         root.Children.Add(ProductHeader(baseSize));
@@ -210,6 +211,26 @@ public static class TicketWindowsPrinter
             WidthMm = profile.WidthMm
         };
         Print(printerName, ticket, profile, $"Movimiento de efectivo {DateTime.Now:yyyyMMddHHmmss}");
+    }
+
+    public static void PrintShiftClose(string printerName, string storeName, string cashierName, DateTimeOffset closedAt, decimal initialCash, decimal cashSales, decimal cardSales, decimal transferSales, decimal creditSales, decimal cashIn, decimal cashOut, decimal cashReturns, decimal expectedCash, decimal countedCash, decimal difference, TicketPrintProfile profile)
+    {
+        var lines = new[]
+        {
+            new TicketPdfLine("Fondo inicial", 1m, initialCash, initialCash),
+            new TicketPdfLine("Ventas en efectivo", 1m, cashSales, cashSales),
+            new TicketPdfLine("Ventas con tarjeta", 1m, cardSales, cardSales),
+            new TicketPdfLine("Ventas por transferencia", 1m, transferSales, transferSales),
+            new TicketPdfLine("Ventas a crédito", 1m, creditSales, creditSales),
+            new TicketPdfLine("Entradas de efectivo", 1m, cashIn, cashIn),
+            new TicketPdfLine("Salidas de efectivo", 1m, -cashOut, -cashOut),
+            new TicketPdfLine("Devoluciones en efectivo", 1m, -cashReturns, -cashReturns),
+            new TicketPdfLine("Efectivo esperado", 1m, expectedCash, expectedCash),
+            new TicketPdfLine("Efectivo contado", 1m, countedCash, countedCash),
+            new TicketPdfLine("Diferencia", 1m, difference, difference)
+        };
+        var ticket = new TicketPdfData(storeName, string.Empty, string.Empty, string.Empty, string.Empty, "CORTE DE CAJA - MOVIMIENTOS DEL TURNO", "Entregar este comprobante junto con el efectivo contado.", profile.WidthMm, Guid.NewGuid(), Guid.NewGuid(), "Caja actual", cashierName, closedAt, lines, [], expectedCash);
+        Print(printerName, ticket, profile, $"Corte de caja {closedAt:yyyyMMddHHmmss}");
     }
 
     private static TextBlock Text(string value, double size, FontWeight weight, TextAlignment alignment, Thickness margin) => new()

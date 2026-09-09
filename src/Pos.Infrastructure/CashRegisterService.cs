@@ -166,9 +166,7 @@ public sealed class CashRegisterService(PosDbContext database)
 
     private static (DateTimeOffset FromUtc, DateTimeOffset ToUtc) DayRangeUtc(DateOnly date)
     {
-        TimeZoneInfo zone;
-        try { zone = TimeZoneInfo.FindSystemTimeZoneById("Central Standard Time (Mexico)"); }
-        catch (TimeZoneNotFoundException) { zone = TimeZoneInfo.FindSystemTimeZoneById("America/Mexico_City"); }
+        var zone = TimeZoneInfo.Local;
         var localStart = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
         var nextStart = localStart.AddDays(1);
         return (new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localStart, zone)), new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(nextStart, zone)));

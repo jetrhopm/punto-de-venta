@@ -33,6 +33,7 @@ public partial class MainWindow : Window
     private string _roundingMode = "Tenths";
     private TemporaryPermissionLease? _modulePermissionLease;
     private string? _licenseReminder;
+    private readonly ApiAvailabilityMonitor _apiAvailabilityMonitor = new();
     public MainWindow()
     {
         InitializeComponent();
@@ -44,6 +45,7 @@ public partial class MainWindow : Window
         Closing += OnClosing;
         PreviewTextInput += OnPreviewTextInput;
         BarcodeScannerService.BarcodeScanned += OnSerialBarcodeScanned;
+        _apiAvailabilityMonitor.AvailabilityChanged += OnApiAvailabilityChanged;
     }
 
     public void ShowLicenseReminder(string message)
@@ -88,6 +90,7 @@ public partial class MainWindow : Window
     {
         ApiClient.ApplySession(SessionContext.AccessToken);
         BarcodeScannerService.StartConfiguredProfile();
+        _apiAvailabilityMonitor.Start();
         try
         {
             using var response = await Client.GetAsync("/api/setup/status");
@@ -481,6 +484,13 @@ public partial class MainWindow : Window
         var summary = await summaryResponse.Content.ReadFromJsonAsync<ShiftSummaryResponse>();
         summaryResponse.Dispose();
         if (summary is null) { StatusText.Text = "No se pudo calcular el efectivo esperado."; return false; }
+        CashCutResponse? currentCut = null;
+        try { currentCut = await Client.GetFromJsonAsync<CashCutResponse>("/api/shifts/cut"); }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            StatusText.Text = await DescribeCloseConnectionFailureAsync();
+            return false;
+        }
         CutSettingsResponse? cutSettings = null;
         try { cutSettings = await Client.GetFromJsonAsync<CutSettingsResponse>("/api/cut-settings"); }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
@@ -514,6 +524,16 @@ public partial class MainWindow : Window
             var result = await response.Content.ReadFromJsonAsync<ShiftSummaryResponse>();
             if (result is null) { StatusText.Text = "Turno cerrado."; return true; }
             StatusText.Text = $"Turno cerrado. Diferencia: ${result.Difference:0.00}";
+            if (currentCut is not null && ApiClient.IsTicketPrintingAvailable)
+            {
+                try
+                {
+                    TicketWindowsPrinter.PrintShiftClose(ApiClient.PrinterName!, StoreNameText.Text, SessionContext.DisplayName ?? "Cajero", result.ClosedAtUtc ?? DateTimeOffset.Now, currentCut.InitialCash, currentCut.CashSales, currentCut.CardSales, currentCut.TransferSales, currentCut.CreditSales, currentCut.CashIn, currentCut.CashOut, currentCut.CashReturns, result.ExpectedCash, result.CountedCash, result.Difference, TicketWindowsPrinter.CurrentProfile);
+                    StatusText.Text += " Comprobante de corte enviado a la impresora.";
+                }
+                catch (Exception exception) { StatusText.Text += $" El turno se cerró, pero no se pudo imprimir el comprobante: {exception.Message}"; }
+            }
+            else StatusText.Text += " No hay impresora activa; el comprobante de corte no se imprimió.";
             new ShiftCloseSummaryWindow(result.ExpectedCash, result.CountedCash, result.Difference) { Owner = this }.ShowDialog();
             if (openNewShift)
             {
@@ -741,6 +761,35 @@ public partial class MainWindow : Window
         if (window.ShowDialog() != true) { FocusProductInput(); return; }
 
         await AddCommonProductAsync(window.ProductCode, window.ProductDescription, window.Price, window.UnitOfMeasure, window.Quantity);
+    }
+
+    private void OnApiAvailabilityChanged(object? sender, bool available)
+    {
+        if (!IsLoaded || _exitConfirmed) return;
+        ApiStatusBanner.Visibility = Visibility.Visible;
+        if (available)
+        {
+            ApiStatusBanner.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(229, 244, 252));
+            ApiStatusBanner.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(38, 132, 190));
+            ApiStatusIcon.Kind = MahApps.Metro.IconPacks.PackIconMaterialKind.LanConnect;
+            ApiStatusIcon.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(28, 104, 157));
+            ApiStatusTitle.Text = "JetVenta volvió a responder";
+            ApiStatusText.Text = "La comunicación con la API se restableció. Puedes continuar operando.";
+            StatusText.Text = "La conexión con JetVenta se restableció.";
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
+            timer.Tick += (_, _) => { timer.Stop(); if (ApiStatusTitle.Text == "JetVenta volvió a responder") ApiStatusBanner.Visibility = Visibility.Collapsed; };
+            timer.Start();
+        }
+        else
+        {
+            ApiStatusBanner.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(252, 232, 232));
+            ApiStatusBanner.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(196, 67, 67));
+            ApiStatusIcon.Kind = MahApps.Metro.IconPacks.PackIconMaterialKind.LanDisconnect;
+            ApiStatusIcon.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(163, 36, 36));
+            ApiStatusTitle.Text = "Se perdió la comunicación con JetVenta";
+            ApiStatusText.Text = "No confirmes operaciones hasta que vuelva a responder. Ve a Configuración > Diagnóstico > Levantar API.";
+            StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
+        }
     }
 
     // The missing-product dialog already captured its final quantity. It must not invoke
@@ -1079,7 +1128,8 @@ public partial class MainWindow : Window
     private sealed record StoreOptionsResponse(bool InventoryEnabled, string InventoryCostMethod, bool CreditSalesEnabled, bool CommonProductsEnabled, bool AutoPriceWithProfit, decimal DefaultProfitPercent, bool RoundSaleAmounts, string RoundingMode, string OccasionalNotice, int OccasionalNoticeEverySales);
     private sealed record RegisterResponse(Guid Id, string Name);
     private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
-    private sealed record CutSettingsResponse(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, decimal CashLimit, string CashLimitMessage);
+    private sealed record CutSettingsResponse(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, bool BlockSalesWhenCashLimitReached, decimal CashLimit, string CashLimitMessage);
+    private sealed record CashCutResponse(decimal InitialCash, decimal TotalSales, int SalesCount, decimal CashSales, decimal CardSales, decimal TransferSales, decimal CreditSales, decimal CashIn, decimal CashOut, decimal CashReturns, decimal Profit, decimal ExpectedCash);
     private sealed record MercadoPagoStatus(bool Enabled);
     private sealed record CurrentShiftResponse(Guid ShiftId, Guid RegisterId, Guid UserId, decimal InitialCash, DateTimeOffset OpenedAtUtc);
     private sealed record OpenShiftConflictResponse(string? Code, string? Message, string? OpenedBy, DateTimeOffset OpenedAtUtc);
@@ -1540,6 +1590,7 @@ public partial class MainWindow : Window
 
     private void CompleteExit()
     {
+        _apiAvailabilityMonitor.Dispose();
         _exitConfirmed = true;
         Closing -= OnClosing;
         Close();

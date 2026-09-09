@@ -74,6 +74,23 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         }
         var totalSale = RoundSaleAmount(lines.Sum(line => line.LineTotal), store);
         ValidatePaymentMethodEnabled(store, command, totalSale);
+        var cashForThisSale = command.PaymentMethod switch
+        {
+            "Card" or "Transfer" or "Credit" => 0m,
+            "Mixed" => decimal.Round(totalSale - command.CardAmount - command.TransferAmount, 2, MidpointRounding.AwayFromZero),
+            _ => totalSale
+        };
+        if (store.CashLimitEnabled && store.BlockSalesWhenCashLimitReached && cashForThisSale > 0m)
+        {
+            var currentCashSales = await database.Payments
+                .Where(payment => payment.Method == "Cash" && database.Sales.Any(sale => sale.Id == payment.SaleId && sale.ShiftId == shift.Id && sale.Status == "Completed"))
+                .SumAsync(payment => payment.Amount, cancellationToken);
+            var currentIn = await database.CashMovements.Where(item => item.ShiftId == shift.Id && item.Type == "In").SumAsync(item => item.Amount, cancellationToken);
+            var currentOut = await database.CashMovements.Where(item => item.ShiftId == shift.Id && item.Type == "Out").SumAsync(item => item.Amount, cancellationToken);
+            var expectedCash = shift.InitialCash + currentCashSales + currentIn - currentOut;
+            if (expectedCash >= store.CashLimit || expectedCash + cashForThisSale > store.CashLimit)
+                throw new InvalidOperationException("La venta en efectivo está bloqueada porque se alcanzó el límite de efectivo en caja. Registra un retiro autorizado (F8) antes de continuar.");
+        }
         var mercadoPagoAmount = command.PaymentMethod == "Card" ? totalSale : command.PaymentMethod == "Mixed" ? command.CardAmount : 0m;
         if (store.MercadoPagoEnabled && mercadoPagoAmount > 0m)
         {
