@@ -88,7 +88,9 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
             var currentIn = await database.CashMovements.Where(item => item.ShiftId == shift.Id && item.Type == "In").SumAsync(item => item.Amount, cancellationToken);
             var currentOut = await database.CashMovements.Where(item => item.ShiftId == shift.Id && item.Type == "Out").SumAsync(item => item.Amount, cancellationToken);
             var expectedCash = shift.InitialCash + currentCashSales + currentIn - currentOut;
-            if (expectedCash >= store.CashLimit || expectedCash + cashForThisSale > store.CashLimit)
+            // La venta que rebasa el límite se confirma. El bloqueo protege la siguiente venta
+            // en efectivo, cuando ya existe efectivo por retirar en la caja.
+            if (expectedCash >= store.CashLimit)
                 throw new InvalidOperationException("La venta en efectivo está bloqueada porque se alcanzó el límite de efectivo en caja. Registra un retiro autorizado (F8) antes de continuar.");
         }
         var mercadoPagoAmount = command.PaymentMethod == "Card" ? totalSale : command.PaymentMethod == "Mixed" ? command.CardAmount : 0m;

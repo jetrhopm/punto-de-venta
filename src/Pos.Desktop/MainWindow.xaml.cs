@@ -1066,7 +1066,10 @@ public partial class MainWindow : Window
             if (settings is not { CashLimitEnabled: true } || settings.CashLimit <= 0m) return;
             var summary = await Client.GetFromJsonAsync<ShiftSummaryResponse>("/api/shifts/summary");
             if (summary is null || summary.ExpectedCash < settings.CashLimit) return;
-            MessageBox.Show(settings.CashLimitMessage, "Límite de efectivo en caja", MessageBoxButton.OK, MessageBoxImage.Information);
+            var message = settings.BlockSalesWhenCashLimitReached
+                ? $"{settings.CashLimitMessage}{Environment.NewLine}{Environment.NewLine}Las siguientes ventas en efectivo quedarán bloqueadas hasta registrar un retiro autorizado (F8)."
+                : settings.CashLimitMessage;
+            MessageBox.Show(message, "Límite de efectivo en caja", MessageBoxButton.OK, settings.BlockSalesWhenCashLimitReached ? MessageBoxImage.Warning : MessageBoxImage.Information);
         }
         catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailableRetry; }
     }

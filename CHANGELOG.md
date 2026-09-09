@@ -215,3 +215,4 @@
 - Se conecta Enter y botón Buscar al alta rápida de productos y Delete a la eliminación de partidas del carrito.
 - Se agrega pantalla WPF para configurar kits y sus componentes con permiso de productos.
 - Se publica la versión 2.5.12: cortes y reportes por fecha usan la zona horaria local de Windows; JetVenta vigila la API en segundo plano y muestra un aviso rojo al perderla y azul al recuperarla. El límite de caja puede sólo advertir o bloquear ventas en efectivo hasta registrar un retiro autorizado, sin incluir tarjeta, transferencia ni crédito. Al cerrar turno, imprime un comprobante completo de movimientos si la caja tiene impresora activa.
+- Se publica la versión 2.5.13: el modo de bloqueo por límite de efectivo permite completar la venta que rebasa el límite y exige retiro autorizado sólo antes del siguiente cobro en efectivo.
