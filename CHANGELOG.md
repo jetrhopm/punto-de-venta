@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se prepara la versión 2.5.10: el catálogo manual de departamentos evita duplicados que sólo cambian por mayúsculas, minúsculas o acentos; se verificaron los flujos ya existentes de autorización temporal, producto común y clientes sin modificar permisos ajenos a las notas.
 - Se prepara la versión 2.5.9: la importación vincula productos con departamentos reales, reutiliza el mismo departamento sin distinguir mayúsculas, minúsculas ni acentos y conserva el nombre ya existente del catálogo.
 - Se prepara la versión 2.5.8: importación y exportación de inventario aceptan importes comerciales con moneda y separadores, validan lotes completos antes de escribir datos y conservan mayoreo, mínimos y proveedor al exportar y reimportar.
 - Se prepara la versión 2.5.7: mayoreo automático por cantidad, correcciones de integridad para cancelaciones y devoluciones con pagos mixtos, y estados operativos en español para ventas y movimientos.

@@ -8,6 +8,39 @@ namespace Pos.IntegrationTests;
 public sealed class ProductImportIntegrationTests
 {
     [Fact]
+    public async Task PreventsDepartmentsDuplicatedOnlyByAccentsOrCapitalization()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var suffix = Guid.NewGuid().ToString("N");
+        var user = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "DEPARTMENT_" + suffix, DisplayName = "Department test", PasswordHash = "test", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        database.Users.Add(user);
+        database.Sessions.Add(new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) });
+        await database.SaveChangesAsync();
+        var firstName = "Lácteos " + suffix;
+        var equivalentName = "LACTEOS " + suffix;
+        try
+        {
+            var catalog = new ProductCatalogService(database);
+            var first = await catalog.CreateDepartmentAsync(token, firstName, CancellationToken.None);
+            Assert.NotNull(first);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => catalog.CreateDepartmentAsync(token, equivalentName, CancellationToken.None));
+
+            var second = await catalog.CreateDepartmentAsync(token, "Bebidas " + suffix, CancellationToken.None);
+            Assert.NotNull(second);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => catalog.UpdateDepartmentAsync(token, second.Id, equivalentName, CancellationToken.None));
+        }
+        finally
+        {
+            database.Departments.RemoveRange(database.Departments.Where(item => item.Name.EndsWith(suffix)));
+            database.Sessions.RemoveRange(database.Sessions.Where(item => item.UserId == user.Id));
+            database.Users.Remove(user);
+            await database.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
     public async Task RejectsWholeBatchWhenAnySelectedRowIsInvalid()
     {
         await using var database = new PosDbContextFactory().CreateDbContext([]);

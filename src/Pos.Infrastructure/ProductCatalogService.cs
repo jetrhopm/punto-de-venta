@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -62,14 +63,14 @@ public sealed class ProductCatalogService(PosDbContext database)
     {
         if (await GetAuthorizedUserAsync(accessToken, "ManageProducts", cancellationToken) is null) return null;
         var normalized = NormalizeName(name); if (normalized.Length is 0 or > 100) throw new ArgumentException("El departamento debe tener entre 1 y 100 caracteres.");
-        if (await database.Departments.AnyAsync(item => item.NormalizedName == normalized, cancellationToken)) throw new InvalidOperationException("El departamento ya existe.");
+        if (await DepartmentNameExistsAsync(normalized, null, cancellationToken)) throw new InvalidOperationException("El departamento ya existe.");
         var result = new DepartmentRecord { Id = Guid.NewGuid(), Name = name.Trim(), NormalizedName = normalized, CreatedAtUtc = DateTimeOffset.UtcNow }; database.Departments.Add(result); await database.SaveChangesAsync(cancellationToken); return new DepartmentResult(result.Id, result.Name, result.IsActive);
     }
     public async Task<DepartmentResult?> UpdateDepartmentAsync(string accessToken, Guid id, string name, CancellationToken cancellationToken)
     {
         if (await GetAuthorizedUserAsync(accessToken, "ManageProducts", cancellationToken) is null) return null;
         var normalized = NormalizeName(name); var item = await database.Departments.SingleOrDefaultAsync(department => department.Id == id && department.IsActive, cancellationToken) ?? throw new KeyNotFoundException("Departamento no encontrado.");
-        if (normalized.Length is 0 or > 100) throw new ArgumentException("El departamento debe tener entre 1 y 100 caracteres."); if (await database.Departments.AnyAsync(department => department.Id != id && department.NormalizedName == normalized, cancellationToken)) throw new InvalidOperationException("El departamento ya existe."); item.Name = name.Trim(); item.NormalizedName = normalized; await database.SaveChangesAsync(cancellationToken); return new DepartmentResult(item.Id, item.Name, item.IsActive);
+        if (normalized.Length is 0 or > 100) throw new ArgumentException("El departamento debe tener entre 1 y 100 caracteres."); if (await DepartmentNameExistsAsync(normalized, id, cancellationToken)) throw new InvalidOperationException("El departamento ya existe."); item.Name = name.Trim(); item.NormalizedName = normalized; await database.SaveChangesAsync(cancellationToken); return new DepartmentResult(item.Id, item.Name, item.IsActive);
     }
     public async Task<bool?> DeactivateDepartmentAsync(string accessToken, Guid id, CancellationToken cancellationToken)
     {
@@ -88,7 +89,21 @@ public sealed class ProductCatalogService(PosDbContext database)
     private async Task ValidateDepartmentAsync(Guid? id, CancellationToken cancellationToken) { if (id is not null && !await database.Departments.AnyAsync(item => item.Id == id && item.IsActive, cancellationToken)) throw new ArgumentException("El departamento no existe o esta inactivo."); }
     private static decimal ResolvePrice(decimal price, decimal cost, decimal profit, StoreRecord store) => price > 0m || !store.AutoPriceWithProfit ? decimal.Round(price, 2) : decimal.Round(cost * (1m + (profit > 0m ? profit : store.DefaultProfitPercent) / 100m), 2, MidpointRounding.AwayFromZero);
     private static decimal ResolveWholesalePrice(decimal price, decimal cost, decimal profit, StoreRecord store) => price > 0m || !store.AutoPriceWithProfit ? decimal.Round(price, 2) : profit > 0m ? decimal.Round(cost * (1m + profit / 100m), 2, MidpointRounding.AwayFromZero) : 0m;
-    private static string NormalizeName(string value) => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToUpperInvariant();
+    private async Task<bool> DepartmentNameExistsAsync(string normalizedName, Guid? excludedId, CancellationToken cancellationToken)
+    {
+        var names = await database.Departments.AsNoTracking()
+            .Where(item => excludedId == null || item.Id != excludedId.Value)
+            .Select(item => item.Name)
+            .ToListAsync(cancellationToken);
+        return names.Any(item => NormalizeName(item) == normalizedName);
+    }
+
+    private static string NormalizeName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var decomposed = value.Trim().Normalize(NormalizationForm.FormD);
+        return new string(decomposed.Where(character => CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark).ToArray()).ToUpperInvariant();
+    }
     private static ProductResult ToResult(ProductRecord product) => new(product.Id, product.Code, product.Description, product.Price, product.Cost, product.ProfitPercent, product.WholesalePrice, product.WholesaleProfitPercent, product.WholesaleMinimumQuantity, product.DepartmentId, product.IsKit, product.UnitOfMeasure, product.IsActive);
     private static string NormalizeUnit(string value)
     {
