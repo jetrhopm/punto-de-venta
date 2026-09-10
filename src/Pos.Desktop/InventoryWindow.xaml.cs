@@ -206,7 +206,13 @@ public partial class InventoryWindow : UserControl, INotifyPropertyChanged
     }
 
     private void OnAdjustmentClick(object sender, RoutedEventArgs e) { new InventoryAdjustmentWindow { Owner = Window.GetWindow(this) }.ShowDialog(); _ = LoadAsync(); }
-    private void OnImportClick(object sender, RoutedEventArgs e) { new ProductImportWindow { Owner = Window.GetWindow(this) }.ShowDialog(); _ = LoadAsync(); }
+    private async void OnImportClick(object sender, RoutedEventArgs e)
+    {
+        new ProductImportWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+        // La importación puede crear departamentos. Recargar ambos catálogos evita salir y volver a F4.
+        await LoadDepartmentsAsync();
+        await LoadAsync();
+    }
     private async void OnExportClick(object sender, RoutedEventArgs e)
     {
         var dialog = new SaveFileDialog { Title = "Exportar inventario", Filter = "CSV (*.csv)|*.csv", FileName = $"inventario-{DateTime.Now:yyyyMMdd-HHmmss}.csv", AddExtension = true };
