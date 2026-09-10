@@ -569,6 +569,14 @@ app.MapPost("/api/promotions", async (HttpRequest request, PromotionCommand comm
     try { var result = await promotions.CreateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Created($"/api/promotions/{result.Id}", result); }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["promotion"] = [exception.Message] }); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+app.MapPut("/api/promotions/{id:guid}", async (Guid id, HttpRequest request, PromotionCommand command, PromotionService promotions, CancellationToken cancellationToken) =>
+{
+    try { var result = await promotions.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), id, command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["promotion"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 app.MapGet("/api/promotions", async (Guid? productId, bool? includeInactive, HttpRequest request, PromotionService promotions, CancellationToken cancellationToken) =>
 {
