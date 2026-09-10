@@ -54,9 +54,8 @@ public partial class DiagnosticWindow : Window
             SalesText.Text = report.CompletedSaleCount.ToString("N0");
             BackupText.Text = report.LatestBackup ?? "Sin respaldo";
             CheckedText.Text = report.CheckedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm");
-            PrintQueueInfoText.Text = report.ResidualPrintDocumentCount == 0
-                ? "No hay documentos técnicos residuales. Los trabajos pendientes de impresión nunca se eliminan desde aquí."
-                : $"Hay {report.ResidualPrintDocumentCount:N0} documento(s) técnico(s) ya generado(s) o impreso(s). Limpiar sólo borra este historial; las ventas, tickets e inventario permanecen intactos.";
+            PrintQueueInfoText.Text = BuildPrintQueueHelp(report.PendingPrintJobCount, report.ResidualPrintDocumentCount);
+            DiscardPendingDocumentsButton.IsEnabled = report.PendingPrintJobCount > 0;
             ClearTechnicalDocumentsButton.IsEnabled = report.ResidualPrintDocumentCount > 0;
             _reportText = BuildReportText(report, _checks);
             StatusText.Text = _checks.Any(item => item.Status == "Problema")
@@ -72,6 +71,7 @@ public partial class DiagnosticWindow : Window
             BackupText.Text = "-";
             CheckedText.Text = DateTime.Now.ToString("dd/MM/yyyy HH:mm");
             PrintQueueInfoText.Text = "No se pudo consultar la cola de impresión mientras JetVenta no responda.";
+            DiscardPendingDocumentsButton.IsEnabled = false;
             ClearTechnicalDocumentsButton.IsEnabled = false;
             _reportText = $"JETVENTA - DIAGNÓSTICO{Environment.NewLine}{exception.Message}";
             StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
@@ -80,10 +80,12 @@ public partial class DiagnosticWindow : Window
 
     private async void OnClearTechnicalDocumentsClick(object sender, RoutedEventArgs e)
     {
-        var confirmation = MessageBox.Show(
-            "Se eliminará únicamente el historial técnico de documentos ya generados o impresos. No se eliminarán ventas, tickets, inventario ni trabajos pendientes de impresión.\n\n¿Deseas continuar?",
-            "Limpiar historial técnico", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        if (confirmation != MessageBoxResult.Yes) return;
+        var confirmation = new OperationConfirmationWindow(
+            "Limpiar historial técnico",
+            "Se eliminará únicamente el historial técnico de documentos ya generados o impresos. No se eliminarán ventas, tickets, inventario ni trabajos pendientes de impresión.",
+            OperationResultKind.Warning,
+            MessageBoxButton.YesNo) { Owner = this };
+        if (confirmation.ShowDialog() != true || confirmation.Result != MessageBoxResult.Yes) return;
 
         ClearTechnicalDocumentsButton.IsEnabled = false;
         StatusText.Text = "Limpiando el historial técnico de impresión...";
@@ -111,6 +113,44 @@ public partial class DiagnosticWindow : Window
         finally
         {
             if (!cleaned) ClearTechnicalDocumentsButton.IsEnabled = true;
+        }
+    }
+
+    private async void OnDiscardPendingDocumentsClick(object sender, RoutedEventArgs e)
+    {
+        var confirmation = new OperationConfirmationWindow(
+            "Descartar cola pendiente",
+            "Se descartarán únicamente los intentos de impresión pendientes. Las ventas ya cobradas, tickets, pagos, inventario y cortes no se eliminarán. Usa esta opción sólo si ya no necesitas imprimir esos tickets.",
+            OperationResultKind.Warning,
+            MessageBoxButton.YesNo) { Owner = this };
+        if (confirmation.ShowDialog() != true || confirmation.Result != MessageBoxResult.Yes) return;
+
+        DiscardPendingDocumentsButton.IsEnabled = false;
+        StatusText.Text = "Descartando la cola técnica de impresión...";
+        var discarded = false;
+        try
+        {
+            using var response = await ApiClient.Client.DeleteAsync("api/diagnostics/pending-print-documents");
+            if (!response.IsSuccessStatusCode)
+            {
+                StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo descartar la cola pendiente.");
+                return;
+            }
+            var result = await response.Content.ReadFromJsonAsync<ClearTechnicalDocumentsResult>();
+            var message = result is null || result.DeletedCount == 0
+                ? "No había trabajos de impresión pendientes."
+                : $"Se descartaron {result.DeletedCount:N0} trabajo(s) de impresión pendiente(s). Las ventas no se modificaron.";
+            discarded = true;
+            await RefreshAsync();
+            StatusText.Text = message;
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo descartar la cola pendiente");
+        }
+        finally
+        {
+            if (!discarded) DiscardPendingDocumentsButton.IsEnabled = true;
         }
     }
 
@@ -161,6 +201,15 @@ public partial class DiagnosticWindow : Window
         builder.AppendLine();
         foreach (var check in checks) builder.AppendLine($"[{check.Status}] {check.Name}: {check.Detail} {check.Action}");
         return builder.ToString();
+    }
+
+    private static string BuildPrintQueueHelp(int pending, int residual)
+    {
+        if (pending == 0 && residual == 0) return "No hay trabajos pendientes ni historial técnico de impresión.";
+        var messages = new List<string>();
+        if (pending > 0) messages.Add($"Hay {pending:N0} trabajo(s) pendiente(s): las ventas ya están confirmadas. Revisa Configuración > Impresora; si ya no debes imprimirlos, usa Descartar cola pendiente.");
+        if (residual > 0) messages.Add($"Hay {residual:N0} documento(s) ya generado(s) o impreso(s): Limpiar historial técnico sólo borra ese registro técnico, sin afectar ventas, tickets ni inventario.");
+        return string.Join(" ", messages);
     }
 
     private void OnCopyClick(object sender, RoutedEventArgs e)

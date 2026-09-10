@@ -217,6 +217,12 @@ app.MapDelete("/api/diagnostics/technical-print-documents", async (HttpRequest r
     var result = await diagnostics.ClearTechnicalPrintDocumentsAsync(token, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
+app.MapDelete("/api/diagnostics/pending-print-documents", async (HttpRequest request, SystemDiagnosticsService diagnostics, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    var result = await diagnostics.DiscardPendingPrintDocumentsAsync(token, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
 
 app.MapGet("/api/lan/info", () => Results.Ok(new
 {

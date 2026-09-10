@@ -75,7 +75,7 @@ public sealed class SystemDiagnosticsService(PosDbContext database)
                 : new("Tickets pendientes", "Aviso", $"Hay {openTicketCount} ticket(s) guardado(s) para recuperar.", "Revísalos en Ventas antes de cerrar el turno."));
             checks.Add(pendingPrintJobCount == 0
                 ? new("Cola de impresión", "Correcto", "No hay trabajos de impresión pendientes.", "")
-                : new("Cola de impresión", "Aviso", $"Hay {pendingPrintJobCount} trabajo(s) pendiente(s).", "Revisa la impresora y reimprime solo si es necesario."));
+                : new("Cola de impresión", "Aviso", $"Hay {pendingPrintJobCount} trabajo(s) pendiente(s). Las ventas ya están confirmadas; sólo falta o quedó pendiente la impresión.", "Revisa Configuración > Impresora. Si ya no deseas imprimirlos, usa Descartar cola pendiente en esta ventana."));
             checks.Add(residualPrintDocumentCount == 0
                 ? new("Documentos técnicos", "Correcto", "No hay historial técnico de impresión para limpiar.", "")
                 : new("Documentos técnicos", "Aviso", $"Hay {residualPrintDocumentCount} comprobante(s) ya generado(s) o impreso(s) en el historial técnico.", "Puedes limpiarlos desde Diagnóstico; no se eliminarán ventas, tickets ni inventario."));
@@ -122,6 +122,15 @@ public sealed class SystemDiagnosticsService(PosDbContext database)
         if (!await AuthorizedAsync(token, cancellationToken)) return null;
         var deleted = await database.PrintJobs
             .Where(item => item.Status == "Generated" || item.Status == "Printed")
+            .ExecuteDeleteAsync(cancellationToken);
+        return new ClearTechnicalPrintDocumentsResult(deleted);
+    }
+
+    public async Task<ClearTechnicalPrintDocumentsResult?> DiscardPendingPrintDocumentsAsync(string token, CancellationToken cancellationToken)
+    {
+        if (!await AuthorizedAsync(token, cancellationToken)) return null;
+        var deleted = await database.PrintJobs
+            .Where(item => item.PrintRequested && (item.Status == "Pending" || item.Status == "Processing"))
             .ExecuteDeleteAsync(cancellationToken);
         return new ClearTechnicalPrintDocumentsResult(deleted);
     }
