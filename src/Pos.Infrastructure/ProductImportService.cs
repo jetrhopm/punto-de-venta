@@ -41,7 +41,7 @@ public sealed class ProductImportService(PosDbContext database)
                 product.WholesalePrice = decimal.Round(row.WholesalePrice, 2);
                 product.WholesaleMinimumQuantity = decimal.Round(row.WholesaleMinimumQuantity, 3);
                 ApplyCatalogFields(product, row, ResolveSupplier(row.SupplierName, suppliers), ResolveDepartment(row.Category, departments));
-                if (store.InventoryEnabled) AddStockMovement(product, row.Stock, userId.Value, command.OperationId, row.RowNumber);
+                ApplyImportedStock(product, row.Stock, userId.Value, command.OperationId, row.RowNumber, store.InventoryEnabled);
                 updated++;
             }
             else
@@ -50,7 +50,7 @@ public sealed class ProductImportService(PosDbContext database)
                 ApplyCatalogFields(product, row, ResolveSupplier(row.SupplierName, suppliers), ResolveDepartment(row.Category, departments));
                 database.Products.Add(product);
                 products.Add(normalized, product);
-                if (store.InventoryEnabled) AddStockMovement(product, row.Stock, userId.Value, command.OperationId, row.RowNumber);
+                ApplyImportedStock(product, row.Stock, userId.Value, command.OperationId, row.RowNumber, store.InventoryEnabled);
                 created++;
             }
         }
@@ -62,12 +62,13 @@ public sealed class ProductImportService(PosDbContext database)
         return new(batch.Id, created, updated, skipped, false);
     }
 
-    private void AddStockMovement(ProductRecord product, decimal requestedStock, Guid userId, Guid batchOperationId, int rowNumber)
+    private void ApplyImportedStock(ProductRecord product, decimal requestedStock, Guid userId, Guid batchOperationId, int rowNumber, bool recordInventoryMovement)
     {
         var stock = decimal.Round(requestedStock, 3);
         if (product.Stock == stock) return;
         var before = product.Stock;
         product.Stock = stock;
+        if (!recordInventoryMovement) return;
         database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, UserId = userId, OperationId = RowOperationId(batchOperationId, rowNumber), Quantity = stock - before, StockBefore = before, StockAfter = stock, Reason = "Importacion de inventario", CreatedAtUtc = DateTimeOffset.UtcNow });
     }
 

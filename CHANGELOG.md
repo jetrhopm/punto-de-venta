@@ -1,6 +1,7 @@
 # Changelog
 
 ## Sin liberar
+- Se prepara la versión 2.5.14: las gráficas de pastel muestran porcentaje e importe real; la importación conserva la existencia final indicada por el archivo aunque el control global de inventario esté deshabilitado. Cuando el inventario está habilitado, también queda registrado el movimiento trazable de importación.
 - Se prepara la versión 2.5.11: los departamentos desactivados se conservan visibles como inactivos en su administración y pueden reactivarse; los selectores operativos siguen mostrando únicamente departamentos activos.
 - Se prepara la versión 2.5.10: el catálogo manual de departamentos evita duplicados que sólo cambian por mayúsculas, minúsculas o acentos; se verificaron los flujos ya existentes de autorización temporal, producto común y clientes sin modificar permisos ajenos a las notas.
 - Se prepara la versión 2.5.9: la importación vincula productos con departamentos reales, reutiliza el mismo departamento sin distinguir mayúsculas, minúsculas ni acentos y conserva el nombre ya existente del catálogo.

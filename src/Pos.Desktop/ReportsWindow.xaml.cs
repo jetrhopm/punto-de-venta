@@ -165,7 +165,7 @@ public partial class ReportsWindow : UserControl
                 item.Total,
                 PaymentBrush(item.Method))
             {
-                PercentageText = $"{item.Total / total * 100m:0.#}%",
+                PercentageText = $"{item.Total / total * 100m:0.#}%  {item.Total.ToString("C2", CultureInfo.CurrentCulture)}",
                 TotalText = item.Total.ToString("C2", CultureInfo.CurrentCulture)
             }).ToList();
     }
@@ -181,7 +181,7 @@ public partial class ReportsWindow : UserControl
                 item.Total,
                 DepartmentBrush(index))
             {
-                PercentageText = $"{item.Total / total * 100m:0.#}%",
+                PercentageText = $"{item.Total / total * 100m:0.#}%  {item.Total.ToString("C2", CultureInfo.CurrentCulture)}",
                 TotalText = item.Total.ToString("C2", CultureInfo.CurrentCulture)
             }).ToList();
     }

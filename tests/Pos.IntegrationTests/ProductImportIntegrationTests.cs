@@ -178,4 +178,45 @@ public sealed class ProductImportIntegrationTests
             database.Sessions.RemoveRange(database.Sessions.Where(item => item.UserId == user.Id)); database.Users.Remove(user); await database.SaveChangesAsync();
         }
     }
+
+    [Fact]
+    public async Task ImportsFinalStockEvenWhenGlobalInventoryIsDisabled()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var suffix = Guid.NewGuid().ToString("N");
+        var user = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "IMPORT_DISABLED_" + suffix, DisplayName = "Import without inventory", PasswordHash = "test", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        var createdStore = !await database.Stores.AnyAsync();
+        var store = createdStore ? new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda sin inventario " + suffix, BusinessType = "Pruebas", InventoryEnabled = false, CreatedAtUtc = DateTimeOffset.UtcNow } : await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync();
+        var originalInventoryEnabled = store.InventoryEnabled;
+        database.AddRange(user, session);
+        if (createdStore) database.Stores.Add(store);
+        else store.InventoryEnabled = false;
+        await database.SaveChangesAsync();
+
+        var operationId = Guid.NewGuid();
+        var code = "IMPORT-STOCK-" + suffix;
+        var normalizedCode = ProductCatalogService.NormalizeCode(code);
+        try
+        {
+            var result = await new ProductImportService(database).ImportAsync(token, new ProductImportCommand(operationId, "existencia.xlsx", "Skip", [new ProductImportRow(2, code, "Existencia importada", 25m, 10m, 7.5m, 0m, 0m)]), CancellationToken.None);
+
+            Assert.NotNull(result);
+            var product = await database.Products.SingleAsync(item => item.NormalizedCode == normalizedCode);
+            Assert.Equal(7.5m, product.Stock);
+            Assert.Empty(await database.InventoryMovements.Where(item => item.ProductId == product.Id).ToListAsync());
+        }
+        finally
+        {
+            var product = await database.Products.SingleOrDefaultAsync(item => item.NormalizedCode == normalizedCode);
+            if (product is not null) database.Products.Remove(product);
+            database.ImportBatches.RemoveRange(database.ImportBatches.Where(item => item.OperationId == operationId));
+            database.Sessions.RemoveRange(database.Sessions.Where(item => item.UserId == user.Id));
+            database.Users.Remove(user);
+            if (!createdStore) store.InventoryEnabled = originalInventoryEnabled;
+            await database.SaveChangesAsync();
+        }
+    }
 }
