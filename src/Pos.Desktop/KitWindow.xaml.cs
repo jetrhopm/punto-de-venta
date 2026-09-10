@@ -19,6 +19,7 @@ public partial class KitWindow : Window
     private CancellationTokenSource? _searchCancellation;
     private CancellationTokenSource? _componentSearchCancellation;
     private bool _showInactive;
+    private bool _applyingComponentSelection;
 
     public KitWindow() : this([], "Kilogramo", true, 20m) { }
 
@@ -77,6 +78,7 @@ public partial class KitWindow : Window
 
     private async void OnComponentSearchChanged(object sender, TextChangedEventArgs e)
     {
+        if (_applyingComponentSelection) return;
         _pendingComponent = null; _componentSearchCancellation?.Cancel(); _componentSearchCancellation = new CancellationTokenSource(); var token = _componentSearchCancellation.Token;
         var query = ComponentSearchBox.Text.Trim(); if (query.Length < 2) { ComponentResults.Visibility = Visibility.Collapsed; return; }
         try
@@ -91,7 +93,20 @@ public partial class KitWindow : Window
     private void OnComponentSelected(object sender, MouseButtonEventArgs e)
     {
         if (ComponentResults.SelectedItem is not ProductSearchRow row) return;
-        _pendingComponent = row; ComponentSearchBox.Text = row.Display; ComponentResults.Visibility = Visibility.Collapsed;
+        ApplyComponentSelection(row);
+    }
+    private void OnComponentSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ComponentResults.SelectedItem is ProductSearchRow row) ApplyComponentSelection(row);
+    }
+    private void ApplyComponentSelection(ProductSearchRow row)
+    {
+        _pendingComponent = row;
+        _componentSearchCancellation?.Cancel();
+        _applyingComponentSelection = true;
+        ComponentSearchBox.Text = row.Display;
+        _applyingComponentSelection = false;
+        ComponentResults.Visibility = Visibility.Collapsed;
     }
     private void OnAddComponentClick(object sender, RoutedEventArgs e)
     {
