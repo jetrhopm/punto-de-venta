@@ -18,6 +18,9 @@ public partial class DepartmentManagerWindow : Window
     private async void OnSaveClick(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(NameBox.Text)) { StatusText.Text = "Escribe un nombre."; return; }
+        var action = _selected is null ? "Crear un departamento" : "Editar este departamento";
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "ManageProducts", $"{action} requiere autorización.");
+        if (authorization is null) return;
         try
         {
             using var response = _selected is null ? await ApiClient.Client.PostAsJsonAsync("/api/departments", new { name = NameBox.Text.Trim() }) : await ApiClient.Client.PutAsJsonAsync($"/api/departments/{_selected.Id}", new { name = NameBox.Text.Trim() });
@@ -30,12 +33,16 @@ public partial class DepartmentManagerWindow : Window
     {
         if (_selected is null) { StatusText.Text = "Selecciona un departamento."; return; }
         if (MessageBox.Show($"¿Desactivar {_selected.Name}? Los productos conservarán su historial.", "Desactivar departamento", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "ManageProducts", "Desactivar este departamento requiere autorización.");
+        if (authorization is null) return;
         try { using var response = await ApiClient.Client.DeleteAsync($"/api/departments/{_selected.Id}"); if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; } await LoadAsync(); OnNewClick(sender, e); StatusText.Text = "Departamento desactivado."; }
         catch (Exception exception) { StatusText.Text = $"No se pudo desactivar: {exception.Message}"; }
     }
     private async void OnReactivateClick(object sender, RoutedEventArgs e)
     {
         if (_selected is null) { StatusText.Text = "Selecciona un departamento inactivo."; return; }
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "ManageProducts", "Reactivar este departamento requiere autorización.");
+        if (authorization is null) return;
         try { using var response = await ApiClient.Client.PutAsJsonAsync($"/api/departments/{_selected.Id}/status", new { isActive = true }); if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; } await LoadAsync(); OnNewClick(sender, e); StatusText.Text = "Departamento reactivado. Ya puede asignarse a productos."; }
         catch (Exception exception) { StatusText.Text = $"No se pudo reactivar: {exception.Message}"; }
     }

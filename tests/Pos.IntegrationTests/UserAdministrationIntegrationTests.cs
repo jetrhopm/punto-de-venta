@@ -107,4 +107,53 @@ public sealed class UserAdministrationIntegrationTests
             await database.SaveChangesAsync();
         }
     }
+
+    [Fact]
+    public async Task TemporaryManageProductsPermissionAllowsOnlyTheAuthorizedCatalogAction()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var actorToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var hasher = new PasswordHasher<UserRecord>();
+        var administrator = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = ("ADMIN_PRODUCTS_" + suffix).ToUpperInvariant(), DisplayName = "Administrador de catálogo", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        administrator.PasswordHash = hasher.HashPassword(administrator, "clave-admin");
+        var cashier = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = ("CAJERO_PRODUCTS_" + suffix).ToUpperInvariant(), DisplayName = "Cajero sin catálogo", IsAdministrator = false, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        cashier.PasswordHash = hasher.HashPassword(cashier, "clave-cajero");
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = cashier.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(actorToken))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        var createdStore = !await database.Stores.AnyAsync();
+        var store = createdStore ? new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda permisos " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow } : null;
+        database.AddRange(administrator, cashier, session);
+        if (store is not null) database.Stores.Add(store);
+        await database.SaveChangesAsync();
+
+        var code = "TEMP-PRODUCT-" + suffix;
+        try
+        {
+            var catalog = new ProductCatalogService(database);
+            var command = new ProductCommand(code, "Producto temporal autorizado", 15m, 8m);
+            Assert.Null(await catalog.CreateAsync(actorToken, command, CancellationToken.None));
+
+            var authentication = new AuthenticationService(database, hasher);
+            var grant = await authentication.GrantTemporaryPermissionAsync(actorToken, new TemporaryPermissionAuthorizationCommand(administrator.NormalizedUserName, "clave-admin", "ManageProducts"), CancellationToken.None);
+            Assert.NotNull(grant);
+            Assert.NotNull(await catalog.CreateAsync(actorToken, command, CancellationToken.None));
+
+            Assert.True(await authentication.RevokeTemporaryPermissionAsync(actorToken, grant.GrantId!.Value, CancellationToken.None));
+            Assert.Null(await catalog.CreateAsync(actorToken, new ProductCommand(code + "-2", "Producto sin autorización", 15m, 8m), CancellationToken.None));
+        }
+        finally
+        {
+            var productIds = await database.Products.Where(item => item.NormalizedCode.StartsWith("TEMP-PRODUCT-" + suffix)).Select(item => item.Id).ToListAsync();
+            database.InventoryMovements.RemoveRange(database.InventoryMovements.Where(item => productIds.Contains(item.ProductId)));
+            database.Products.RemoveRange(database.Products.Where(item => productIds.Contains(item.Id)));
+            var userIds = new[] { administrator.Id, cashier.Id };
+            database.Permissions.RemoveRange(database.Permissions.IgnoreQueryFilters().Where(item => userIds.Contains(item.UserId)));
+            database.Sessions.RemoveRange(database.Sessions.Where(item => userIds.Contains(item.UserId)));
+            database.Users.RemoveRange(database.Users.Where(item => userIds.Contains(item.Id)));
+            if (store is not null) database.Stores.Remove(store);
+            await database.SaveChangesAsync();
+        }
+    }
 }

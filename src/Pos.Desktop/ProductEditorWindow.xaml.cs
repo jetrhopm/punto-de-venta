@@ -60,6 +60,9 @@ public partial class ProductEditorWindow : Window
     private async void OnSaveClick(object sender, RoutedEventArgs e)
     {
         if (!TryReadForm(out var command)) return;
+        var action = _original is null ? "Crear un producto" : "Editar este producto";
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "ManageProducts", $"{action} requiere autorización.");
+        if (authorization is null) return;
         SaveButton.IsEnabled = false;
         try
         {
