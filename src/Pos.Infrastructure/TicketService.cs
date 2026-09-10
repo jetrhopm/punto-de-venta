@@ -24,7 +24,16 @@ public sealed class TicketService(PosDbContext database)
         if (await AuthorizedUserAsync(token, cancellationToken) is null) return null;
         var sale = await database.Sales.AsNoTracking().SingleOrDefaultAsync(item => item.Id == saleId, cancellationToken);
         if (sale is null) throw new KeyNotFoundException("Venta no encontrada.");
-        var lines = await (from line in database.SaleLines.AsNoTracking() join product in database.Products.AsNoTracking() on line.ProductId equals product.Id where line.SaleId == saleId select new TicketPdfLine(product.Description, line.Quantity, line.UnitPrice, line.LineTotal)).ToListAsync(cancellationToken);
+        var lines = await (from line in database.SaleLines.AsNoTracking()
+                           join product in database.Products.AsNoTracking() on line.ProductId equals product.Id
+                           where line.SaleId == saleId
+                           select new TicketPdfLine(
+                               product.Description,
+                               line.Quantity,
+                               line.OriginalUnitPrice > 0m ? line.OriginalUnitPrice : line.UnitPrice,
+                               line.LineTotal,
+                               line.DiscountTotal,
+                               line.PromotionName)).ToListAsync(cancellationToken);
         var payments = await database.Payments.AsNoTracking().Where(item => item.SaleId == saleId).Select(item => new TicketPdfPayment(item.Method, item.Amount, item.Received, item.Change)).ToListAsync(cancellationToken);
         var shift = await database.Shifts.AsNoTracking().SingleAsync(item => item.Id == sale.ShiftId, cancellationToken);
         var register = await database.Registers.AsNoTracking().SingleAsync(item => item.Id == shift.RegisterId, cancellationToken);

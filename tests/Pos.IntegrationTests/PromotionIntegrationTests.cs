@@ -36,9 +36,12 @@ public sealed class PromotionIntegrationTests
 
             Assert.Equal(170m, percent.Total);
             Assert.Equal(85m, percent.UnitPrice);
+            Assert.Equal("Porcentaje " + suffix, percent.PromotionName);
             Assert.Equal(176m, fixedAmount.Total);
             Assert.Equal(88m, fixedAmount.UnitPrice);
+            Assert.Equal("Fijo " + suffix, fixedAmount.PromotionName);
             Assert.Equal(200m, buyPay.Total);
+            Assert.Equal("Compra paga " + suffix, buyPay.PromotionName);
         }
         finally
         {

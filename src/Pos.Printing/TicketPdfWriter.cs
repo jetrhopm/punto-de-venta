@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace Pos.Printing;
 
-public sealed record TicketPdfLine(string Description, decimal Quantity, decimal UnitPrice, decimal Total);
+public sealed record TicketPdfLine(string Description, decimal Quantity, decimal UnitPrice, decimal Total, decimal DiscountTotal = 0m, string PromotionName = "");
 public sealed record TicketPdfPayment(string Method, decimal Amount, decimal Received, decimal Change);
 
 [method: JsonConstructor]
@@ -95,7 +95,7 @@ public static class TicketPdfWriter
             {
                 var quantity = index == 0 ? line.Quantity.ToString("0.###", CultureInfo.InvariantCulture) : string.Empty;
                 var price = index == 0 ? Money(ticket, line.UnitPrice) : string.Empty;
-                var amount = index == 0 ? Money(ticket, line.Total) : string.Empty;
+                var amount = index == 0 ? Money(ticket, decimal.Round(line.UnitPrice * line.Quantity, 2, MidpointRounding.AwayFromZero)) : string.Empty;
                 rows.Add(new LayoutRow(
                     $"{FitRight(quantity, quantityWidth)} {FitLeft(descriptionLines[index], descriptionWidth)} {FitRight(price, priceWidth)} {FitRight(amount, amountWidth)}",
                     normalSize,
@@ -103,13 +103,31 @@ public static class TicketPdfWriter
                     TextAlignment.Left,
                     index == descriptionLines.Length - 1 ? 2m : 1m));
             }
+
+            if (line.DiscountTotal > 0m)
+            {
+                var promotion = string.IsNullOrWhiteSpace(line.PromotionName) ? "DESCUENTO" : $"PROMO: {line.PromotionName.ToUpperInvariant()}";
+                var promotionWidth = quantityWidth + descriptionWidth + priceWidth + 2;
+                rows.Add(new LayoutRow(
+                    $"{FitLeft(string.Empty, quantityWidth)} {FitLeft(promotion, promotionWidth - quantityWidth - 1)} {FitRight(NegativeMoney(ticket, line.DiscountTotal), amountWidth)}",
+                    normalSize,
+                    false,
+                    TextAlignment.Left,
+                    3m));
+            }
         }
 
         AddRule(rows);
         var itemCount = ticket.Lines.Sum(line => line.Quantity);
         rows.Add(new LayoutRow($"ARTICULOS: {itemCount:0.###}", normalSize, false, TextAlignment.Left, 4m));
-        var subtotal = ticket.Subtotal ?? ticket.Total;
-        rows.Add(new LayoutRow($"SUBTOTAL: {Money(ticket, subtotal)}", normalSize + 1m, true, TextAlignment.Right, 3m));
+        var discounts = decimal.Round(ticket.Lines.Sum(line => Math.Max(0m, line.DiscountTotal)), 2, MidpointRounding.AwayFromZero);
+        var grossSubtotal = discounts > 0m
+            ? decimal.Round(ticket.Lines.Sum(line => line.UnitPrice * line.Quantity), 2, MidpointRounding.AwayFromZero)
+            : ticket.Subtotal ?? ticket.Total;
+        var subtotal = ticket.Subtotal ?? decimal.Round(grossSubtotal - discounts, 2, MidpointRounding.AwayFromZero);
+        rows.Add(new LayoutRow($"SUBTOTAL: {Money(ticket, grossSubtotal)}", normalSize + 1m, true, TextAlignment.Right, 3m));
+        if (discounts > 0m)
+            rows.Add(new LayoutRow($"DESCUENTOS: {NegativeMoney(ticket, discounts)}", normalSize, false, TextAlignment.Right, 2m));
         if (subtotal != ticket.Total)
             rows.Add(new LayoutRow($"REDONDEO: {Money(ticket, ticket.Total - subtotal)}", normalSize, false, TextAlignment.Right, 2m));
         rows.Add(new LayoutRow($"TOTAL: {Money(ticket, ticket.Total)}", totalSize, true, TextAlignment.Right, 5m));
@@ -225,6 +243,7 @@ public static class TicketPdfWriter
     private static string FormatShiftNumber(long shiftNumber) => shiftNumber > 0 ? shiftNumber.ToString("N0", CultureInfo.CurrentCulture) : "N/D";
     private static string FormatFolio(long folio, Guid saleId) => folio > 0 ? folio.ToString("N0", CultureInfo.CurrentCulture) : "N/D";
     private static string Money(TicketPdfData ticket, decimal value) => (string.IsNullOrWhiteSpace(ticket.CurrencySymbol) ? "$" : ticket.CurrencySymbol.Trim()) + value.ToString("#,##0.00", CultureInfo.InvariantCulture);
+    private static string NegativeMoney(TicketPdfData ticket, decimal value) => "-" + Money(ticket, Math.Abs(value));
     private static string PaymentLabel(string method) => method.ToUpperInvariant() switch { "CASH" => "EFECTIVO", "CARD" => "TARJETA", "TRANSFER" => "TRANSFERENCIA", "CREDIT" => "CREDITO", _ => method.ToUpperInvariant() };
     private static string FitLeft(string value, int width) => value.Length > width ? value[..width] : value.PadRight(width);
     private static string FitRight(string value, int width) => value.Length > width ? value[^width..] : value.PadLeft(width);

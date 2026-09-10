@@ -58,6 +58,29 @@ public sealed class TicketPdfTests
     }
 
     [Fact]
+    public void PrintsOriginalPricePromotionAndDiscountBreakdown()
+    {
+        var ticket = new TicketPdfData(
+            "Tienda de prueba",
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow,
+            [new TicketPdfLine("Coca cola", 2m, 23m, 23m, 23m, "2x1 Coca")],
+            23m,
+            23m,
+            0m)
+        {
+            Subtotal = 23m
+        };
+
+        var text = Encoding.Latin1.GetString(TicketPdfWriter.Create(ticket));
+
+        Assert.Contains("PROMO: 2X1 COCA", text);
+        Assert.Contains("DESCUENTOS:", text);
+        Assert.Contains("-$23.00", text);
+        Assert.Contains("$46.00", text);
+    }
+
+    [Fact]
     public void DeserializesTicketDataForWindowsPrinter()
     {
         var ticket = CreateTicket(Guid.NewGuid(), 80, 1) with { Folio = 1234, ShiftNumber = 91 };

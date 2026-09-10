@@ -7,8 +7,8 @@ namespace Pos.Infrastructure;
 public sealed record PromotionCommand(Guid ProductId, string Name, decimal Percent = 0m, decimal DiscountAmount = 0m, decimal BuyQuantity = 0m, decimal PayQuantity = 0m, DateTimeOffset? StartsAtUtc = null, DateTimeOffset? EndsAtUtc = null);
 public sealed record PromotionStatusCommand(bool IsActive);
 public sealed record PromotionResult(Guid Id, Guid ProductId, string Name, decimal Percent, decimal DiscountAmount, decimal BuyQuantity, decimal PayQuantity, DateTimeOffset? StartsAtUtc, DateTimeOffset? EndsAtUtc, bool IsActive, string ProductCode = "", string ProductDescription = "", decimal ProductCost = 0m, decimal ProductPrice = 0m);
-public sealed record PromotionPriceQuote(Guid ProductId, decimal BaseUnitPrice, decimal UnitPrice, decimal Quantity, decimal Total, decimal DiscountTotal, bool PromotionApplied);
-public sealed record PromotionPriceCalculation(decimal UnitPrice, decimal Total);
+public sealed record PromotionPriceQuote(Guid ProductId, decimal BaseUnitPrice, decimal UnitPrice, decimal Quantity, decimal Total, decimal DiscountTotal, bool PromotionApplied, string PromotionName = "");
+public sealed record PromotionPriceCalculation(decimal UnitPrice, decimal Total, string PromotionName = "");
 
 public sealed class PromotionService(PosDbContext database)
 {
@@ -47,6 +47,7 @@ public sealed class PromotionService(PosDbContext database)
     {
         var promotions = await database.Promotions.AsNoTracking().Where(item => item.ProductId == productId && item.IsActive && (item.StartsAtUtc == null || item.StartsAtUtc <= now) && (item.EndsAtUtc == null || item.EndsAtUtc > now)).ToListAsync(cancellationToken);
         var result = price * quantity;
+        var promotionName = string.Empty;
         foreach (var promotion in promotions)
         {
             var candidate = promotion.BuyQuantity > 0m && quantity >= promotion.BuyQuantity
@@ -54,10 +55,14 @@ public sealed class PromotionService(PosDbContext database)
                 : promotion.Percent > 0m
                     ? price * quantity * (1m - promotion.Percent / 100m)
                     : Math.Max(0m, price - promotion.DiscountAmount) * quantity;
-            result = Math.Min(result, candidate);
+            if (candidate < result)
+            {
+                result = candidate;
+                promotionName = promotion.Name;
+            }
         }
         var total = decimal.Round(Math.Max(0m, result), 2, MidpointRounding.AwayFromZero);
-        return new PromotionPriceCalculation(decimal.Round(total / quantity, 2, MidpointRounding.AwayFromZero), total);
+        return new PromotionPriceCalculation(decimal.Round(total / quantity, 2, MidpointRounding.AwayFromZero), total, promotionName);
     }
 
     public async Task<decimal> DiscountedPriceAsync(Guid productId, decimal price, DateTimeOffset now, CancellationToken cancellationToken, decimal quantity = 1m) =>
@@ -71,7 +76,7 @@ public sealed class PromotionService(PosDbContext database)
         if (productId == Guid.Empty || price < 0m || quantity <= 0m) throw new ArgumentException("Los datos de precio y cantidad no son validos.");
         var calculation = await CalculateAsync(productId, price, DateTimeOffset.UtcNow, cancellationToken, quantity);
         var discountTotal = decimal.Round(Math.Max(0m, (price * quantity) - calculation.Total), 2, MidpointRounding.AwayFromZero);
-        return new PromotionPriceQuote(productId, price, calculation.UnitPrice, quantity, calculation.Total, discountTotal, discountTotal > 0m);
+        return new PromotionPriceQuote(productId, price, calculation.UnitPrice, quantity, calculation.Total, discountTotal, discountTotal > 0m, calculation.PromotionName);
     }
 
     public async Task<IReadOnlyList<PromotionResult>?> ListAsync(string token, Guid? productId, bool includeInactive, CancellationToken cancellationToken)

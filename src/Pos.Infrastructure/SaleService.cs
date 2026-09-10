@@ -65,12 +65,13 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
             var stockBefore = stockBeforeByProduct.GetValueOrDefault(line.ProductId, product.Stock);
             var originalLine = command.Lines.SingleOrDefault(item => item.ProductId == line.ProductId);
             var requestedQuantity = originalLine?.Quantity ?? line.Quantity;
-            var unitPrice = UsesWholesalePrice(product, requestedQuantity) ? product.WholesalePrice : product.Price;
+            var originalUnitPrice = UsesWholesalePrice(product, requestedQuantity) ? product.WholesalePrice : product.Price;
             // El borrador solo conserva la cantidad y la composición del ticket. El precio autoritativo se recalcula al cobrar para aplicar promociones vigentes.
-            var promotionCalculation = await promotions.CalculateAsync(product.Id, unitPrice, DateTimeOffset.UtcNow, cancellationToken, requestedQuantity);
-            unitPrice = promotionCalculation.UnitPrice;
+            var promotionCalculation = await promotions.CalculateAsync(product.Id, originalUnitPrice, DateTimeOffset.UtcNow, cancellationToken, requestedQuantity);
+            var unitPrice = promotionCalculation.UnitPrice;
             var total = originalLine is null ? 0m : promotionCalculation.Total;
-            if (originalLine is not null) lines.Add(new SaleLineRecord { Id = Guid.NewGuid(), ProductId = product.Id, Quantity = requestedQuantity, UnitPrice = unitPrice, LineTotal = total, StockBefore = stockBefore, StockAfter = stockAfterByProduct.GetValueOrDefault(product.Id, product.Stock) });
+            var discountTotal = decimal.Round(Math.Max(0m, (originalUnitPrice * requestedQuantity) - total), 2, MidpointRounding.AwayFromZero);
+            if (originalLine is not null) lines.Add(new SaleLineRecord { Id = Guid.NewGuid(), ProductId = product.Id, Quantity = requestedQuantity, OriginalUnitPrice = originalUnitPrice, UnitPrice = unitPrice, LineTotal = total, DiscountTotal = discountTotal, PromotionName = discountTotal > 0m ? promotionCalculation.PromotionName : string.Empty, StockBefore = stockBefore, StockAfter = stockAfterByProduct.GetValueOrDefault(product.Id, product.Stock) });
         }
         var totalSale = RoundSaleAmount(lines.Sum(line => line.LineTotal), store);
         ValidatePaymentMethodEnabled(store, command, totalSale);

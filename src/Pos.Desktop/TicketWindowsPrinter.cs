@@ -116,8 +116,14 @@ public static class TicketWindowsPrinter
 
         root.Children.Add(Text($"Articulos: {ticket.Lines.Sum(line => line.Quantity):0.###}", baseSize, FontWeights.Normal, TextAlignment.Left, new Thickness(0, 1, 0, 4)));
         var totalWeight = profile.UseNormalTotals ? FontWeights.Normal : FontWeights.Bold;
-        var subtotal = ticket.Subtotal ?? ticket.Total;
-        root.Children.Add(AmountLine(ticket, "Subtotal", subtotal, baseSize + 1d, totalWeight));
+        var discounts = decimal.Round(ticket.Lines.Sum(line => Math.Max(0m, line.DiscountTotal)), 2, MidpointRounding.AwayFromZero);
+        var grossSubtotal = discounts > 0m
+            ? decimal.Round(ticket.Lines.Sum(line => line.UnitPrice * line.Quantity), 2, MidpointRounding.AwayFromZero)
+            : ticket.Subtotal ?? ticket.Total;
+        var subtotal = ticket.Subtotal ?? decimal.Round(grossSubtotal - discounts, 2, MidpointRounding.AwayFromZero);
+        root.Children.Add(AmountLine(ticket, "Subtotal", grossSubtotal, baseSize + 1d, totalWeight));
+        if (discounts > 0m)
+            root.Children.Add(AmountLine(ticket, "Descuentos", discounts, baseSize, FontWeights.Normal, true));
         if (subtotal != ticket.Total)
             root.Children.Add(AmountLine(ticket, "Redondeo", ticket.Total - subtotal, baseSize, FontWeights.Normal));
         root.Children.Add(AmountLine(ticket, "TOTAL", ticket.Total, baseSize + 4d, totalWeight));
@@ -270,23 +276,31 @@ public static class TicketWindowsPrinter
         return grid;
     }
 
-    private static Grid ProductLine(TicketPdfData ticket, TicketPdfLine line, double size)
+    private static FrameworkElement ProductLine(TicketPdfData ticket, TicketPdfLine line, double size)
     {
         var grid = ProductGrid();
         grid.Margin = new Thickness(0, 1, 0, 2);
         AddCell(grid, line.Quantity.ToString("0.###", CultureInfo.InvariantCulture), 0, size, FontWeights.Normal, TextAlignment.Left);
         AddCell(grid, line.Description, 1, size, FontWeights.Normal, TextAlignment.Left);
         AddCell(grid, Money(ticket, line.UnitPrice), 2, size, FontWeights.Normal, TextAlignment.Right);
-        AddCell(grid, Money(ticket, line.Total), 3, size, FontWeights.Normal, TextAlignment.Right);
-        return grid;
+        AddCell(grid, Money(ticket, decimal.Round(line.UnitPrice * line.Quantity, 2, MidpointRounding.AwayFromZero)), 3, size, FontWeights.Normal, TextAlignment.Right);
+        if (line.DiscountTotal <= 0m) return grid;
+
+        var promotion = new Grid { Margin = new Thickness(0, 0, 0, 3) };
+        promotion.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.74d, GridUnitType.Star) });
+        promotion.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.26d, GridUnitType.Star) });
+        var name = string.IsNullOrWhiteSpace(line.PromotionName) ? "Descuento" : $"Promo: {line.PromotionName}";
+        AddCell(promotion, name, 0, Math.Max(7d, size - 0.5d), FontWeights.Normal, TextAlignment.Left);
+        AddCell(promotion, NegativeMoney(ticket, line.DiscountTotal), 1, Math.Max(7d, size - 0.5d), FontWeights.Normal, TextAlignment.Right);
+        return new StackPanel { Children = { grid, promotion } };
     }
 
-    private static Grid AmountLine(TicketPdfData ticket, string label, decimal amount, double size, FontWeight weight)
+    private static Grid AmountLine(TicketPdfData ticket, string label, decimal amount, double size, FontWeight weight, bool showAsDiscount = false)
     {
         var grid = TwoColumnGrid(0.55d, 0.45d);
         grid.Margin = new Thickness(0, 1, 0, 1);
         AddCell(grid, label + ":", 0, size, weight, TextAlignment.Right);
-        AddCell(grid, Money(ticket, amount), 1, size, weight, TextAlignment.Right);
+        AddCell(grid, showAsDiscount ? NegativeMoney(ticket, amount) : Money(ticket, amount), 1, size, weight, TextAlignment.Right);
         return grid;
     }
 
@@ -319,6 +333,7 @@ public static class TicketWindowsPrinter
     private static string FormatShiftNumber(long shiftNumber) => shiftNumber > 0 ? shiftNumber.ToString("N0", CultureInfo.CurrentCulture) : "N/D";
     private static string FormatFolio(long folio, Guid saleId) => folio > 0 ? folio.ToString("N0", CultureInfo.CurrentCulture) : "N/D";
     private static string Money(TicketPdfData ticket, decimal value) => (string.IsNullOrWhiteSpace(ticket.CurrencySymbol) ? "$" : ticket.CurrencySymbol.Trim()) + value.ToString("#,##0.00", CultureInfo.InvariantCulture);
+    private static string NegativeMoney(TicketPdfData ticket, decimal value) => "-" + Money(ticket, Math.Abs(value));
     private static string PaymentLabel(string method) => method.ToUpperInvariant() switch
     {
         "CASH" => "Efectivo",
