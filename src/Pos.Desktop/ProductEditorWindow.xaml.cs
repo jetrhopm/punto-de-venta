@@ -12,17 +12,19 @@ public partial class ProductEditorWindow : Window
     private readonly string _weightUnit;
     private readonly bool _autoPriceWithProfit;
     private readonly decimal _defaultProfitPercent;
+    private readonly bool _isKitLocked;
     private bool _loading;
 
     public ProductEditModel? SavedProduct { get; private set; }
 
-    public ProductEditorWindow(ProductEditModel? product, IReadOnlyList<DepartmentOption> departments, string weightUnit, bool autoPriceWithProfit, decimal defaultProfitPercent)
+    public ProductEditorWindow(ProductEditModel? product, IReadOnlyList<DepartmentOption> departments, string weightUnit, bool autoPriceWithProfit, decimal defaultProfitPercent, bool isKitLocked = false)
     {
         InitializeComponent();
         _original = product;
         _weightUnit = weightUnit;
         _autoPriceWithProfit = autoPriceWithProfit;
         _defaultProfitPercent = defaultProfitPercent;
+        _isKitLocked = isKitLocked;
         DepartmentBox.ItemsSource = new[] { new DepartmentOption(null, "Sin departamento") }.Concat(departments).ToArray();
         UnitBox.ItemsSource = new[] { "Pieza", "Granel (unidad configurada)", "Kilogramo", "Gramo", "Libra", "Onza", "Litro", "Mililitro", "Metro", "Servicio" };
         Loaded += (_, _) => LoadForm();
@@ -33,8 +35,8 @@ public partial class ProductEditorWindow : Window
     {
         _loading = true;
         var product = _original;
-        TitleText.Text = product is null ? "Nuevo producto" : "Editar producto";
-        SubtitleText.Text = product is null ? "Los datos se agregarán al catálogo." : "Modifica la información del producto seleccionado.";
+        TitleText.Text = _isKitLocked && product is null ? "Nuevo kit" : product is null ? "Nuevo producto" : "Editar producto";
+        SubtitleText.Text = _isKitLocked && product is null ? "Primero registra los datos de venta; después agrega los artículos que contiene." : product is null ? "Los datos se agregarán al catálogo." : "Modifica la información del producto seleccionado.";
         CodeBox.Text = product?.Code ?? string.Empty;
         DescriptionBox.Text = product?.Description ?? string.Empty;
         DepartmentBox.SelectedValue = product?.DepartmentId;
@@ -51,7 +53,9 @@ public partial class ProductEditorWindow : Window
         MinimumStockBox.Text = Quantity(product?.MinimumStock ?? 0m);
         MaximumStockBox.Text = Quantity(product?.MaximumStock ?? 0m);
         StockHintText.Text = product is null ? "La existencia inicial se registra como movimiento. Después podrás ajustarla desde Inventario." : "La existencia actual se conserva aquí. Para cambiarla usa Inventario > Ajustar y deja un movimiento auditable.";
-        IsKitBox.IsChecked = product?.IsKit == true;
+        IsKitBox.IsChecked = _isKitLocked || product?.IsKit == true;
+        IsKitBox.IsEnabled = !_isKitLocked;
+        if (_isKitLocked) IsKitBox.Content = "Producto compuesto (la composición se captura al guardar)";
         _loading = false;
         UpdateProfitAmount();
         UpdateWholesaleProfitAmount();
@@ -75,7 +79,8 @@ public partial class ProductEditorWindow : Window
                 ShowResult("Producto no guardado", message, OperationResultKind.Error);
                 return;
             }
-            SavedProduct = new ProductEditModel(_original?.Id ?? Guid.Empty, CodeBox.Text.Trim(), DescriptionBox.Text.Trim(), DepartmentBox.SelectedValue is Guid id && id != Guid.Empty ? id : null, UnitValue(), Parse(CostBox.Text), Parse(PriceBox.Text), Parse(ProfitPercentBox.Text), Parse(WholesalePriceBox.Text), Parse(WholesaleProfitPercentBox.Text), Parse(WholesaleMinimumBox.Text), Parse(InitialStockBox.Text), Parse(MinimumStockBox.Text), Parse(MaximumStockBox.Text), IsKitBox.IsChecked == true);
+            var persisted = await response.Content.ReadFromJsonAsync<ProductResponse>();
+            SavedProduct = new ProductEditModel(persisted?.Id ?? _original?.Id ?? Guid.Empty, CodeBox.Text.Trim(), DescriptionBox.Text.Trim(), DepartmentBox.SelectedValue is Guid id && id != Guid.Empty ? id : null, UnitValue(), persisted?.Cost ?? Parse(CostBox.Text), persisted?.Price ?? Parse(PriceBox.Text), persisted?.ProfitPercent ?? Parse(ProfitPercentBox.Text), persisted?.WholesalePrice ?? Parse(WholesalePriceBox.Text), persisted?.WholesaleProfitPercent ?? Parse(WholesaleProfitPercentBox.Text), persisted?.WholesaleMinimumQuantity ?? Parse(WholesaleMinimumBox.Text), Parse(InitialStockBox.Text), Parse(MinimumStockBox.Text), Parse(MaximumStockBox.Text), IsKitBox.IsChecked == true);
             DialogResult = true;
             Close();
         }
@@ -130,4 +135,5 @@ public partial class ProductEditorWindow : Window
 
     public sealed record ProductEditModel(Guid Id, string Code, string Description, Guid? DepartmentId, string UnitOfMeasure, decimal Cost, decimal Price, decimal ProfitPercent, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleMinimumQuantity, decimal Stock, decimal MinimumStock, decimal MaximumStock, bool IsKit);
     public sealed record DepartmentOption(Guid? Id, string Name);
+    private sealed record ProductResponse(Guid Id, decimal Price, decimal Cost, decimal ProfitPercent, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleMinimumQuantity);
 }

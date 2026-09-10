@@ -608,6 +608,20 @@ app.MapPost("/api/kits", async (HttpRequest request, KitCommand command, KitServ
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["kit"] = [exception.Message] }); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
+app.MapGet("/api/kits", async (bool? includeInactive, string? q, HttpRequest request, KitService kits, CancellationToken cancellationToken) =>
+{
+    var result = await kits.ListAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), includeInactive == true, q, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapGet("/api/kits/{id:guid}", async (Guid id, HttpRequest request, KitService kits, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await kits.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), id, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+});
 
 app.MapPost("/api/sales/complete", async (HttpRequest request, CompleteSaleCommand command, SaleService sales, CancellationToken cancellationToken) =>
 {

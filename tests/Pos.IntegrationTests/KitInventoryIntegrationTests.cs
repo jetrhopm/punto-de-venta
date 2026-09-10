@@ -8,6 +8,23 @@ namespace Pos.IntegrationTests;
 public sealed class KitInventoryIntegrationTests
 {
     [Fact]
+    public async Task IncompleteKitCannotBeExpandedForSale()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+        var code = "KIT-INCOMPLETO-" + Guid.NewGuid().ToString("N");
+        var kit = new ProductRecord { Id = Guid.NewGuid(), Code = code, NormalizedCode = code, Description = "Kit sin artículos", IsKit = true, IsActive = true };
+        database.Products.Add(kit);
+        await database.SaveChangesAsync();
+        try
+        {
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => new KitService(database).ExpandAsync(kit.Id, 1m, CancellationToken.None));
+            Assert.Contains("no tiene componentes", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally { database.Products.Remove(kit); await database.SaveChangesAsync(); }
+    }
+
+    [Fact]
     public async Task SaleOfKitDiscountsComponentsAndCancellationRestoresThem()
     {
         await using var database = new PosDbContextFactory().CreateDbContext([]);
