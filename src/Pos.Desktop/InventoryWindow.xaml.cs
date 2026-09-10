@@ -6,6 +6,7 @@ using System.Net.Http.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using System.Windows.Markup;
 
 namespace Pos.Desktop;
 
@@ -24,6 +25,7 @@ public partial class InventoryWindow : UserControl, INotifyPropertyChanged
     public InventoryWindow()
     {
         InitializeComponent();
+        InventoryGrid.Columns.Insert(0, CreateSelectionColumn());
         _filterTimer.Tick += async (_, _) => { _filterTimer.Stop(); _page = 1; await LoadAsync(); };
         Loaded += async (_, _) =>
         {
@@ -241,6 +243,18 @@ public partial class InventoryWindow : UserControl, INotifyPropertyChanged
     private void OnMovementsClick(object sender, RoutedEventArgs e) => new InventoryMovementsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
 
     private void ShowResult(string title, string message, OperationResultKind kind) => new OperationResultWindow(title, message, kind) { Owner = Window.GetWindow(this) }.ShowDialog();
+
+    private static DataGridTemplateColumn CreateSelectionColumn() => new()
+    {
+        Header = string.Empty,
+        Width = 42,
+        IsReadOnly = true,
+        CellTemplate = (DataTemplate)XamlReader.Parse("""
+            <DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+              <CheckBox HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Seleccionar producto" IsChecked="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type DataGridRow}}, Mode=TwoWay}" />
+            </DataTemplate>
+            """)
+    };
 
     private sealed class InventoryPage
     {

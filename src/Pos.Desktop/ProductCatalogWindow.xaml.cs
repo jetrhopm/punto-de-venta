@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Markup;
 using System.Windows.Media;
 
 namespace Pos.Desktop;
@@ -28,6 +29,7 @@ public partial class ProductCatalogWindow : UserControl
         InitializeComponent();
         ProductsGrid.SelectionMode = DataGridSelectionMode.Extended;
         ProductsGrid.SelectionUnit = DataGridSelectionUnit.FullRow;
+        ProductsGrid.Columns.Insert(0, CreateSelectionColumn());
         ConfigureCatalogModes();
         Loaded += async (_, _) =>
         {
@@ -257,8 +259,8 @@ public partial class ProductCatalogWindow : UserControl
         if (actions is null) return;
         actions.Children.Insert(0, CreateCatalogAction("Nuevo producto", "ConfirmButtonStyle", OnShowNewProductClick));
         actions.Children.Insert(1, CreateCatalogAction("Editar seleccionado", "PrimaryButtonStyle", OnShowEditProductClick));
-        actions.Children.Insert(2, CreateCatalogAction("Seleccionar página", "PrimaryButtonStyle", OnSelectVisibleClick));
-        actions.Children.Insert(3, CreateCatalogAction("Quitar selección", "DangerButtonStyle", OnClearSelectionClick));
+        actions.Children.Insert(2, CreateCatalogAction("Seleccionar todos", "PrimaryButtonStyle", OnSelectVisibleClick));
+        actions.Children.Insert(3, CreateCatalogAction("Desmarcar todos", "DangerButtonStyle", OnClearSelectionClick));
     }
     private Button CreateCatalogAction(string text, string styleKey, RoutedEventHandler click)
     {
@@ -266,6 +268,16 @@ public partial class ProductCatalogWindow : UserControl
         button.Click += click;
         return button;
     }
+    private static DataGridTemplateColumn CreateSelectionColumn() => new()
+    {
+        Header = string.Empty,
+        Width = 42,
+        CellTemplate = (DataTemplate)XamlReader.Parse("""
+            <DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+              <CheckBox HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Seleccionar producto" IsChecked="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type DataGridRow}}, Mode=TwoWay}" />
+            </DataTemplate>
+            """)
+    };
     private void ShowEditor()
     {
         if (_editorPanel is null || _catalogLayout is null) return;
