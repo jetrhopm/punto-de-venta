@@ -79,11 +79,15 @@ public sealed class PromotionService(PosDbContext database)
         return new PromotionPriceQuote(productId, price, calculation.UnitPrice, quantity, calculation.Total, discountTotal, discountTotal > 0m, calculation.PromotionName);
     }
 
-    public async Task<IReadOnlyList<PromotionResult>?> ListAsync(string token, Guid? productId, bool includeInactive, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<PromotionResult>?> ListAsync(string token, Guid? productId, bool includeInactive, string? query, CancellationToken cancellationToken)
     {
         if (await AuthorizedAsync(token, "ViewProducts", cancellationToken) is null) return null;
-        var query = database.Promotions.AsNoTracking().Where(item => includeInactive || item.IsActive); if (productId is not null) query = query.Where(item => item.ProductId == productId);
-        var promotions = await query.OrderByDescending(item => item.StartsAtUtc).ToListAsync(cancellationToken);
+        var promotionsQuery = database.Promotions.AsNoTracking().Where(item => includeInactive || item.IsActive);
+        if (productId is not null) promotionsQuery = promotionsQuery.Where(item => item.ProductId == productId);
+        var search = query?.Trim().ToUpperInvariant();
+        if (!string.IsNullOrWhiteSpace(search))
+            promotionsQuery = promotionsQuery.Where(item => item.Name.ToUpper().Contains(search) || database.Products.Any(product => product.Id == item.ProductId && (product.Code.ToUpper().Contains(search) || product.Description.ToUpper().Contains(search))));
+        var promotions = await promotionsQuery.OrderByDescending(item => item.StartsAtUtc).ToListAsync(cancellationToken);
         var productIds = promotions.Select(item => item.ProductId).Distinct().ToArray();
         var products = await database.Products.AsNoTracking().Where(item => productIds.Contains(item.Id)).ToDictionaryAsync(item => item.Id, cancellationToken);
         return promotions.Select(item => ToResult(item, products.GetValueOrDefault(item.ProductId))).ToArray();

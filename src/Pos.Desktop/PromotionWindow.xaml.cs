@@ -12,6 +12,7 @@ public partial class PromotionWindow : Window
     private ProductRow? _selectedProduct;
     private PromotionRow? _selectedPromotion;
     private CancellationTokenSource? _productSearchCancellation;
+    private CancellationTokenSource? _promotionSearchCancellation;
     private Button? _deactivateButton;
     private Button? _reactivateButton;
     private Button? _editButton;
@@ -24,7 +25,7 @@ public partial class PromotionWindow : Window
         InitializeComponent();
         ConfigureInactiveControls();
         Loaded += async (_, _) => await LoadPromotionsAsync();
-        Closed += (_, _) => _productSearchCancellation?.Cancel();
+        Closed += (_, _) => { _productSearchCancellation?.Cancel(); _promotionSearchCancellation?.Cancel(); };
     }
 
     private async void OnProductTextChanged(object sender, TextChangedEventArgs e)
@@ -61,13 +62,29 @@ public partial class PromotionWindow : Window
         ValueTwoLabel.Text = type == "buyPay" ? "Cantidad a pagar" : "Campo no utilizado";
         ValueOneBox.IsEnabled = true; ValueTwoBox.IsEnabled = type == "buyPay"; if (type != "buyPay") ValueTwoBox.Text = "0";
     }
-    private async Task LoadPromotionsAsync()
+    private async void OnPromotionSearchChanged(object sender, TextChangedEventArgs e)
+    {
+        _promotionSearchCancellation?.Cancel();
+        _promotionSearchCancellation = new CancellationTokenSource();
+        var cancellationToken = _promotionSearchCancellation.Token;
+        try
+        {
+            await Task.Delay(220, cancellationToken);
+            await LoadPromotionsAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task LoadPromotionsAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            PromotionsGrid.ItemsSource = await ApiClient.Client.GetFromJsonAsync<List<PromotionRow>>($"/api/promotions?includeInactive={_includeInactive.ToString().ToLowerInvariant()}") ?? [];
+            var query = PromotionSearchBox?.Text.Trim() ?? string.Empty;
+            var endpoint = $"/api/promotions?includeInactive={_includeInactive.ToString().ToLowerInvariant()}&q={Uri.EscapeDataString(query)}";
+            PromotionsGrid.ItemsSource = await ApiClient.Client.GetFromJsonAsync<List<PromotionRow>>(endpoint, cancellationToken) ?? [];
             StatusText.Text = _includeInactive ? "Mostrando promociones activas y dadas de baja." : "Las promociones se aplican durante el cobro y quedan auditadas.";
         }
+        catch (OperationCanceledException) { }
         catch (Exception exception)
         {
             var message = ConnectionHelp.FromException(exception, "No se pudieron cargar las promociones");
@@ -185,7 +202,7 @@ public partial class PromotionWindow : Window
     {
         PromotionsGrid.Columns.Add(new DataGridTextColumn { Header = "Estado", Binding = new Binding(nameof(PromotionRow.State)), Width = 95 });
         if (Content is not Grid root) return;
-        var footer = root.Children.OfType<Grid>().FirstOrDefault(item => Grid.GetRow(item) == 3);
+        var footer = root.Children.OfType<Grid>().FirstOrDefault(item => Grid.GetRow(item) == 4);
         if (footer is null) return;
         _deactivateButton = footer.Children.OfType<Button>().FirstOrDefault();
         if (_deactivateButton is not null)

@@ -82,6 +82,11 @@ public sealed class PromotionIntegrationTests
             Assert.Equal(product.Description, updated.ProductDescription);
             Assert.Equal(5m, updated.DiscountAmount);
             Assert.Equal(0m, updated.Percent);
+
+            var byName = await service.ListAsync(token, null, true, "editada", CancellationToken.None);
+            var byProduct = await service.ListAsync(token, null, true, product.Code, CancellationToken.None);
+            Assert.Contains(byName!, item => item.Id == created.Id);
+            Assert.Contains(byProduct!, item => item.Id == created.Id);
         }
         finally
         {

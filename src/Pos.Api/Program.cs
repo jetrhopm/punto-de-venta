@@ -578,9 +578,9 @@ app.MapPut("/api/promotions/{id:guid}", async (Guid id, HttpRequest request, Pro
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
-app.MapGet("/api/promotions", async (Guid? productId, bool? includeInactive, HttpRequest request, PromotionService promotions, CancellationToken cancellationToken) =>
+app.MapGet("/api/promotions", async (Guid? productId, bool? includeInactive, string? q, HttpRequest request, PromotionService promotions, CancellationToken cancellationToken) =>
 {
-    var result = await promotions.ListAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), productId, includeInactive == true, cancellationToken);
+    var result = await promotions.ListAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), productId, includeInactive == true, q, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
 app.MapGet("/api/promotions/quote", async (Guid productId, decimal price, decimal quantity, HttpRequest request, PromotionService promotions, CancellationToken cancellationToken) =>
