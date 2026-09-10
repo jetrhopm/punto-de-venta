@@ -345,10 +345,17 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (ticket.ManualWholesaleEnabled)
+        if (CartList.SelectedItem is not CartLineView line)
+        {
+            StatusText.Text = "Selecciona el artículo al que deseas aplicar mayoreo manual.";
+            FocusProductInput();
+            return;
+        }
+
+        if (line.IsManualWholesale)
         {
             if (MessageBox.Show(
-                    "El ticket volverá a respetar la cantidad mínima configurada para mayoreo. ¿Deseas quitar la excepción manual?",
+                    $"{line.Description} volverá a respetar la cantidad mínima configurada para mayoreo. ¿Deseas quitar la excepción manual?",
                     "Quitar mayoreo manual",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question) != MessageBoxResult.Yes)
@@ -356,15 +363,15 @@ public partial class MainWindow : Window
                 return;
             }
 
-            await ticket.DisableManualWholesaleAsync();
+            line.IsManualWholesale = false;
+            await ticket.ClearManualWholesaleAuthorizationIfUnusedAsync();
             await RefreshTicketPricingAsync(ticket);
-            StatusText.Text = "Mayoreo manual desactivado. Se aplicarán las reglas normales por cantidad.";
+            StatusText.Text = $"Mayoreo manual desactivado para {line.Description}.";
             FocusProductInput();
             return;
         }
 
-        var eligibleCount = ticket.Lines.Count(line => line.CanUseManualWholesale);
-        if (eligibleCount == 0)
+        if (!line.CanUseManualWholesale)
         {
             new OperationResultWindow(
                 "Mayoreo no configurado",
@@ -376,16 +383,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        var minimums = string.Join("; ", ticket.Lines
-            .Where(line => line.CanUseManualWholesale)
-            .Select(line => $"{line.Description}: {line.WholesaleMinimumQuantity:0.###} {line.UnitOfMeasure}")
-            .Distinct(StringComparer.OrdinalIgnoreCase));
-        var unavailableCount = ticket.Lines.Count - eligibleCount;
-        var unavailableDetail = unavailableCount == 0
-            ? string.Empty
-            : $" {unavailableCount} artículo(s) sin precio de mayoreo conservarán su precio normal.";
         if (MessageBox.Show(
-                $"Se aplicará el precio de mayoreo a {eligibleCount} artículo(s) elegible(s), aunque no alcancen su cantidad mínima. Mínimo configurado: {minimums}. Esta excepción sólo aplica al ticket actual.{unavailableDetail} ¿Deseas continuar?",
+                $"Se aplicará el precio de mayoreo a {line.Description}, aunque no alcance el mínimo configurado de {line.WholesaleMinimumQuantity:0.###} {line.UnitOfMeasure}. Esta excepción sólo aplica a esta partida del ticket. ¿Deseas continuar?",
                 "Aplicar mayoreo manual",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning) != MessageBoxResult.Yes)
@@ -393,7 +392,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var authorization = await PermissionAuthorization.RequestCriticalActionAsync(
+        var authorization = ticket.ManualWholesaleAuthorization ?? await PermissionAuthorization.RequestCriticalActionAsync(
             this,
             "UseWholesalePrice",
             "Aplicar mayoreo manual sin cumplir la cantidad mínima requiere autorización.");
@@ -404,21 +403,21 @@ public partial class MainWindow : Window
             return;
         }
 
-        ticket.EnableManualWholesale(authorization);
+        ticket.SetManualWholesaleAuthorization(authorization);
+        line.IsManualWholesale = true;
         await RefreshTicketPricingAsync(ticket);
-        StatusText.Text = "Mayoreo manual activo en este ticket. Los artículos elegibles muestran su precio de mayoreo.";
+        StatusText.Text = $"Mayoreo manual activo para {line.Description}.";
         FocusProductInput();
     }
 
     private async Task RefreshTicketPricingAsync(TicketTabView ticket)
     {
-        foreach (var line in ticket.Lines) line.IsManualWholesale = ticket.ManualWholesaleEnabled && line.CanUseManualWholesale;
         await Task.WhenAll(ticket.Lines.Select(ApplyPromotionQuoteAsync));
         if (ReferenceEquals(ticket, _activeTicket))
         {
             CartList.Items.Refresh();
             UpdateSaleSummary();
-            WholesaleButtonText.Text = ticket.ManualWholesaleEnabled ? "F11 Quitar mayoreo" : "F11 Mayoreo";
+            WholesaleButtonText.Text = "F11 Mayoreo";
         }
     }
 
@@ -939,10 +938,7 @@ public partial class MainWindow : Window
         var existing = cart.FirstOrDefault(item => item.ProductId == product.Id);
         if (existing is null)
         {
-            var created = new CartLineView(product.Id, product.Code, product.Description, product.Price, product.Stock, quantity, product.UnitOfMeasure, product.WholesalePrice, product.WholesaleMinimumQuantity)
-            {
-                IsManualWholesale = _activeTicket.ManualWholesaleEnabled && product.WholesalePrice > 0m
-            };
+            var created = new CartLineView(product.Id, product.Code, product.Description, product.Price, product.Stock, quantity, product.UnitOfMeasure, product.WholesalePrice, product.WholesaleMinimumQuantity);
             cart.Add(created);
         }
         else
@@ -1012,10 +1008,7 @@ public partial class MainWindow : Window
         var existing = cart.FirstOrDefault(item => item.ProductId == product.Id);
         if (existing is null)
         {
-            var created = new CartLineView(product.Id, product.Code, product.Description, product.Price, product.Stock, quantity, product.UnitOfMeasure, product.WholesalePrice, product.WholesaleMinimumQuantity)
-            {
-                IsManualWholesale = _activeTicket.ManualWholesaleEnabled && product.WholesalePrice > 0m
-            };
+            var created = new CartLineView(product.Id, product.Code, product.Description, product.Price, product.Stock, quantity, product.UnitOfMeasure, product.WholesalePrice, product.WholesaleMinimumQuantity);
             cart.Add(created);
         }
         else { existing.Quantity += quantity; }
@@ -1226,19 +1219,22 @@ public partial class MainWindow : Window
         public int TicketNumber { get; } = ticketNumber;
         public Guid? CustomerId { get; private set; }
         public string? CustomerName { get; private set; }
-        public bool ManualWholesaleEnabled { get; private set; }
         public TemporaryPermissionLease? ManualWholesaleAuthorization { get; private set; }
         public string Title => string.IsNullOrWhiteSpace(CustomerName) ? $"Ticket {TicketNumber}" : CustomerName!;
         public ObservableCollection<CartLineView> Lines { get; } = new(lines ?? []);
         public void SetCustomer(Guid customerId, string customerName) { CustomerId = customerId; CustomerName = customerName.Trim(); }
-        public void EnableManualWholesale(TemporaryPermissionLease authorization) { ManualWholesaleEnabled = true; ManualWholesaleAuthorization = authorization; }
-        public async Task DisableManualWholesaleAsync()
+        public void SetManualWholesaleAuthorization(TemporaryPermissionLease authorization) => ManualWholesaleAuthorization ??= authorization;
+        public async Task ClearManualWholesaleAuthorizationIfUnusedAsync()
         {
-            ManualWholesaleEnabled = false;
-            foreach (var line in Lines) line.IsManualWholesale = false;
+            if (Lines.Any(line => line.IsManualWholesale)) return;
             var authorization = ManualWholesaleAuthorization;
             ManualWholesaleAuthorization = null;
             if (authorization?.GrantId is not null) await authorization.DisposeAsync();
+        }
+        public async Task DisableManualWholesaleAsync()
+        {
+            foreach (var line in Lines) line.IsManualWholesale = false;
+            await ClearManualWholesaleAuthorizationIfUnusedAsync();
         }
     }
 
@@ -1346,7 +1342,7 @@ public partial class MainWindow : Window
         CartList.Items.Refresh();
         UpdateSaleSummary();
         CurrentCustomerText.Text = ticket.CustomerName ?? "Seleccionar cliente";
-        WholesaleButtonText.Text = ticket.ManualWholesaleEnabled ? "F11 Quitar mayoreo" : "F11 Mayoreo";
+        WholesaleButtonText.Text = "F11 Mayoreo";
         _ = RefreshPromotionQuotesAsync(ticket);
         FocusProductInput();
     }
