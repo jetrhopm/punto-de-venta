@@ -29,6 +29,7 @@ public partial class MainWindow : Window
     private bool _exitDialogOpen;
     private bool _openingProductLookup;
     private bool _chargeInProgress;
+    private bool _refreshingPromotionQuotes;
     private bool _roundSaleAmounts;
     private string _roundingMode = "Tenths";
     private TemporaryPermissionLease? _modulePermissionLease;
@@ -84,6 +85,7 @@ public partial class MainWindow : Window
     {
         if (!IsLoaded || _exitConfirmed || string.IsNullOrWhiteSpace(SessionContext.AccessToken)) return;
         await LoadSalePricingOptionsAsync();
+        await RefreshPromotionQuotesAsync();
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -1227,7 +1229,30 @@ public partial class MainWindow : Window
         CartList.Items.Refresh();
         UpdateSaleSummary();
         CurrentCustomerText.Text = ticket.CustomerName ?? "Seleccionar cliente";
+        _ = RefreshPromotionQuotesAsync(ticket);
         FocusProductInput();
+    }
+
+    private async Task RefreshPromotionQuotesAsync(TicketTabView? ticket = null)
+    {
+        if (_refreshingPromotionQuotes) return;
+        var target = ticket ?? _activeTicket;
+        if (target is null || target.Lines.Count == 0 || string.IsNullOrWhiteSpace(SessionContext.AccessToken)) return;
+
+        _refreshingPromotionQuotes = true;
+        try
+        {
+            await Task.WhenAll(target.Lines.Select(ApplyPromotionQuoteAsync));
+            if (ReferenceEquals(target, _activeTicket))
+            {
+                CartList.Items.Refresh();
+                UpdateSaleSummary();
+            }
+        }
+        finally
+        {
+            _refreshingPromotionQuotes = false;
+        }
     }
 
     private void SelectNextTicket()
