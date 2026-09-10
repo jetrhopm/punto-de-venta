@@ -21,6 +21,7 @@ public partial class ProductCatalogWindow : UserControl
     private bool _autoPriceWithProfit = true;
     private decimal _defaultProfitPercent = 20m;
     private bool _catalogReady;
+    private bool _showInactive;
     private bool _updatingFilterControls;
     private Grid? _catalogLayout;
     private Border? _editorPanel;
@@ -115,7 +116,7 @@ public partial class ProductCatalogWindow : UserControl
             if (TryDecimal(MinimumPriceBox.Text, out var minimumPrice)) query.Add($"minimumPrice={minimumPrice.ToString(CultureInfo.InvariantCulture)}");
             if (TryDecimal(MaximumPriceBox.Text, out var maximumPrice)) query.Add($"maximumPrice={maximumPrice.ToString(CultureInfo.InvariantCulture)}");
             if (TryDecimal(MinimumProfitBox.Text, out var minimumProfit)) query.Add($"minimumProfit={minimumProfit.ToString(CultureInfo.InvariantCulture)}");
-            if (ShowInactiveBox.IsChecked == true) query.Add("includeInactive=true");
+            if (_showInactive) query.Add("includeInactive=true");
             var result = await ApiClient.Client.GetFromJsonAsync<CatalogPage>("/api/products/catalog?" + string.Join('&', query), token);
             token.ThrowIfCancellationRequested();
             ProductsGrid.ItemsSource = result?.Items ?? [];
@@ -336,7 +337,16 @@ public partial class ProductCatalogWindow : UserControl
 
         ProductsGrid.Columns.Add(new DataGridTextColumn { Header = "Estado", Binding = new Binding(nameof(CatalogProductRow.State)), Width = 95 });
     }
-    private async void OnShowInactiveChanged(object sender, RoutedEventArgs e) { _page = 1; await LoadCatalogAsync(); }
+    private async void OnToggleInactiveClick(object sender, RoutedEventArgs e)
+    {
+        _showInactive = !_showInactive;
+        ShowInactiveButtonText.Text = _showInactive ? "Ocultar bajas" : "Mostrar bajas";
+        ShowInactiveButton.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(_showInactive ? "#D83245" : "#FFF7F7"));
+        ShowInactiveButton.BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(_showInactive ? "#D83245" : "#E7AFB7"));
+        ShowInactiveButton.Foreground = _showInactive ? Brushes.White : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#A42836"));
+        _page = 1;
+        await LoadCatalogAsync();
+    }
     private static DataGridTemplateColumn CreateSelectionColumn() => new()
     {
         Header = string.Empty,
