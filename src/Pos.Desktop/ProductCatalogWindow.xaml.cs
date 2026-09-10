@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Markup;
 using System.Windows.Media;
 
@@ -23,6 +24,7 @@ public partial class ProductCatalogWindow : UserControl
     private bool _updatingFilterControls;
     private Grid? _catalogLayout;
     private Border? _editorPanel;
+    private CheckBox? _showInactiveBox;
 
     public ProductCatalogWindow()
     {
@@ -114,6 +116,7 @@ public partial class ProductCatalogWindow : UserControl
             if (TryDecimal(MinimumPriceBox.Text, out var minimumPrice)) query.Add($"minimumPrice={minimumPrice.ToString(CultureInfo.InvariantCulture)}");
             if (TryDecimal(MaximumPriceBox.Text, out var maximumPrice)) query.Add($"maximumPrice={maximumPrice.ToString(CultureInfo.InvariantCulture)}");
             if (TryDecimal(MinimumProfitBox.Text, out var minimumProfit)) query.Add($"minimumProfit={minimumProfit.ToString(CultureInfo.InvariantCulture)}");
+            if (_showInactiveBox?.IsChecked == true) query.Add("includeInactive=true");
             var result = await ApiClient.Client.GetFromJsonAsync<CatalogPage>("/api/products/catalog?" + string.Join('&', query), token);
             token.ThrowIfCancellationRequested();
             ProductsGrid.ItemsSource = result?.Items ?? [];
@@ -255,7 +258,7 @@ public partial class ProductCatalogWindow : UserControl
 
         try
         {
-            using var response = await ApiClient.Client.PostAsJsonAsync("/api/products/deactivate", new { productIds = selected.Select(item => item.Id).ToArray() });
+            using var response = await ApiClient.Client.PutAsJsonAsync("/api/products/status", new { productIds = selected.Select(item => item.Id).ToArray(), isActive = false });
             if (!response.IsSuccessStatusCode)
             {
                 var message = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudieron retirar los productos seleccionados.");
@@ -273,6 +276,45 @@ public partial class ProductCatalogWindow : UserControl
             var message = ConnectionHelp.FromException(exception, "No se pudieron retirar los productos seleccionados");
             StatusText.Text = message;
             new OperationResultWindow("Productos no retirados", message, OperationResultKind.Error) { Owner = Window.GetWindow(this) }.ShowDialog();
+        }
+    }
+
+    private async void OnReactivateSelectedClick(object sender, RoutedEventArgs e)
+    {
+        var selected = ProductsGrid.SelectedItems.OfType<CatalogProductRow>().Where(item => !item.IsActive).ToArray();
+        if (selected.Length == 0)
+        {
+            new OperationResultWindow("Selecciona productos", "Activa Mostrar bajas y marca uno o más productos inactivos para reactivarlos.", OperationResultKind.Information) { Owner = Window.GetWindow(this) }.ShowDialog();
+            return;
+        }
+
+        var confirmation = new OperationConfirmationWindow(
+            "Reactivar productos seleccionados",
+            $"Se reactivarán {selected.Length} producto{(selected.Length == 1 ? string.Empty : "s")} y volverán a estar disponibles para vender.",
+            OperationResultKind.Information,
+            MessageBoxButton.YesNo) { Owner = Window.GetWindow(this) };
+        if (confirmation.ShowDialog() != true || confirmation.Result != MessageBoxResult.Yes) return;
+
+        try
+        {
+            using var response = await ApiClient.Client.PutAsJsonAsync("/api/products/status", new { productIds = selected.Select(item => item.Id).ToArray(), isActive = true });
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudieron reactivar los productos seleccionados.");
+                StatusText.Text = message;
+                new OperationResultWindow("Productos no reactivados", message, OperationResultKind.Error) { Owner = Window.GetWindow(this) }.ShowDialog();
+                return;
+            }
+
+            ProductsGrid.UnselectAll();
+            await LoadCatalogAsync();
+            StatusText.Text = $"{selected.Length} producto{(selected.Length == 1 ? string.Empty : "s")} reactivado{(selected.Length == 1 ? string.Empty : "s")} correctamente.";
+        }
+        catch (Exception exception)
+        {
+            var message = ConnectionHelp.FromException(exception, "No se pudieron reactivar los productos seleccionados");
+            StatusText.Text = message;
+            new OperationResultWindow("Productos no reactivados", message, OperationResultKind.Error) { Owner = Window.GetWindow(this) }.ShowDialog();
         }
     }
     private void OpenProductEditor(CatalogProductRow? row)
@@ -301,6 +343,12 @@ public partial class ProductCatalogWindow : UserControl
         actions.Children.Insert(2, CreateCatalogAction("Seleccionar todos", "PrimaryButtonStyle", OnSelectVisibleClick));
         actions.Children.Insert(3, CreateCatalogAction("Desmarcar todos", "DangerButtonStyle", OnClearSelectionClick));
         actions.Children.Insert(4, CreateCatalogAction("Retirar seleccionados", "DangerButtonStyle", OnDeactivateSelectedClick));
+        actions.Children.Insert(5, CreateCatalogAction("Reactivar seleccionados", "ConfirmButtonStyle", OnReactivateSelectedClick));
+        _showInactiveBox = new CheckBox { Content = "Mostrar bajas", Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        _showInactiveBox.Checked += async (_, _) => { _page = 1; await LoadCatalogAsync(); };
+        _showInactiveBox.Unchecked += async (_, _) => { _page = 1; await LoadCatalogAsync(); };
+        actions.Children.Add(_showInactiveBox);
+        ProductsGrid.Columns.Add(new DataGridTextColumn { Header = "Estado", Binding = new Binding(nameof(CatalogProductRow.State)), Width = 95 });
     }
     private Button CreateCatalogAction(string text, string styleKey, RoutedEventHandler click)
     {
@@ -448,6 +496,7 @@ public partial class ProductCatalogWindow : UserControl
     private sealed record CatalogProductRow(Guid Id, string Code, string Description, string Department, Guid? DepartmentId, decimal Cost, decimal Price, decimal ProfitPercent, decimal ProfitAmount, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleProfitAmount, decimal WholesaleMinimumQuantity, decimal Stock, decimal MinimumStock, decimal MaximumStock, string UnitOfMeasure, bool IsKit, bool IsActive)
     {
         public string WholesaleText => WholesalePrice > 0m ? $"${WholesalePrice:0.00} desde {WholesaleMinimumQuantity:0.###}" : "No configurado";
+        public string State => IsActive ? "Activo" : "Retirado";
     }
     private sealed record CatalogPage(List<CatalogProductRow> Items, int Page, int PageSize, int TotalCount, int TotalPages);
     private sealed record MeasureSettings(string DefaultWeightUnit);

@@ -5,6 +5,7 @@ using System.Text;
 namespace Pos.Infrastructure;
 
 public sealed record PromotionCommand(Guid ProductId, string Name, decimal Percent = 0m, decimal DiscountAmount = 0m, decimal BuyQuantity = 0m, decimal PayQuantity = 0m, DateTimeOffset? StartsAtUtc = null, DateTimeOffset? EndsAtUtc = null);
+public sealed record PromotionStatusCommand(bool IsActive);
 public sealed record PromotionResult(Guid Id, Guid ProductId, string Name, decimal Percent, decimal DiscountAmount, decimal BuyQuantity, decimal PayQuantity, DateTimeOffset? StartsAtUtc, DateTimeOffset? EndsAtUtc, bool IsActive);
 public sealed record PromotionPriceQuote(Guid ProductId, decimal BaseUnitPrice, decimal UnitPrice, decimal Quantity, decimal Total, decimal DiscountTotal, bool PromotionApplied);
 public sealed record PromotionPriceCalculation(decimal UnitPrice, decimal Total);
@@ -50,17 +51,22 @@ public sealed class PromotionService(PosDbContext database)
         return new PromotionPriceQuote(productId, price, calculation.UnitPrice, quantity, calculation.Total, discountTotal, discountTotal > 0m);
     }
 
-    public async Task<IReadOnlyList<PromotionResult>?> ListAsync(string token, Guid? productId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<PromotionResult>?> ListAsync(string token, Guid? productId, bool includeInactive, CancellationToken cancellationToken)
     {
         if (await AuthorizedAsync(token, "ViewProducts", cancellationToken) is null) return null;
-        var query = database.Promotions.AsNoTracking().Where(item => item.IsActive); if (productId is not null) query = query.Where(item => item.ProductId == productId);
+        var query = database.Promotions.AsNoTracking().Where(item => includeInactive || item.IsActive); if (productId is not null) query = query.Where(item => item.ProductId == productId);
         return await query.OrderByDescending(item => item.StartsAtUtc).Select(item => ToResult(item)).ToListAsync(cancellationToken);
     }
 
     public async Task<bool?> DeactivateAsync(string token, Guid id, CancellationToken cancellationToken)
     {
+        return await SetStatusAsync(token, id, new PromotionStatusCommand(false), cancellationToken);
+    }
+
+    public async Task<bool?> SetStatusAsync(string token, Guid id, PromotionStatusCommand command, CancellationToken cancellationToken)
+    {
         if (await AuthorizedAsync(token, "ManageProducts", cancellationToken) is null) return null;
-        var promotion = await database.Promotions.SingleOrDefaultAsync(item => item.Id == id && item.IsActive, cancellationToken) ?? throw new KeyNotFoundException("Promocion no encontrada."); promotion.IsActive = false; await database.SaveChangesAsync(cancellationToken); return true;
+        var promotion = await database.Promotions.SingleOrDefaultAsync(item => item.Id == id, cancellationToken) ?? throw new KeyNotFoundException("Promocion no encontrada."); promotion.IsActive = command.IsActive; await database.SaveChangesAsync(cancellationToken); return true;
     }
 
     private async Task<Guid?> AuthorizedAsync(string token, string permission, CancellationToken cancellationToken)

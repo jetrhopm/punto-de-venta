@@ -14,11 +14,14 @@ public sealed record CreditStatementItem(Guid Id, string Type, decimal Amount, d
 
 public sealed class CustomerCreditService(PosDbContext database)
 {
-    public async Task<IReadOnlyList<CustomerResult>?> ListAsync(string token, string? query, bool creditOnly, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<CustomerResult>?> ListAsync(string token, string? query, bool creditOnly, CancellationToken cancellationToken) =>
+        ListAsync(token, query, creditOnly, false, cancellationToken);
+
+    public async Task<IReadOnlyList<CustomerResult>?> ListAsync(string token, string? query, bool creditOnly, bool includeInactive, CancellationToken cancellationToken)
     {
         if (await GetUserAsync(token, "ManageCustomersAndCredit", cancellationToken) is null) return null;
         var search = (query ?? string.Empty).Trim().ToUpperInvariant();
-        var customerQuery = database.Customers.AsNoTracking().Where(item => item.IsActive && (search.Length == 0 || item.Name.ToUpper().Contains(search) || (item.Phone ?? "").Contains(search)));
+        var customerQuery = database.Customers.AsNoTracking().Where(item => (includeInactive || item.IsActive) && (search.Length == 0 || item.Name.ToUpper().Contains(search) || (item.Phone ?? "").Contains(search)));
         if (creditOnly) customerQuery = customerQuery.Where(item => item.CreditEnabled);
         var customers = await customerQuery.OrderBy(item => item.Name).Take(100).ToListAsync(cancellationToken);
         var balances = await database.CreditTransactions.AsNoTracking().GroupBy(item => item.CustomerId).Select(group => new { CustomerId = group.Key, Balance = group.Sum(item => item.Amount) }).ToDictionaryAsync(item => item.CustomerId, item => item.Balance, cancellationToken);

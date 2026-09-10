@@ -383,9 +383,9 @@ app.MapPut("/api/users/{userId:guid}/permissions", async (Guid userId, HttpReque
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 
-app.MapGet("/api/customers", async (string? q, bool? creditOnly, HttpRequest request, CustomerCreditService customers, CancellationToken cancellationToken) =>
+app.MapGet("/api/customers", async (string? q, bool? creditOnly, bool? includeInactive, HttpRequest request, CustomerCreditService customers, CancellationToken cancellationToken) =>
 {
-    var result = await customers.ListAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), q, creditOnly ?? false, cancellationToken);
+    var result = await customers.ListAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), q, creditOnly ?? false, includeInactive == true, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
 app.MapPost("/api/customers", async (HttpRequest request, CustomerCommand command, CustomerCreditService customers, CancellationToken cancellationToken) =>
@@ -449,9 +449,9 @@ app.MapGet("/api/products/search", async (string? q, PosDbContext database, Canc
     return Results.Ok(products);
 });
 
-app.MapGet("/api/products/catalog", async (string? q, Guid? departmentId, decimal? minimumPrice, decimal? maximumPrice, decimal? minimumProfit, string? sort, bool descending, int? page, ProductCatalogService catalog, HttpRequest request, CancellationToken cancellationToken) =>
+app.MapGet("/api/products/catalog", async (string? q, Guid? departmentId, decimal? minimumPrice, decimal? maximumPrice, decimal? minimumProfit, bool? includeInactive, string? sort, bool descending, int? page, ProductCatalogService catalog, HttpRequest request, CancellationToken cancellationToken) =>
 {
-    var result = await catalog.CatalogAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), q, departmentId, minimumPrice, maximumPrice, minimumProfit, sort ?? "description", descending, page ?? 1, 500, cancellationToken);
+    var result = await catalog.CatalogAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), q, departmentId, minimumPrice, maximumPrice, minimumProfit, includeInactive == true, sort ?? "description", descending, page ?? 1, 500, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
 app.MapGet("/api/departments", async (bool? includeInactive, ProductCatalogService catalog, HttpRequest request, CancellationToken cancellationToken) =>
@@ -554,12 +554,12 @@ app.MapDelete("/api/products/{id:guid}", async (Guid id, HttpRequest request, Pr
     }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
-app.MapPost("/api/products/deactivate", async (HttpRequest request, ProductBulkDeactivateCommand command, ProductCatalogService catalog, CancellationToken cancellationToken) =>
+app.MapPut("/api/products/status", async (HttpRequest request, ProductBulkStatusCommand command, ProductCatalogService catalog, CancellationToken cancellationToken) =>
 {
     try
     {
-        var result = await catalog.DeactivateManyAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken);
-        return result is null ? Results.Unauthorized() : Results.Ok(new { deactivatedCount = result.Value });
+        var result = await catalog.SetStatusManyAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(new { changedCount = result.Value });
     }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["products"] = [exception.Message] }); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
@@ -570,9 +570,9 @@ app.MapPost("/api/promotions", async (HttpRequest request, PromotionCommand comm
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["promotion"] = [exception.Message] }); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
-app.MapGet("/api/promotions", async (Guid? productId, HttpRequest request, PromotionService promotions, CancellationToken cancellationToken) =>
+app.MapGet("/api/promotions", async (Guid? productId, bool? includeInactive, HttpRequest request, PromotionService promotions, CancellationToken cancellationToken) =>
 {
-    var result = await promotions.ListAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), productId, cancellationToken);
+    var result = await promotions.ListAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), productId, includeInactive == true, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
 app.MapGet("/api/promotions/quote", async (Guid productId, decimal price, decimal quantity, HttpRequest request, PromotionService promotions, CancellationToken cancellationToken) =>
@@ -588,6 +588,11 @@ app.MapDelete("/api/promotions/{id:guid}", async (Guid id, HttpRequest request, 
 {
     var result = await promotions.DeactivateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), id, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.NoContent();
+});
+app.MapPut("/api/promotions/{id:guid}/status", async (Guid id, HttpRequest request, PromotionStatusCommand command, PromotionService promotions, CancellationToken cancellationToken) =>
+{
+    try { var result = await promotions.SetStatusAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), id, command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { updated = true }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
 app.MapPost("/api/kits", async (HttpRequest request, KitCommand command, KitService kits, CancellationToken cancellationToken) =>
 {

@@ -6,7 +6,7 @@ using System.Text;
 namespace Pos.Infrastructure;
 
 public sealed record ProductCommand(string Code, string Description, decimal Price, decimal Cost = 0m, decimal ProfitPercent = 20m, decimal WholesalePrice = 0m, decimal WholesaleProfitPercent = 0m, decimal WholesaleMinimumQuantity = 0m, bool IsKit = false, string UnitOfMeasure = "Pieza", Guid? DepartmentId = null, bool IsCommonProduct = false, decimal InitialStock = 0m, decimal MinimumStock = 0m, decimal MaximumStock = 0m);
-public sealed record ProductBulkDeactivateCommand(IReadOnlyList<Guid> ProductIds);
+public sealed record ProductBulkStatusCommand(IReadOnlyList<Guid> ProductIds, bool IsActive);
 public sealed record DepartmentCommand(string Name);
 public sealed record DepartmentStatusCommand(bool IsActive);
 public sealed record ProductResult(Guid Id, string Code, string Description, decimal Price, decimal Cost, decimal ProfitPercent, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleMinimumQuantity, Guid? DepartmentId, bool IsKit, string UnitOfMeasure, bool IsActive);
@@ -93,23 +93,23 @@ public sealed class ProductCatalogService(PosDbContext database)
         await database.SaveChangesAsync(cancellationToken);
         return true;
     }
-    public async Task<int?> DeactivateManyAsync(string accessToken, ProductBulkDeactivateCommand command, CancellationToken cancellationToken)
+    public async Task<int?> SetStatusManyAsync(string accessToken, ProductBulkStatusCommand command, CancellationToken cancellationToken)
     {
         var userId = await GetAuthorizedUserAsync(accessToken, "ManageProducts", cancellationToken);
         if (userId is null) return null;
         var ids = command.ProductIds.Distinct().ToArray();
-        if (ids.Length is 0 or > 500) throw new ArgumentException("Selecciona entre 1 y 500 productos para retirar.");
+        if (ids.Length is 0 or > 500) throw new ArgumentException("Selecciona entre 1 y 500 productos.");
         var products = await database.Products.Where(item => ids.Contains(item.Id)).ToListAsync(cancellationToken);
         if (products.Count != ids.Length) throw new KeyNotFoundException("Uno o más productos ya no existen. Actualiza el catálogo e inténtalo de nuevo.");
-        var deactivated = products.Count(item => item.IsActive);
-        foreach (var product in products) product.IsActive = false;
+        var changed = products.Count(item => item.IsActive != command.IsActive);
+        foreach (var product in products) product.IsActive = command.IsActive;
         await database.SaveChangesAsync(cancellationToken);
-        return deactivated;
+        return changed;
     }
-    public async Task<CatalogPageResult?> CatalogAsync(string accessToken, string? query, Guid? departmentId, decimal? minimumPrice, decimal? maximumPrice, decimal? minimumProfit, string sort, bool descending, int page, int pageSize, CancellationToken cancellationToken)
+    public async Task<CatalogPageResult?> CatalogAsync(string accessToken, string? query, Guid? departmentId, decimal? minimumPrice, decimal? maximumPrice, decimal? minimumProfit, bool includeInactive, string sort, bool descending, int page, int pageSize, CancellationToken cancellationToken)
     {
         if (await GetAuthorizedUserAsync(accessToken, "ViewProducts", cancellationToken) is null) return null;
-        page = Math.Max(1, page); pageSize = 500; var products = database.Products.AsNoTracking().Where(item => item.IsActive && !item.IsTemporary).Include(item => item.Department).AsQueryable();
+        page = Math.Max(1, page); pageSize = 500; var products = database.Products.AsNoTracking().Where(item => (includeInactive || item.IsActive) && !item.IsTemporary).Include(item => item.Department).AsQueryable();
         var text = query?.Trim().ToUpperInvariant(); if (!string.IsNullOrWhiteSpace(text)) products = products.Where(item => item.NormalizedCode.Contains(text) || item.Description.ToUpper().Contains(text));
         if (departmentId is not null) products = products.Where(item => item.DepartmentId == departmentId); if (minimumPrice is not null) products = products.Where(item => item.Price >= minimumPrice); if (maximumPrice is not null) products = products.Where(item => item.Price <= maximumPrice); if (minimumProfit is not null) products = products.Where(item => item.ProfitPercent >= minimumProfit);
         products = (sort.ToLowerInvariant()) switch { "code" => descending ? products.OrderByDescending(item => item.Code) : products.OrderBy(item => item.Code), "department" => descending ? products.OrderByDescending(item => item.Department!.Name) : products.OrderBy(item => item.Department!.Name), "cost" => descending ? products.OrderByDescending(item => item.Cost) : products.OrderBy(item => item.Cost), "price" => descending ? products.OrderByDescending(item => item.Price) : products.OrderBy(item => item.Price), "wholesale" => descending ? products.OrderByDescending(item => item.WholesalePrice) : products.OrderBy(item => item.WholesalePrice), "profit" => descending ? products.OrderByDescending(item => item.ProfitPercent) : products.OrderBy(item => item.ProfitPercent), "stock" => descending ? products.OrderByDescending(item => item.Stock) : products.OrderBy(item => item.Stock), "minimumstock" => descending ? products.OrderByDescending(item => item.MinimumStock) : products.OrderBy(item => item.MinimumStock), "maximumstock" => descending ? products.OrderByDescending(item => item.MaximumStock) : products.OrderBy(item => item.MaximumStock), _ => descending ? products.OrderByDescending(item => item.Description) : products.OrderBy(item => item.Description) };

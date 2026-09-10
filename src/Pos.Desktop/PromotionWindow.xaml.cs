@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 
 namespace Pos.Desktop;
@@ -11,10 +12,14 @@ public partial class PromotionWindow : Window
     private ProductRow? _selectedProduct;
     private PromotionRow? _selectedPromotion;
     private CancellationTokenSource? _productSearchCancellation;
+    private Button? _deactivateButton;
+    private Button? _reactivateButton;
+    private CheckBox? _showInactiveBox;
 
     public PromotionWindow()
     {
         InitializeComponent();
+        ConfigureInactiveControls();
         Loaded += async (_, _) => await LoadPromotionsAsync();
         Closed += (_, _) => _productSearchCancellation?.Cancel();
     }
@@ -48,10 +53,15 @@ public partial class PromotionWindow : Window
     }
     private async Task LoadPromotionsAsync()
     {
-        try { PromotionsGrid.ItemsSource = await ApiClient.Client.GetFromJsonAsync<List<PromotionRow>>("/api/promotions") ?? []; StatusText.Text = "Las promociones se aplican durante el cobro y quedan auditadas."; }
+        try { PromotionsGrid.ItemsSource = await ApiClient.Client.GetFromJsonAsync<List<PromotionRow>>($"/api/promotions?includeInactive={(_showInactiveBox?.IsChecked == true).ToString().ToLowerInvariant()}") ?? []; StatusText.Text = "Las promociones se aplican durante el cobro y quedan auditadas."; }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron cargar las promociones"); }
     }
-    private void OnPromotionSelected(object sender, SelectionChangedEventArgs e) { _selectedPromotion = PromotionsGrid.SelectedItem as PromotionRow; }
+    private void OnPromotionSelected(object sender, SelectionChangedEventArgs e)
+    {
+        _selectedPromotion = PromotionsGrid.SelectedItem as PromotionRow;
+        if (_deactivateButton is not null) _deactivateButton.IsEnabled = _selectedPromotion?.IsActive == true;
+        if (_reactivateButton is not null) _reactivateButton.IsEnabled = _selectedPromotion?.IsActive == false;
+    }
     private async void OnSaveClick(object sender, RoutedEventArgs e)
     {
         if (_selectedProduct is null || string.IsNullOrWhiteSpace(NameBox.Text)) { StatusText.Text = "Selecciona un producto y escribe un nombre único."; return; }
@@ -70,9 +80,51 @@ public partial class PromotionWindow : Window
         try { using var response = await ApiClient.Client.DeleteAsync($"/api/promotions/{_selectedPromotion.Id}"); if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; } await LoadPromotionsAsync(); StatusText.Text = "Promoción desactivada."; }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo desactivar"); }
     }
+    private async void OnReactivateClick(object sender, RoutedEventArgs e)
+    {
+        if (_selectedPromotion is null) { StatusText.Text = "Selecciona una promoción inactiva."; return; }
+        if (MessageBox.Show($"¿Reactivar {_selectedPromotion.Name}? Volverá a aplicarse durante el cobro cuando esté vigente.", "Reactivar promoción", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        try
+        {
+            using var response = await ApiClient.Client.PutAsJsonAsync($"/api/promotions/{_selectedPromotion.Id}/status", new { isActive = true });
+            if (!response.IsSuccessStatusCode) { StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo reactivar la promoción."); return; }
+            await LoadPromotionsAsync(); StatusText.Text = "Promoción reactivada.";
+        }
+        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo reactivar"); }
+    }
+    private void ConfigureInactiveControls()
+    {
+        PromotionsGrid.Columns.Add(new DataGridTextColumn { Header = "Estado", Binding = new Binding(nameof(PromotionRow.State)), Width = 95 });
+        if (Content is not Grid root) return;
+        var footer = root.Children.OfType<Grid>().FirstOrDefault(item => Grid.GetRow(item) == 3);
+        if (footer is null) return;
+        _deactivateButton = footer.Children.OfType<Button>().FirstOrDefault();
+        if (_deactivateButton is not null)
+        {
+            footer.Children.Remove(_deactivateButton);
+            var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            actions.Children.Add(_deactivateButton);
+            _reactivateButton = new Button { Content = "Reactivar seleccionada", Style = FindResource("ConfirmButtonStyle") as Style, Margin = new Thickness(8, 0, 0, 0), IsEnabled = false };
+            _reactivateButton.Click += OnReactivateClick;
+            actions.Children.Add(_reactivateButton);
+            footer.Children.Add(actions);
+        }
+        footer.Children.Remove(StatusText);
+        var information = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        _showInactiveBox = new CheckBox { Content = "Mostrar bajas", VerticalAlignment = VerticalAlignment.Center };
+        _showInactiveBox.Checked += async (_, _) => await LoadPromotionsAsync();
+        _showInactiveBox.Unchecked += async (_, _) => await LoadPromotionsAsync();
+        information.Children.Add(_showInactiveBox);
+        StatusText.Margin = new Thickness(14, 0, 0, 0);
+        information.Children.Add(StatusText);
+        footer.Children.Add(information);
+    }
     private void ClearForm() { _selectedProduct = null; ProductBox.Clear(); NameBox.Clear(); StartDate.SelectedDate = null; EndDate.SelectedDate = null; TypeBox.SelectedIndex = 0; ValueOneBox.Text = "10"; ValueTwoBox.Text = "0"; }
     private static DateTimeOffset? ToUtc(DateTime? date, bool end) { if (date is null) return null; var local = DateTime.SpecifyKind(date.Value.Date.AddDays(end ? 1 : 0), DateTimeKind.Local); return new DateTimeOffset(local).ToUniversalTime(); }
     private static bool TryDecimal(string value, out decimal result) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out result) || decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
     private sealed record ProductRow(Guid Id, string Code, string Description) { public string Display => $"{Code} | {Description}"; }
-    private sealed record PromotionRow(Guid Id, Guid ProductId, string Name, decimal Percent, decimal DiscountAmount, decimal BuyQuantity, decimal PayQuantity, DateTimeOffset? StartsAtUtc, DateTimeOffset? EndsAtUtc, bool IsActive);
+    private sealed record PromotionRow(Guid Id, Guid ProductId, string Name, decimal Percent, decimal DiscountAmount, decimal BuyQuantity, decimal PayQuantity, DateTimeOffset? StartsAtUtc, DateTimeOffset? EndsAtUtc, bool IsActive)
+    {
+        public string State => IsActive ? "Activa" : "Inactiva";
+    }
 }

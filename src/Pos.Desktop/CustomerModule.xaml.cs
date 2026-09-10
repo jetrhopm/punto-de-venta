@@ -13,12 +13,15 @@ public partial class CustomerModule : UserControl
     private readonly bool _creditMode;
     private CancellationTokenSource? _searchCancellation;
     private CustomerView? _selected;
+    private CheckBox? _showInactiveBox;
+    private Button? _reactivateCustomerButton;
 
     public CustomerModule(bool creditMode = false)
     {
         InitializeComponent();
         _creditMode = creditMode;
         ConfigureMode();
+        ConfigureInactiveCustomerControls();
         Loaded += async (_, _) => await LoadCustomersAsync();
     }
 
@@ -55,7 +58,7 @@ public partial class CustomerModule : UserControl
         try
         {
             var query = Uri.EscapeDataString(SearchTextBox.Text.Trim());
-            var customers = await Client.GetFromJsonAsync<List<CustomerView>>($"/api/customers?q={query}&creditOnly={_creditMode.ToString().ToLowerInvariant()}", cancellationToken) ?? [];
+            var customers = await Client.GetFromJsonAsync<List<CustomerView>>($"/api/customers?q={query}&creditOnly={_creditMode.ToString().ToLowerInvariant()}&includeInactive={(_showInactiveBox?.IsChecked == true).ToString().ToLowerInvariant()}", cancellationToken) ?? [];
             CustomersList.ItemsSource = customers;
             _selected = selectCustomerId is null ? null : customers.FirstOrDefault(customer => customer.Id == selectCustomerId);
             CustomersList.SelectedItem = _selected;
@@ -78,7 +81,8 @@ public partial class CustomerModule : UserControl
     private void SetActionAvailability()
     {
         EditCustomerButton.IsEnabled = _selected is not null;
-        DeactivateCustomerButton.IsEnabled = _selected is not null;
+        DeactivateCustomerButton.IsEnabled = _selected?.IsActive == true;
+        if (_reactivateCustomerButton is not null) _reactivateCustomerButton.IsEnabled = _selected?.IsActive == false;
         OpenCreditAccountButton.IsEnabled = _selected is not null;
     }
 
@@ -92,6 +96,33 @@ public partial class CustomerModule : UserControl
     private async void OnDeactivateCustomerClick(object sender, RoutedEventArgs e)
     {
         if (_selected is not null) await DeactivateCustomerAsync(_selected);
+    }
+
+    private async void OnReactivateCustomerClick(object sender, RoutedEventArgs e)
+    {
+        if (_selected is null || _selected.IsActive) return;
+        if (MessageBox.Show($"¿Reactivar a {_selected.Name}? Volverá a estar disponible para ventas y créditos si estos están habilitados.", "Reactivar cliente", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        try
+        {
+            using var response = await Client.PutAsJsonAsync($"/api/customers/{_selected.Id}/status", new { isActive = true });
+            if (!response.IsSuccessStatusCode) { StatusText.Text = await ReadErrorAsync(response); return; }
+            await LoadCustomersAsync(selectCustomerId: _selected.Id);
+            StatusText.Text = "Cliente reactivado correctamente.";
+        }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; }
+    }
+
+    private void ConfigureInactiveCustomerControls()
+    {
+        if (_creditMode || SearchTextBox.Parent is not StackPanel searchPanel) return;
+        _showInactiveBox = new CheckBox { Content = "Mostrar bajas", Margin = new Thickness(0, 8, 0, 0) };
+        _showInactiveBox.Checked += async (_, _) => await LoadCustomersAsync();
+        _showInactiveBox.Unchecked += async (_, _) => await LoadCustomersAsync();
+        searchPanel.Children.Add(_showInactiveBox);
+
+        _reactivateCustomerButton = new Button { Content = "Reactivar cliente", Style = FindResource("ConfirmButtonStyle") as Style, MinWidth = 176, Margin = new Thickness(10, 0, 0, 0), IsEnabled = false };
+        _reactivateCustomerButton.Click += OnReactivateCustomerClick;
+        CustomerActionsPanel.Children.Add(_reactivateCustomerButton);
     }
 
     private async void OnOpenCreditAccountClick(object sender, RoutedEventArgs e)

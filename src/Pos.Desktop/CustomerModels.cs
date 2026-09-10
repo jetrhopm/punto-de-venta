@@ -13,7 +13,7 @@ public sealed record CustomerView(
 {
     public decimal AvailableCredit => Math.Max(0m, CreditLimit - Balance);
     public string ContactSummary => string.Join("  |  ", new[] { Phone, Email }.Where(value => !string.IsNullOrWhiteSpace(value)));
-    public string CreditStatus => CreditEnabled ? "Crédito activo" : "Sin crédito";
+    public string CreditStatus => !IsActive ? "Inactivo" : CreditEnabled ? "Crédito activo" : "Sin crédito";
     public string BalanceDisplay => $"${Balance:N2}";
 }
 
