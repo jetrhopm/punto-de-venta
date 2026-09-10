@@ -6,6 +6,7 @@ using System.Text;
 namespace Pos.Infrastructure;
 
 public sealed record ProductCommand(string Code, string Description, decimal Price, decimal Cost = 0m, decimal ProfitPercent = 20m, decimal WholesalePrice = 0m, decimal WholesaleProfitPercent = 0m, decimal WholesaleMinimumQuantity = 0m, bool IsKit = false, string UnitOfMeasure = "Pieza", Guid? DepartmentId = null, bool IsCommonProduct = false, decimal InitialStock = 0m, decimal MinimumStock = 0m, decimal MaximumStock = 0m);
+public sealed record ProductBulkDeactivateCommand(IReadOnlyList<Guid> ProductIds);
 public sealed record DepartmentCommand(string Name);
 public sealed record DepartmentStatusCommand(bool IsActive);
 public sealed record ProductResult(Guid Id, string Code, string Description, decimal Price, decimal Cost, decimal ProfitPercent, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleMinimumQuantity, Guid? DepartmentId, bool IsKit, string UnitOfMeasure, bool IsActive);
@@ -91,6 +92,19 @@ public sealed class ProductCatalogService(PosDbContext database)
         item.IsActive = isActive;
         await database.SaveChangesAsync(cancellationToken);
         return true;
+    }
+    public async Task<int?> DeactivateManyAsync(string accessToken, ProductBulkDeactivateCommand command, CancellationToken cancellationToken)
+    {
+        var userId = await GetAuthorizedUserAsync(accessToken, "ManageProducts", cancellationToken);
+        if (userId is null) return null;
+        var ids = command.ProductIds.Distinct().ToArray();
+        if (ids.Length is 0 or > 500) throw new ArgumentException("Selecciona entre 1 y 500 productos para retirar.");
+        var products = await database.Products.Where(item => ids.Contains(item.Id)).ToListAsync(cancellationToken);
+        if (products.Count != ids.Length) throw new KeyNotFoundException("Uno o más productos ya no existen. Actualiza el catálogo e inténtalo de nuevo.");
+        var deactivated = products.Count(item => item.IsActive);
+        foreach (var product in products) product.IsActive = false;
+        await database.SaveChangesAsync(cancellationToken);
+        return deactivated;
     }
     public async Task<CatalogPageResult?> CatalogAsync(string accessToken, string? query, Guid? departmentId, decimal? minimumPrice, decimal? maximumPrice, decimal? minimumProfit, string sort, bool descending, int page, int pageSize, CancellationToken cancellationToken)
     {

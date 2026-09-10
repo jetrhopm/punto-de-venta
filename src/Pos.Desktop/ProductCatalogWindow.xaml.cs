@@ -236,6 +236,45 @@ public partial class ProductCatalogWindow : UserControl
         _selected = null;
         StatusText.Text = "Selección quitada.";
     }
+
+    private async void OnDeactivateSelectedClick(object sender, RoutedEventArgs e)
+    {
+        var selected = ProductsGrid.SelectedItems.OfType<CatalogProductRow>().Where(item => item.IsActive).ToArray();
+        if (selected.Length == 0)
+        {
+            new OperationResultWindow("Selecciona productos", "Marca uno o más productos activos para retirarlos del catálogo.", OperationResultKind.Information) { Owner = Window.GetWindow(this) }.ShowDialog();
+            return;
+        }
+
+        var confirmation = new OperationConfirmationWindow(
+            "Retirar productos seleccionados",
+            $"Se retirarán {selected.Length} producto{(selected.Length == 1 ? string.Empty : "s")} del catálogo activo. Sus ventas, movimientos e historial se conservarán.",
+            OperationResultKind.Warning,
+            MessageBoxButton.YesNo) { Owner = Window.GetWindow(this) };
+        if (confirmation.ShowDialog() != true || confirmation.Result != MessageBoxResult.Yes) return;
+
+        try
+        {
+            using var response = await ApiClient.Client.PostAsJsonAsync("/api/products/deactivate", new { productIds = selected.Select(item => item.Id).ToArray() });
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudieron retirar los productos seleccionados.");
+                StatusText.Text = message;
+                new OperationResultWindow("Productos no retirados", message, OperationResultKind.Error) { Owner = Window.GetWindow(this) }.ShowDialog();
+                return;
+            }
+
+            ProductsGrid.UnselectAll();
+            await LoadCatalogAsync();
+            StatusText.Text = $"{selected.Length} producto{(selected.Length == 1 ? string.Empty : "s")} retirado{(selected.Length == 1 ? string.Empty : "s")} del catálogo. El historial se conserva.";
+        }
+        catch (Exception exception)
+        {
+            var message = ConnectionHelp.FromException(exception, "No se pudieron retirar los productos seleccionados");
+            StatusText.Text = message;
+            new OperationResultWindow("Productos no retirados", message, OperationResultKind.Error) { Owner = Window.GetWindow(this) }.ShowDialog();
+        }
+    }
     private void OpenProductEditor(CatalogProductRow? row)
     {
         var model = row is null ? null : new ProductEditorWindow.ProductEditModel(row.Id, row.Code, row.Description, row.DepartmentId, row.UnitOfMeasure, row.Cost, row.Price, row.ProfitPercent, row.WholesalePrice, row.WholesaleProfitPercent, row.WholesaleMinimumQuantity, row.Stock, row.MinimumStock, row.MaximumStock, row.IsKit);
@@ -261,6 +300,7 @@ public partial class ProductCatalogWindow : UserControl
         actions.Children.Insert(1, CreateCatalogAction("Editar seleccionado", "PrimaryButtonStyle", OnShowEditProductClick));
         actions.Children.Insert(2, CreateCatalogAction("Seleccionar todos", "PrimaryButtonStyle", OnSelectVisibleClick));
         actions.Children.Insert(3, CreateCatalogAction("Desmarcar todos", "DangerButtonStyle", OnClearSelectionClick));
+        actions.Children.Insert(4, CreateCatalogAction("Retirar seleccionados", "DangerButtonStyle", OnDeactivateSelectedClick));
     }
     private Button CreateCatalogAction(string text, string styleKey, RoutedEventHandler click)
     {
