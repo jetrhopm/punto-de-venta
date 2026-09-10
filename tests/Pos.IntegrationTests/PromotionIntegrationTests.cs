@@ -8,6 +8,48 @@ namespace Pos.IntegrationTests;
 public sealed class PromotionIntegrationTests
 {
     [Fact]
+    public async Task CalculatesPercentFixedAmountAndBuyPayPromotions()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var products = new[]
+        {
+            new ProductRecord { Id = Guid.NewGuid(), Code = "PERCENT-" + suffix, NormalizedCode = ("PERCENT-" + suffix).ToUpperInvariant(), Description = "Producto porcentaje", Price = 100m, IsActive = true },
+            new ProductRecord { Id = Guid.NewGuid(), Code = "FIXED-" + suffix, NormalizedCode = ("FIXED-" + suffix).ToUpperInvariant(), Description = "Producto descuento fijo", Price = 100m, IsActive = true },
+            new ProductRecord { Id = Guid.NewGuid(), Code = "BUYPAY-" + suffix, NormalizedCode = ("BUYPAY-" + suffix).ToUpperInvariant(), Description = "Producto compra y paga", Price = 100m, IsActive = true }
+        };
+        database.Products.AddRange(products);
+        database.Promotions.AddRange(
+            new PromotionRecord { Id = Guid.NewGuid(), ProductId = products[0].Id, Name = "Porcentaje " + suffix, Percent = 15m, IsActive = true },
+            new PromotionRecord { Id = Guid.NewGuid(), ProductId = products[1].Id, Name = "Fijo " + suffix, DiscountAmount = 12m, IsActive = true },
+            new PromotionRecord { Id = Guid.NewGuid(), ProductId = products[2].Id, Name = "Compra paga " + suffix, BuyQuantity = 3m, PayQuantity = 2m, IsActive = true });
+        await database.SaveChangesAsync();
+
+        try
+        {
+            var service = new PromotionService(database);
+            var percent = await service.CalculateAsync(products[0].Id, 100m, DateTimeOffset.UtcNow, CancellationToken.None, 2m);
+            var fixedAmount = await service.CalculateAsync(products[1].Id, 100m, DateTimeOffset.UtcNow, CancellationToken.None, 2m);
+            var buyPay = await service.CalculateAsync(products[2].Id, 100m, DateTimeOffset.UtcNow, CancellationToken.None, 3m);
+
+            Assert.Equal(170m, percent.Total);
+            Assert.Equal(85m, percent.UnitPrice);
+            Assert.Equal(176m, fixedAmount.Total);
+            Assert.Equal(88m, fixedAmount.UnitPrice);
+            Assert.Equal(200m, buyPay.Total);
+        }
+        finally
+        {
+            var ids = products.Select(item => item.Id).ToArray();
+            database.Promotions.RemoveRange(database.Promotions.Where(item => ids.Contains(item.ProductId)));
+            database.Products.RemoveRange(products);
+            await database.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
     public async Task UpdatingAnInactivePromotionKeepsItsStatusAndReturnsProductInformation()
     {
         await using var database = new PosDbContextFactory().CreateDbContext([]);

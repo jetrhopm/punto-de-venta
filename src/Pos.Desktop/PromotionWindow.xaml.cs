@@ -44,7 +44,14 @@ public partial class PromotionWindow : Window
         catch (OperationCanceledException) { }
         catch { ProductList.Visibility = Visibility.Collapsed; }
     }
-    private void OnProductSelected(object sender, MouseButtonEventArgs e) { if (ProductList.SelectedItem is ProductRow row) { _selectedProduct = row; ProductBox.Text = row.Display; ProductList.Visibility = Visibility.Collapsed; } }
+    private void OnProductSelected(object sender, MouseButtonEventArgs e)
+    {
+        if (ProductList.SelectedItem is not ProductRow row) return;
+        _selectedProduct = row;
+        ProductBox.Text = row.Display;
+        ProductPricingText.Text = $"Costo: {row.Cost:C2} · Precio de venta: {row.Price:C2}";
+        ProductList.Visibility = Visibility.Collapsed;
+    }
     private void OnTypeChanged(object sender, SelectionChangedEventArgs e)
     {
         // WPF can raise SelectionChanged while InitializeComponent is still creating the controls.
@@ -90,8 +97,9 @@ public partial class PromotionWindow : Window
 
         var promotion = _selectedPromotion;
         _editingPromotionId = promotion.Id;
-        _selectedProduct = new ProductRow(promotion.ProductId, promotion.ProductCode, promotion.ProductDescription);
+        _selectedProduct = new ProductRow(promotion.ProductId, promotion.ProductCode, promotion.ProductDescription, promotion.ProductCost, promotion.ProductPrice);
         ProductBox.Text = _selectedProduct.Display;
+        ProductPricingText.Text = $"Costo: {promotion.ProductCost:C2} · Precio de venta: {promotion.ProductPrice:C2}";
         ProductList.Visibility = Visibility.Collapsed;
         NameBox.Text = promotion.Name;
         var type = promotion.Percent > 0m ? "percent" : promotion.DiscountAmount > 0m ? "amount" : "buyPay";
@@ -222,14 +230,14 @@ public partial class PromotionWindow : Window
         _selectedProduct = null;
         _selectedPromotion = null;
         PromotionsGrid.UnselectAll();
-        ProductBox.Clear(); NameBox.Clear(); StartDate.SelectedDate = null; EndDate.SelectedDate = null; TypeBox.SelectedIndex = 0; ValueOneBox.Text = "10"; ValueTwoBox.Text = "0";
+        ProductBox.Clear(); ProductPricingText.Text = "Selecciona un producto para consultar costo y precio de venta."; NameBox.Clear(); StartDate.SelectedDate = null; EndDate.SelectedDate = null; TypeBox.SelectedIndex = 0; ValueOneBox.Text = "10"; ValueTwoBox.Text = "0";
         SaveButtonText.Text = "Guardar";
     }
     private void ShowResult(string title, string message, OperationResultKind kind) => new OperationResultWindow(title, message, kind) { Owner = this }.ShowDialog();
     private static DateTimeOffset? ToUtc(DateTime? date, bool end) { if (date is null) return null; var local = DateTime.SpecifyKind(date.Value.Date.AddDays(end ? 1 : 0), DateTimeKind.Local); return new DateTimeOffset(local).ToUniversalTime(); }
     private static bool TryDecimal(string value, out decimal result) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out result) || decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
-    private sealed record ProductRow(Guid Id, string Code, string Description) { public string Display => $"{Code} | {Description}"; }
-    private sealed record PromotionRow(Guid Id, Guid ProductId, string Name, decimal Percent, decimal DiscountAmount, decimal BuyQuantity, decimal PayQuantity, DateTimeOffset? StartsAtUtc, DateTimeOffset? EndsAtUtc, bool IsActive, string ProductCode = "", string ProductDescription = "")
+    private sealed record ProductRow(Guid Id, string Code, string Description, decimal Cost = 0m, decimal Price = 0m) { public string Display => $"{Code} | {Description}"; }
+    private sealed record PromotionRow(Guid Id, Guid ProductId, string Name, decimal Percent, decimal DiscountAmount, decimal BuyQuantity, decimal PayQuantity, DateTimeOffset? StartsAtUtc, DateTimeOffset? EndsAtUtc, bool IsActive, string ProductCode = "", string ProductDescription = "", decimal ProductCost = 0m, decimal ProductPrice = 0m)
     {
         public string ProductDisplay => string.IsNullOrWhiteSpace(ProductCode) ? ProductDescription : $"{ProductCode} | {ProductDescription}";
         public string State => IsActive ? "Activa" : "Inactiva";

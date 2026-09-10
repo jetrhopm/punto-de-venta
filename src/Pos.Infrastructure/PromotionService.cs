@@ -6,7 +6,7 @@ namespace Pos.Infrastructure;
 
 public sealed record PromotionCommand(Guid ProductId, string Name, decimal Percent = 0m, decimal DiscountAmount = 0m, decimal BuyQuantity = 0m, decimal PayQuantity = 0m, DateTimeOffset? StartsAtUtc = null, DateTimeOffset? EndsAtUtc = null);
 public sealed record PromotionStatusCommand(bool IsActive);
-public sealed record PromotionResult(Guid Id, Guid ProductId, string Name, decimal Percent, decimal DiscountAmount, decimal BuyQuantity, decimal PayQuantity, DateTimeOffset? StartsAtUtc, DateTimeOffset? EndsAtUtc, bool IsActive, string ProductCode = "", string ProductDescription = "");
+public sealed record PromotionResult(Guid Id, Guid ProductId, string Name, decimal Percent, decimal DiscountAmount, decimal BuyQuantity, decimal PayQuantity, DateTimeOffset? StartsAtUtc, DateTimeOffset? EndsAtUtc, bool IsActive, string ProductCode = "", string ProductDescription = "", decimal ProductCost = 0m, decimal ProductPrice = 0m);
 public sealed record PromotionPriceQuote(Guid ProductId, decimal BaseUnitPrice, decimal UnitPrice, decimal Quantity, decimal Total, decimal DiscountTotal, bool PromotionApplied);
 public sealed record PromotionPriceCalculation(decimal UnitPrice, decimal Total);
 
@@ -65,8 +65,9 @@ public sealed class PromotionService(PosDbContext database)
 
     public async Task<PromotionPriceQuote?> QuoteAsync(string token, Guid productId, decimal price, decimal quantity, CancellationToken cancellationToken)
     {
-        // F1 necesita cotizar durante una venta; no debe exigir permisos administrativos de catálogo.
-        if (await AuthorizedAsync(token, "Sell", cancellationToken) is null) return null;
+        // La cotización no modifica datos. Basta una sesión vigente para que la pantalla de venta
+        // muestre el precio promocional antes de pedir la autorización de cobro.
+        if (await AuthorizedSessionAsync(token, cancellationToken) is null) return null;
         if (productId == Guid.Empty || price < 0m || quantity <= 0m) throw new ArgumentException("Los datos de precio y cantidad no son validos.");
         var calculation = await CalculateAsync(productId, price, DateTimeOffset.UtcNow, cancellationToken, quantity);
         var discountTotal = decimal.Round(Math.Max(0m, (price * quantity) - calculation.Total), 2, MidpointRounding.AwayFromZero);
@@ -108,5 +109,13 @@ public sealed class PromotionService(PosDbContext database)
     {
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty))); var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken); if (session is null) return null; var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken); return user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == permission, cancellationToken) ? user.Id : null;
     }
-    private static PromotionResult ToResult(PromotionRecord item, ProductRecord? product = null) => new(item.Id, item.ProductId, item.Name, item.Percent, item.DiscountAmount, item.BuyQuantity, item.PayQuantity, item.StartsAtUtc, item.EndsAtUtc, item.IsActive, product?.Code ?? string.Empty, product?.Description ?? string.Empty);
+    private async Task<Guid?> AuthorizedSessionAsync(string token, CancellationToken cancellationToken)
+    {
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty)));
+        return await database.Sessions.AsNoTracking()
+            .Where(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow)
+            .Select(item => (Guid?)item.UserId)
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+    private static PromotionResult ToResult(PromotionRecord item, ProductRecord? product = null) => new(item.Id, item.ProductId, item.Name, item.Percent, item.DiscountAmount, item.BuyQuantity, item.PayQuantity, item.StartsAtUtc, item.EndsAtUtc, item.IsActive, product?.Code ?? string.Empty, product?.Description ?? string.Empty, product?.Cost ?? 0m, product?.Price ?? 0m);
 }
