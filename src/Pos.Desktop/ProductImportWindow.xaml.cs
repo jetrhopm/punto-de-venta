@@ -15,6 +15,8 @@ public partial class ProductImportWindow : Window
     private const int PageSize = 1000;
     private List<ProductImportPreviewRow> _rows = [];
     private List<ProductImportPreviewRow> _sortedRows = [];
+    private List<ProductImportPreviewRow> _filteredRows = [];
+    private CancellationTokenSource? _previewSearchCancellation;
     private int _currentPage = 1;
     private string _sortMember = nameof(ProductImportPreviewRow.RowNumber);
     private ListSortDirection _sortDirection = ListSortDirection.Ascending;
@@ -24,7 +26,11 @@ public partial class ProductImportWindow : Window
     private ProductImportColumnMapping? _mapping;
     private decimal _defaultWholesaleMinimum = 1m;
 
-    public ProductImportWindow() => InitializeComponent();
+    public ProductImportWindow()
+    {
+        InitializeComponent();
+        Closed += (_, _) => _previewSearchCancellation?.Cancel();
+    }
 
     private void OnSelectFileClick(object sender, RoutedEventArgs e)
     {
@@ -103,6 +109,22 @@ public partial class ProductImportWindow : Window
         _currentPage = 1;
         ApplySort();
         UpdatePreviewPage();
+    }
+
+    private async void OnPreviewSearchChanged(object sender, TextChangedEventArgs e)
+    {
+        _previewSearchCancellation?.Cancel();
+        _previewSearchCancellation = new CancellationTokenSource();
+        var cancellationToken = _previewSearchCancellation.Token;
+        try
+        {
+            await Task.Delay(180, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            _currentPage = 1;
+            ApplyFilter();
+            UpdatePreviewPage();
+        }
+        catch (OperationCanceledException) { }
     }
 
     private void OnPreviousPageClick(object sender, RoutedEventArgs e)
@@ -245,7 +267,7 @@ public partial class ProductImportWindow : Window
                 : string.Join(Environment.NewLine, invalidRows.Take(8).Select(item => $"Fila {item.RowNumber}: {item.Status[7..]}")) + (invalidRows.Count > 8 ? $"{Environment.NewLine}... y {invalidRows.Count - 8} error(es) mas." : string.Empty);
             if (focusFirstInvalid && invalidRows.Count > 0)
             {
-                var index = _sortedRows.IndexOf(invalidRows[0]);
+                var index = _filteredRows.IndexOf(invalidRows[0]);
                 if (index >= 0)
                 {
                     _currentPage = (index / PageSize) + 1;
@@ -276,18 +298,20 @@ public partial class ProductImportWindow : Window
         return "Valido";
     }
 
-    private int TotalPages => Math.Max(1, (int)Math.Ceiling(_sortedRows.Count / (double)PageSize));
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(_filteredRows.Count / (double)PageSize));
 
     private void UpdatePreviewPage()
     {
         if (_currentPage > TotalPages) _currentPage = TotalPages;
         if (_currentPage < 1) _currentPage = 1;
-        PreviewGrid.ItemsSource = _sortedRows.Skip((_currentPage - 1) * PageSize).Take(PageSize).ToList();
+        PreviewGrid.ItemsSource = _filteredRows.Skip((_currentPage - 1) * PageSize).Take(PageSize).ToList();
         PreviousPageButton.IsEnabled = _currentPage > 1;
         NextPageButton.IsEnabled = _currentPage < TotalPages;
-        var first = _sortedRows.Count == 0 ? 0 : ((_currentPage - 1) * PageSize) + 1;
-        var last = Math.Min(_currentPage * PageSize, _sortedRows.Count);
-        PageInfoText.Text = _sortedRows.Count == 0 ? "Sin filas cargadas." : $"Página {_currentPage} de {TotalPages}. Mostrando {first}-{last} de {_sortedRows.Count}; {_rows.Count(item => item.IsSelected)} seleccionados.";
+        var first = _filteredRows.Count == 0 ? 0 : ((_currentPage - 1) * PageSize) + 1;
+        var last = Math.Min(_currentPage * PageSize, _filteredRows.Count);
+        PageInfoText.Text = _filteredRows.Count == 0
+            ? "Sin filas que coincidan con la búsqueda."
+            : $"Página {_currentPage} de {TotalPages}. Mostrando {first}-{last} de {_filteredRows.Count} coincidencias; {_rows.Count(item => item.IsSelected)} seleccionados.";
     }
 
     private void ApplySort()
@@ -311,7 +335,27 @@ public partial class ProductImportWindow : Window
             _ => row => row.RowNumber
         };
         _sortedRows = (_sortDirection == ListSortDirection.Ascending ? _rows.OrderBy(key) : _rows.OrderByDescending(key)).ToList();
+        ApplyFilter();
     }
+
+    private void ApplyFilter()
+    {
+        var search = PreviewSearchBox?.Text.Trim();
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            _filteredRows = [.. _sortedRows];
+            return;
+        }
+
+        _filteredRows = _sortedRows.Where(row =>
+            Contains(row.Code, search) ||
+            Contains(row.Description, search) ||
+            Contains(row.Category, search) ||
+            Contains(row.SupplierName, search) ||
+            Contains(row.Status, search)).ToList();
+    }
+
+    private static bool Contains(string value, string search) => value.Contains(search, StringComparison.OrdinalIgnoreCase);
 
     private static string SafeForSpreadsheet(string value) => value.Length > 0 && "=+-@\t\r".Contains(value[0]) ? "'" + value : value;
     private sealed record ImportResult(Guid ImportId, int Created, int Updated, int Skipped, bool ExistingResult);
