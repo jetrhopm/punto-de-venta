@@ -366,13 +366,26 @@ public partial class MainWindow : Window
         var eligibleCount = ticket.Lines.Count(line => line.CanUseManualWholesale);
         if (eligibleCount == 0)
         {
-            StatusText.Text = "Ningún artículo del ticket tiene un precio de mayoreo configurado.";
+            new OperationResultWindow(
+                "Mayoreo no configurado",
+                "Este producto no tiene un precio de mayoreo configurado.",
+                OperationResultKind.Warning,
+                TimeSpan.FromSeconds(2)) { Owner = this }.ShowDialog();
+            StatusText.Text = "No se aplicó mayoreo manual porque el artículo no tiene precio de mayoreo.";
             FocusProductInput();
             return;
         }
 
+        var minimums = string.Join("; ", ticket.Lines
+            .Where(line => line.CanUseManualWholesale)
+            .Select(line => $"{line.Description}: {line.WholesaleMinimumQuantity:0.###} {line.UnitOfMeasure}")
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+        var unavailableCount = ticket.Lines.Count - eligibleCount;
+        var unavailableDetail = unavailableCount == 0
+            ? string.Empty
+            : $" {unavailableCount} artículo(s) sin precio de mayoreo conservarán su precio normal.";
         if (MessageBox.Show(
-                $"Se aplicará el precio de mayoreo a {eligibleCount} artículo(s) elegible(s), aunque no alcancen su cantidad mínima. Esta excepción sólo aplica al ticket actual. ¿Deseas continuar?",
+                $"Se aplicará el precio de mayoreo a {eligibleCount} artículo(s) elegible(s), aunque no alcancen su cantidad mínima. Mínimo configurado: {minimums}. Esta excepción sólo aplica al ticket actual.{unavailableDetail} ¿Deseas continuar?",
                 "Aplicar mayoreo manual",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning) != MessageBoxResult.Yes)
