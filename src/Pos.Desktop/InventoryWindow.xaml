@@ -21,6 +21,8 @@
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                 <Button Style="{StaticResource ActionButton}" Click="OnRefreshClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="Refresh" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Actualizar"/></StackPanel></Button>
+                <Button Style="{StaticResource ActionButton}" Click="OnSelectVisibleClick">Seleccionar página</Button>
+                <Button Style="{StaticResource ActionButton}" Click="OnClearSelectionClick">Quitar selección</Button>
                 <Button Style="{StaticResource ActionButton}" Click="OnAdjustmentClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="PlusMinusBox" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Ajustar existencia"/></StackPanel></Button>
                 <Button Style="{StaticResource ActionButton}" Click="OnImportClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="FileImportOutline" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Importar"/></StackPanel></Button>
                 <Button Style="{StaticResource ActionButton}" Click="OnExportClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="FileExportOutline" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Exportar"/></StackPanel></Button>
@@ -41,11 +43,11 @@
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="150"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <TextBox x:Name="SearchBox" Height="36" Padding="10,7" ToolTip="Código o descripción" TextChanged="OnFilterChanged"/>
             <ComboBox Grid.Column="1" x:Name="StatusBox" Height="36" Margin="10,0,0,0" SelectionChanged="OnFilterChanged"><ComboBoxItem Content="Todos" Tag="" IsSelected="True"/><ComboBoxItem Content="Normal" Tag="normal"/><ComboBoxItem Content="Bajo mínimo" Tag="bajo"/><ComboBoxItem Content="Sobre máximo" Tag="sobre"/><ComboBoxItem Content="Agotado" Tag="agotado"/></ComboBox>
-            <TextBlock Grid.Column="2" x:Name="StatusText" VerticalAlignment="Center" Margin="15,0,15,0" Foreground="#637589"/>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="15,0,15,0"><TextBlock x:Name="StatusText" Foreground="#637589"/><TextBlock x:Name="SelectionText" Margin="12,0,0,0" Foreground="#146CB0" FontWeight="SemiBold"/></StackPanel>
             <Button Grid.Column="3" Height="36" Padding="12,5" Click="OnCloseClick">Cerrar</Button>
         </Grid>
 
-        <DataGrid Grid.Row="3" x:Name="InventoryGrid" AutoGenerateColumns="False" IsReadOnly="False" CanUserSortColumns="True" EnableRowVirtualization="True" EnableColumnVirtualization="True" Sorting="OnSorting" CellEditEnding="OnCellEditEnding" HeadersVisibility="Column" RowHeight="34">
+        <DataGrid Grid.Row="3" x:Name="InventoryGrid" AutoGenerateColumns="False" IsReadOnly="False" SelectionMode="Extended" SelectionUnit="FullRow" SelectionChanged="OnInventorySelectionChanged" CanUserSortColumns="True" EnableRowVirtualization="True" EnableColumnVirtualization="True" Sorting="OnSorting" CellEditEnding="OnCellEditEnding" HeadersVisibility="Column" RowHeight="34">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Código" Binding="{Binding Code}" SortMemberPath="code" IsReadOnly="True" Width="110"/>
                 <DataGridTextColumn Header="Producto" Binding="{Binding Description}" SortMemberPath="description" IsReadOnly="True" Width="230"/>

@@ -26,6 +26,8 @@ public partial class ProductCatalogWindow : UserControl
     public ProductCatalogWindow()
     {
         InitializeComponent();
+        ProductsGrid.SelectionMode = DataGridSelectionMode.Extended;
+        ProductsGrid.SelectionUnit = DataGridSelectionUnit.FullRow;
         ConfigureCatalogModes();
         Loaded += async (_, _) =>
         {
@@ -169,6 +171,12 @@ public partial class ProductCatalogWindow : UserControl
 
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (ProductsGrid.SelectedItems.Count > 1)
+        {
+            _selected = null;
+            StatusText.Text = $"{ProductsGrid.SelectedItems.Count} productos seleccionados. Puedes quitar la selección o elegir uno para editarlo.";
+            return;
+        }
         if (ProductsGrid.SelectedItem is not CatalogProductRow row) return;
         _selected = row;
         _loadingForm = true;
@@ -197,6 +205,11 @@ public partial class ProductCatalogWindow : UserControl
     private void OnShowNewProductClick(object sender, RoutedEventArgs e) => OpenProductEditor(null);
     private void OnShowEditProductClick(object sender, RoutedEventArgs e)
     {
+        if (ProductsGrid.SelectedItems.Count != 1)
+        {
+            new OperationResultWindow("Selecciona un producto", "Para editar, deja seleccionado un solo producto.", OperationResultKind.Information) { Owner = Window.GetWindow(this) }.ShowDialog();
+            return;
+        }
         if (ProductsGrid.SelectedItem is not CatalogProductRow row)
         {
             new OperationResultWindow("Selecciona un producto", "Selecciona una fila de la lista antes de editar.", OperationResultKind.Information) { Owner = Window.GetWindow(this) }.ShowDialog();
@@ -206,7 +219,20 @@ public partial class ProductCatalogWindow : UserControl
     }
     private void OnProductsGridDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (ProductsGrid.SelectedItem is CatalogProductRow row) OpenProductEditor(row);
+        if (ProductsGrid.SelectedItems.Count == 1 && ProductsGrid.SelectedItem is CatalogProductRow row) OpenProductEditor(row);
+    }
+
+    private void OnSelectVisibleClick(object sender, RoutedEventArgs e)
+    {
+        ProductsGrid.SelectAll();
+        StatusText.Text = $"{ProductsGrid.SelectedItems.Count} productos de la página seleccionados.";
+    }
+
+    private void OnClearSelectionClick(object sender, RoutedEventArgs e)
+    {
+        ProductsGrid.UnselectAll();
+        _selected = null;
+        StatusText.Text = "Selección quitada.";
     }
     private void OpenProductEditor(CatalogProductRow? row)
     {
@@ -231,6 +257,8 @@ public partial class ProductCatalogWindow : UserControl
         if (actions is null) return;
         actions.Children.Insert(0, CreateCatalogAction("Nuevo producto", "ConfirmButtonStyle", OnShowNewProductClick));
         actions.Children.Insert(1, CreateCatalogAction("Editar seleccionado", "PrimaryButtonStyle", OnShowEditProductClick));
+        actions.Children.Insert(2, CreateCatalogAction("Seleccionar página", "PrimaryButtonStyle", OnSelectVisibleClick));
+        actions.Children.Insert(3, CreateCatalogAction("Quitar selección", "DangerButtonStyle", OnClearSelectionClick));
     }
     private Button CreateCatalogAction(string text, string styleKey, RoutedEventHandler click)
     {

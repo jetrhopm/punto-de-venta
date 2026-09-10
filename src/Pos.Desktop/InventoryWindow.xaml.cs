@@ -35,6 +35,22 @@ public partial class InventoryWindow : UserControl, INotifyPropertyChanged
 
     private void OnFilterChanged(object sender, RoutedEventArgs e) { if (IsLoaded) { _filterTimer.Stop(); _filterTimer.Start(); } }
     private async void OnRefreshClick(object sender, RoutedEventArgs e) => await LoadAsync();
+    private void OnSelectVisibleClick(object sender, RoutedEventArgs e)
+    {
+        InventoryGrid.SelectAll();
+        UpdateSelectionText();
+    }
+    private void OnClearSelectionClick(object sender, RoutedEventArgs e)
+    {
+        InventoryGrid.UnselectAll();
+        UpdateSelectionText();
+    }
+    private void OnInventorySelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateSelectionText();
+    private void UpdateSelectionText()
+    {
+        var count = InventoryGrid.SelectedItems.Count;
+        SelectionText.Text = count == 0 ? string.Empty : $"{count} seleccionado{(count == 1 ? string.Empty : "s")}";
+    }
     private async void OnPreviousPageClick(object sender, RoutedEventArgs e) { if (_page <= 1) return; _page--; await LoadAsync(); }
     private async void OnNextPageClick(object sender, RoutedEventArgs e) { if (_page >= _totalPages) return; _page++; await LoadAsync(); }
     public event EventHandler? CloseRequested;
