@@ -62,6 +62,7 @@ public sealed class ProductCatalogService(PosDbContext database)
     public async Task<IReadOnlyList<DepartmentResult>?> ListDepartmentsAsync(string accessToken, bool includeInactive, CancellationToken cancellationToken)
     {
         if (await GetAuthorizedUserAsync(accessToken, "ViewProducts", cancellationToken) is null) return null;
+        await DepartmentDefaults.EnsureAsync(database, cancellationToken);
         var departments = database.Departments.AsNoTracking();
         if (!includeInactive) departments = departments.Where(item => item.IsActive);
         return await departments.OrderBy(item => item.Name).Select(item => new DepartmentResult(item.Id, item.Name, item.IsActive)).ToListAsync(cancellationToken);

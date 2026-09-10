@@ -22,6 +22,7 @@ public sealed class ProductImportService(PosDbContext database)
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var existing = await database.ImportBatches.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new(existing.Id, existing.CreatedCount, existing.UpdatedCount, existing.SkippedCount, true);
+        await DepartmentDefaults.EnsureAsync(database, cancellationToken);
         var normalizedCodes = command.Rows.Select(item => ProductCatalogService.NormalizeCode(item.Code)).ToArray();
         var products = await database.Products.Where(item => normalizedCodes.Contains(item.NormalizedCode)).ToDictionaryAsync(item => item.NormalizedCode, cancellationToken);
         var suppliers = (await database.Suppliers.ToListAsync(cancellationToken)).GroupBy(item => NormalizeName(item.Name), StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
@@ -74,7 +75,7 @@ public sealed class ProductImportService(PosDbContext database)
 
     private SupplierRecord? ResolveSupplier(string supplierName, Dictionary<string, SupplierRecord> suppliers)
     {
-        if (string.IsNullOrWhiteSpace(supplierName)) return null;
+        if (IsEmptySupplierMarker(supplierName)) return null;
         var key = NormalizeName(supplierName);
         if (suppliers.TryGetValue(key, out var existing)) return existing;
         var supplier = new SupplierRecord { Id = Guid.NewGuid(), Name = supplierName.Trim(), CreatedAtUtc = DateTimeOffset.UtcNow };
@@ -85,14 +86,14 @@ public sealed class ProductImportService(PosDbContext database)
 
     private DepartmentRecord? ResolveDepartment(string departmentName, Dictionary<string, DepartmentRecord> departments)
     {
-        if (string.IsNullOrWhiteSpace(departmentName)) return null;
-        var key = NormalizeDepartmentName(departmentName);
+        var canonicalName = IsUnassignedDepartmentMarker(departmentName) ? DepartmentDefaults.UnassignedName : departmentName.Trim();
+        var key = NormalizeDepartmentName(canonicalName);
         if (departments.TryGetValue(key, out var existing)) return existing;
         var department = new DepartmentRecord
         {
             Id = Guid.NewGuid(),
-            Name = departmentName.Trim(),
-            NormalizedName = departmentName.Trim().ToUpperInvariant(),
+            Name = canonicalName,
+            NormalizedName = key,
             IsActive = true,
             CreatedAtUtc = DateTimeOffset.UtcNow
         };
@@ -111,12 +112,20 @@ public sealed class ProductImportService(PosDbContext database)
         product.PrimarySupplierId = supplier?.Id;
     }
 
-    private static string NormalizeName(string value) => value.Trim().ToUpperInvariant();
-    private static string NormalizeDepartmentName(string value)
+    private static bool IsEmptySupplierMarker(string value)
     {
-        var normalized = value.Trim().Normalize(NormalizationForm.FormD);
-        return new string(normalized.Where(character => CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark).ToArray()).ToUpperInvariant();
+        var normalized = DepartmentDefaults.Normalize(value);
+        return normalized is "" or "-" or "- SIN PROVEEDOR -";
     }
+
+    private static bool IsUnassignedDepartmentMarker(string value)
+    {
+        var normalized = DepartmentDefaults.Normalize(value);
+        return normalized is "" or "-" or "- SIN DEPARTAMENTO -";
+    }
+
+    private static string NormalizeName(string value) => DepartmentDefaults.Normalize(value);
+    private static string NormalizeDepartmentName(string value) => DepartmentDefaults.Normalize(value);
     private static decimal ResolvePrice(decimal price, decimal cost, decimal profit, StoreRecord store) => price > 0m || !store.AutoPriceWithProfit ? decimal.Round(price, 2) : decimal.Round(cost * (1m + (profit > 0m ? profit : store.DefaultProfitPercent) / 100m), 2, MidpointRounding.AwayFromZero);
 
     private static Guid RowOperationId(Guid operationId, int rowNumber)

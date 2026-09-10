@@ -8,6 +8,49 @@ namespace Pos.IntegrationTests;
 public sealed class ProductImportIntegrationTests
 {
     [Fact]
+    public async Task ImportsPlaceholderDepartmentAsDefaultAndLeavesPlaceholderSupplierEmpty()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var suffix = Guid.NewGuid().ToString("N");
+        var user = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "MARKER_" + suffix, DisplayName = "Marker test", PasswordHash = "test", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        var createdStore = !await database.Stores.AnyAsync();
+        var store = createdStore ? new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda marcadores " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow } : null;
+        var code = "MARKER-" + suffix;
+        database.AddRange(user, session);
+        if (store is not null) database.Stores.Add(store);
+        await database.SaveChangesAsync();
+
+        try
+        {
+            var result = await new ProductImportService(database).ImportAsync(token, new ProductImportCommand(Guid.NewGuid(), "eleventa.xlsx", "Skip",
+            [new ProductImportRow(2, code, "Producto sin departamento", 20m, 10m, 2m, 0m, 0m, "- Sin Departamento -", 0m, 0m, "Pieza", "- Sin Proveedor -")]), CancellationToken.None);
+
+            Assert.NotNull(result);
+            var product = await database.Products.Include(item => item.Department).SingleAsync(item => item.NormalizedCode == ProductCatalogService.NormalizeCode(code));
+            Assert.Equal(DepartmentDefaults.UnassignedName, product.Department!.Name);
+            Assert.Null(product.PrimarySupplierId);
+            Assert.DoesNotContain(await database.Suppliers.ToListAsync(), item => DepartmentDefaults.Normalize(item.Name) is "-" or "- SIN PROVEEDOR -");
+        }
+        finally
+        {
+            var product = await database.Products.SingleOrDefaultAsync(item => item.NormalizedCode == ProductCatalogService.NormalizeCode(code));
+            if (product is not null)
+            {
+                database.InventoryMovements.RemoveRange(database.InventoryMovements.Where(item => item.ProductId == product.Id));
+                database.Products.Remove(product);
+            }
+            database.ImportBatches.RemoveRange(database.ImportBatches.Where(item => item.UserId == user.Id));
+            database.Sessions.Remove(session);
+            database.Users.Remove(user);
+            if (store is not null) database.Stores.Remove(store);
+            await database.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
     public async Task PreventsDepartmentsDuplicatedOnlyByAccentsOrCapitalization()
     {
         await using var database = new PosDbContextFactory().CreateDbContext([]);
