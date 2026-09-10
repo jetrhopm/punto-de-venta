@@ -24,7 +24,6 @@ public partial class ProductCatalogWindow : UserControl
     private bool _updatingFilterControls;
     private Grid? _catalogLayout;
     private Border? _editorPanel;
-    private CheckBox? _showInactiveBox;
 
     public ProductCatalogWindow()
     {
@@ -116,7 +115,7 @@ public partial class ProductCatalogWindow : UserControl
             if (TryDecimal(MinimumPriceBox.Text, out var minimumPrice)) query.Add($"minimumPrice={minimumPrice.ToString(CultureInfo.InvariantCulture)}");
             if (TryDecimal(MaximumPriceBox.Text, out var maximumPrice)) query.Add($"maximumPrice={maximumPrice.ToString(CultureInfo.InvariantCulture)}");
             if (TryDecimal(MinimumProfitBox.Text, out var minimumProfit)) query.Add($"minimumProfit={minimumProfit.ToString(CultureInfo.InvariantCulture)}");
-            if (_showInactiveBox?.IsChecked == true) query.Add("includeInactive=true");
+            if (ShowInactiveBox.IsChecked == true) query.Add("includeInactive=true");
             var result = await ApiClient.Client.GetFromJsonAsync<CatalogPage>("/api/products/catalog?" + string.Join('&', query), token);
             token.ThrowIfCancellationRequested();
             ProductsGrid.ItemsSource = result?.Items ?? [];
@@ -335,27 +334,9 @@ public partial class ProductCatalogWindow : UserControl
         if (_editorPanel is null) return;
         HideEditor();
 
-        if (Content is not Grid root || root.Children.OfType<Grid>().FirstOrDefault() is not Grid header) return;
-        var actions = header.Children.OfType<StackPanel>().FirstOrDefault(panel => panel.HorizontalAlignment == HorizontalAlignment.Right);
-        if (actions is null) return;
-        actions.Children.Insert(0, CreateCatalogAction("Nuevo producto", "ConfirmButtonStyle", OnShowNewProductClick));
-        actions.Children.Insert(1, CreateCatalogAction("Editar seleccionado", "PrimaryButtonStyle", OnShowEditProductClick));
-        actions.Children.Insert(2, CreateCatalogAction("Seleccionar todos", "PrimaryButtonStyle", OnSelectVisibleClick));
-        actions.Children.Insert(3, CreateCatalogAction("Desmarcar todos", "DangerButtonStyle", OnClearSelectionClick));
-        actions.Children.Insert(4, CreateCatalogAction("Retirar seleccionados", "DangerButtonStyle", OnDeactivateSelectedClick));
-        actions.Children.Insert(5, CreateCatalogAction("Reactivar seleccionados", "ConfirmButtonStyle", OnReactivateSelectedClick));
-        _showInactiveBox = new CheckBox { Content = "Mostrar bajas", Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-        _showInactiveBox.Checked += async (_, _) => { _page = 1; await LoadCatalogAsync(); };
-        _showInactiveBox.Unchecked += async (_, _) => { _page = 1; await LoadCatalogAsync(); };
-        actions.Children.Add(_showInactiveBox);
         ProductsGrid.Columns.Add(new DataGridTextColumn { Header = "Estado", Binding = new Binding(nameof(CatalogProductRow.State)), Width = 95 });
     }
-    private Button CreateCatalogAction(string text, string styleKey, RoutedEventHandler click)
-    {
-        var button = new Button { Content = text, Margin = new Thickness(0, 0, 8, 0), Style = FindResource(styleKey) as Style };
-        button.Click += click;
-        return button;
-    }
+    private async void OnShowInactiveChanged(object sender, RoutedEventArgs e) { _page = 1; await LoadCatalogAsync(); }
     private static DataGridTemplateColumn CreateSelectionColumn() => new()
     {
         Header = string.Empty,
