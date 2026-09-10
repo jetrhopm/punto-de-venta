@@ -31,6 +31,43 @@ public sealed class SaleIntegrityIntegrationTests
     }
 
     [Fact]
+    public async Task AppliesManualWholesaleBelowConfiguredMinimumForAuthorizedUser()
+    {
+        var context = await SaleContext.CreateAsync();
+        try
+        {
+            var result = await context.Sales.CompleteAsync(
+                context.Token,
+                new CompleteSaleCommand(Guid.NewGuid(), [new SaleLineCommand(context.Product.Id, 1m, UseWholesale: true)], 8m),
+                CancellationToken.None);
+
+            Assert.NotNull(result);
+            Assert.Equal(8m, result.Total);
+            Assert.Equal(8m, await context.Database.SaleLines.Where(item => item.SaleId == result.SaleId).Select(item => item.UnitPrice).SingleAsync());
+        }
+        finally { await context.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task RejectsManualWholesaleWithoutTheRequiredPermission()
+    {
+        var context = await SaleContext.CreateAsync();
+        try
+        {
+            var user = await context.Database.Users.SingleAsync(item => item.Id == context.UserId);
+            user.IsAdministrator = false;
+            context.Database.Permissions.Add(new PermissionRecord { Id = Guid.NewGuid(), UserId = context.UserId, Code = "Sell" });
+            await context.Database.SaveChangesAsync();
+
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => context.Sales.CompleteAsync(
+                context.Token,
+                new CompleteSaleCommand(Guid.NewGuid(), [new SaleLineCommand(context.Product.Id, 1m, UseWholesale: true)], 8m),
+                CancellationToken.None));
+        }
+        finally { await context.DisposeAsync(); }
+    }
+
+    [Fact]
     public async Task CancellingMixedSaleRestoresInventoryAndOnlyCashPayment()
     {
         var context = await SaleContext.CreateAsync();

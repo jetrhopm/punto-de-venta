@@ -5,10 +5,10 @@ using System.Text;
 
 namespace Pos.Infrastructure;
 
-// UseWholesale is retained for compatibility with existing clients. The price is
-// always determined by the configured wholesale threshold on the server.
+// UseWholesale permits the explicit F11 exception only after the server validates
+// the user's permanent permission or the temporary authorization grant.
 public sealed record SaleLineCommand(Guid ProductId, decimal Quantity, bool UseWholesale = false);
-public sealed record CompleteSaleCommand(Guid OperationId, IReadOnlyList<SaleLineCommand> Lines, decimal CashReceived, Guid? CustomerId = null, string PaymentMethod = "Cash", decimal CardAmount = 0m, decimal TransferAmount = 0m, Guid? DraftId = null, bool PrintRequested = true);
+public sealed record CompleteSaleCommand(Guid OperationId, IReadOnlyList<SaleLineCommand> Lines, decimal CashReceived, Guid? CustomerId = null, string PaymentMethod = "Cash", decimal CardAmount = 0m, decimal TransferAmount = 0m, Guid? DraftId = null, bool PrintRequested = true, Guid? ManualWholesaleAuthorizationGrantId = null);
 public sealed record CompleteSaleResult(Guid SaleId, Guid OperationId, decimal Total, decimal CashReceived, decimal Change, bool Existing);
 
 public sealed class SaleService(PosDbContext database, PromotionService promotions, KitService kits)
@@ -22,6 +22,7 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
         if (!user.IsAdministrator && !await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "Sell", cancellationToken)) return null;
         var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        var manualWholesaleGrant = await GetManualWholesaleAuthorizationAsync(user, command, cancellationToken);
         if (command.PaymentMethod == "Credit" && !store.CreditSalesEnabled) throw new InvalidOperationException("Las ventas a crédito están deshabilitadas en Opciones habilitadas.");
         if (command.PaymentMethod == "Credit" && !user.IsAdministrator && !await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "SellOnCredit", cancellationToken)) throw new UnauthorizedAccessException("El usuario no tiene permiso para cobrar a credito.");
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
@@ -65,7 +66,10 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
             var stockBefore = stockBeforeByProduct.GetValueOrDefault(line.ProductId, product.Stock);
             var originalLine = command.Lines.SingleOrDefault(item => item.ProductId == line.ProductId);
             var requestedQuantity = originalLine?.Quantity ?? line.Quantity;
-            var originalUnitPrice = UsesWholesalePrice(product, requestedQuantity) ? product.WholesalePrice : product.Price;
+            if (line.UseWholesale && product.WholesalePrice <= 0m)
+                throw new ArgumentException($"{product.Description} no tiene un precio de mayoreo configurado.");
+
+            var originalUnitPrice = UsesWholesalePrice(product, requestedQuantity, line.UseWholesale) ? product.WholesalePrice : product.Price;
             // El borrador solo conserva la cantidad y la composición del ticket. El precio autoritativo se recalcula al cobrar para aplicar promociones vigentes.
             var promotionCalculation = await promotions.CalculateAsync(product.Id, originalUnitPrice, DateTimeOffset.UtcNow, cancellationToken, requestedQuantity);
             var unitPrice = promotionCalculation.UnitPrice;
@@ -157,6 +161,7 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
             draft.CompletedAtUtc = sale.CreatedAtUtc;
             draft.UpdatedAtUtc = sale.CreatedAtUtc;
         }
+        if (manualWholesaleGrant is not null) database.Permissions.Remove(manualWholesaleGrant);
         await database.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
         return new CompleteSaleResult(sale.Id, sale.OperationId, totalSale, command.CashReceived, change, false);
     }
@@ -173,10 +178,33 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         if (transfer > 0m && !store.TransferPaymentEnabled) throw new InvalidOperationException("El pago por transferencia está desactivado en esta tienda.");
     }
 
-    private static bool UsesWholesalePrice(ProductRecord product, decimal quantity) =>
+    private async Task<PermissionRecord?> GetManualWholesaleAuthorizationAsync(UserRecord user, CompleteSaleCommand command, CancellationToken cancellationToken)
+    {
+        if (!command.Lines.Any(line => line.UseWholesale)) return null;
+
+        var hasPermanentPermission = user.IsAdministrator || await database.Permissions.IgnoreQueryFilters().AnyAsync(
+            item => item.UserId == user.Id && item.Code == "UseWholesalePrice" && item.ExpiresAtUtc == null,
+            cancellationToken);
+        if (hasPermanentPermission) return null;
+
+        if (command.ManualWholesaleAuthorizationGrantId is null)
+            throw new UnauthorizedAccessException("No tienes permiso para aplicar precio de mayoreo manual. Solicita autorización.");
+
+        var grant = await database.Permissions.IgnoreQueryFilters().SingleOrDefaultAsync(
+            item => item.Id == command.ManualWholesaleAuthorizationGrantId.Value &&
+                    item.UserId == user.Id &&
+                    item.Code == "UseWholesalePrice" &&
+                    item.ExpiresAtUtc != null &&
+                    item.ExpiresAtUtc > DateTimeOffset.UtcNow,
+            cancellationToken);
+        if (grant is null)
+            throw new UnauthorizedAccessException("La autorización temporal de mayoreo ya no es válida. Solicítala de nuevo.");
+        return grant;
+    }
+
+    private static bool UsesWholesalePrice(ProductRecord product, decimal quantity, bool useManualWholesale) =>
         product.WholesalePrice > 0m &&
-        product.WholesaleMinimumQuantity > 0m &&
-        quantity >= product.WholesaleMinimumQuantity;
+        (useManualWholesale || product.WholesaleMinimumQuantity > 0m && quantity >= product.WholesaleMinimumQuantity);
 
     private static decimal RoundSaleAmount(decimal amount, StoreRecord store)
     {

@@ -15,7 +15,7 @@ public partial class UserAdministrationWindow : Window
         new("UseCommonProduct", "Utilizar producto común", PermissionGroup.Sales),
         new("ChangeSalePrice", "Cambiar precio durante la venta", PermissionGroup.Sales),
         new("ApplyDiscounts", "Aplicar descuentos", PermissionGroup.Sales),
-        new("UseWholesalePrice", "Aplicar precio de mayoreo", PermissionGroup.Sales),
+        new("UseWholesalePrice", "Aplicar precio de mayoreo manual (F11)", PermissionGroup.Sales),
         new("CancelSaleLines", "Eliminar productos del ticket", PermissionGroup.Sales),
         new("CancelSales", "Cancelar ventas confirmadas", PermissionGroup.Sales),
         new("ProcessReturns", "Procesar devoluciones", PermissionGroup.Sales),

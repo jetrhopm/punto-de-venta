@@ -15,7 +15,7 @@ public static class PermissionAuthorization
         ["ManageProducts"] = "Administrar productos, promociones y kits",
         ["ChangeSalePrice"] = "Cambiar precios durante la venta",
         ["ApplyDiscounts"] = "Aplicar descuentos",
-        ["UseWholesalePrice"] = "Aplicar precio de mayoreo",
+        ["UseWholesalePrice"] = "Aplicar precio de mayoreo manual (F11)",
         ["ViewInventory"] = "Consultar inventario",
         ["AdjustInventory"] = "Ajustar inventario",
         ["ViewCostsAndProfit"] = "Consultar costos y utilidades",
