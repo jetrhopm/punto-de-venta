@@ -177,7 +177,7 @@
                             <GridView AllowsColumnReorder="True">
                                 <GridViewColumn Header="Código de barras" DisplayMemberBinding="{Binding Code}" Width="125" />
                                 <GridViewColumn Header="Descripción" DisplayMemberBinding="{Binding Description}" Width="220" />
-                                <GridViewColumn Header="Precio venta" DisplayMemberBinding="{Binding UnitPrice, StringFormat={}{0:C2}}" Width="105" />
+                                <GridViewColumn Header="Precio venta" DisplayMemberBinding="{Binding BaseUnitPrice, StringFormat={}{0:C2}}" Width="105" />
                                 <GridViewColumn Header="Cantidad" DisplayMemberBinding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="80" />
                                 <GridViewColumn Header="Descuento" DisplayMemberBinding="{Binding DiscountTotal, StringFormat={}{0:C2}}" Width="95" />
                                 <GridViewColumn Header="Importe" DisplayMemberBinding="{Binding Total, StringFormat={}{0:C2}}" Width="100" />
