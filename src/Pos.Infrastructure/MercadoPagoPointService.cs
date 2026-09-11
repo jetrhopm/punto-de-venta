@@ -19,9 +19,9 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
 {
     public async Task<MercadoPagoSettingsResult?> GetSettingsAsync(string token, CancellationToken cancellationToken)
     {
-        if (!await AuthorizedAsync(token, true, cancellationToken)) return null;
-        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
-        var register = await database.Registers.AsNoTracking().Where(item => item.StoreId == store.Id && item.IsActive).OrderBy(item => item.Name).FirstAsync(cancellationToken);
+        var register = await CurrentRegisterAsync(token, configure: true, cancellationToken);
+        if (register is null) return null;
+        var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
         var connected = !string.IsNullOrWhiteSpace(store.MercadoPagoAccessTokenProtected);
         var oauth = !string.IsNullOrWhiteSpace(configuration["MercadoPago:ClientId"]) && !string.IsNullOrWhiteSpace(configuration["MercadoPago:ClientSecret"]) && !string.IsNullOrWhiteSpace(configuration["MercadoPago:RedirectUri"]);
         var message = !connected ? "Autoriza la cuenta de Mercado Pago o guarda un Access Token de prueba." : string.IsNullOrWhiteSpace(register.MercadoPagoTerminalId) ? "Cuenta conectada. Selecciona una terminal Point en modo PDV." : !store.MercadoPagoEnabled ? "Cuenta y terminal configuradas. Point está desactivado." : "Cuenta y terminal listas para cobrar.";
@@ -30,10 +30,11 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
 
     public async Task<MercadoPagoSettingsResult?> ConfigureTestTokenAsync(string token, ConfigureMercadoPagoTestCommand command, CancellationToken cancellationToken)
     {
-        if (!await AuthorizedAsync(token, true, cancellationToken)) return null;
+        var register = await CurrentRegisterAsync(token, configure: true, cancellationToken);
+        if (register is null) return null;
         if (string.IsNullOrWhiteSpace(command.AccessToken) || (!command.AccessToken.StartsWith("TEST-", StringComparison.Ordinal) && !command.AccessToken.StartsWith("APP_USR-", StringComparison.Ordinal))) throw new ArgumentException("Escribe un Access Token de prueba válido de Mercado Pago.");
         _ = await client.ListTerminalsAsync(command.AccessToken.Trim(), cancellationToken);
-        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
         store.MercadoPagoAccessTokenProtected = Protect(command.AccessToken.Trim());
         store.MercadoPagoRefreshTokenProtected = string.Empty;
         store.MercadoPagoEnvironment = "Test";
@@ -46,21 +47,21 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
 
     public async Task<IReadOnlyList<MercadoPagoTerminalResult>?> ListTerminalsAsync(string token, CancellationToken cancellationToken)
     {
-        if (!await AuthorizedAsync(token, true, cancellationToken)) return null;
-        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
-        var register = await database.Registers.AsNoTracking().Where(item => item.StoreId == store.Id && item.IsActive).OrderBy(item => item.Name).FirstAsync(cancellationToken);
+        var register = await CurrentRegisterAsync(token, configure: true, cancellationToken);
+        if (register is null) return null;
+        var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
         var terminals = await client.ListTerminalsAsync(await GetAccessTokenAsync(store, cancellationToken), cancellationToken);
         return terminals.Select(item => new MercadoPagoTerminalResult(item.Id, BuildTerminalLabel(item), item.OperatingMode, item.Id == register.MercadoPagoTerminalId)).ToArray();
     }
 
     public async Task<bool?> SelectTerminalAsync(string token, SelectMercadoPagoTerminalCommand command, CancellationToken cancellationToken)
     {
-        if (!await AuthorizedAsync(token, true, cancellationToken)) return null;
-        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        var register = await CurrentRegisterAsync(token, configure: true, cancellationToken);
+        if (register is null) return null;
+        var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
         var available = await client.ListTerminalsAsync(await GetAccessTokenAsync(store, cancellationToken), cancellationToken);
         var terminal = available.SingleOrDefault(item => item.Id == command.TerminalId) ?? throw new ArgumentException("La terminal seleccionada ya no está asociada a esta cuenta.");
         if (!string.Equals(terminal.OperatingMode, "PDV", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("La terminal debe estar configurada en modo PDV dentro de Mercado Pago.");
-        var register = await database.Registers.Where(item => item.StoreId == store.Id && item.IsActive).OrderBy(item => item.Name).FirstAsync(cancellationToken);
         register.MercadoPagoTerminalId = terminal.Id;
         register.MercadoPagoTerminalLabel = BuildTerminalLabel(terminal);
         store.MercadoPagoEnabled = true;
@@ -70,21 +71,22 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
 
     public async Task<bool?> ActivateTerminalAsync(string token, ActivateMercadoPagoTerminalCommand command, CancellationToken cancellationToken)
     {
-        if (!await AuthorizedAsync(token, true, cancellationToken)) return null;
+        var register = await CurrentRegisterAsync(token, configure: true, cancellationToken);
+        if (register is null) return null;
         if (string.IsNullOrWhiteSpace(command.TerminalId)) throw new ArgumentException("Selecciona una terminal antes de activar el modo PDV.");
         if (!IsPdvCompatible(command.TerminalId)) throw new InvalidOperationException("Este modelo de terminal no admite la integración PDV de Mercado Pago. La API oficial solo permite activar terminales NEWLAND_N950 y PAX_A910.");
-        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
         await client.ActivatePdvAsync(await GetAccessTokenAsync(store, cancellationToken), command.TerminalId.Trim(), cancellationToken);
         return true;
     }
 
     public async Task<bool?> SetEnabledAsync(string token, SetMercadoPagoEnabledCommand command, CancellationToken cancellationToken)
     {
-        if (!await AuthorizedAsync(token, true, cancellationToken)) return null;
-        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        var register = await CurrentRegisterAsync(token, configure: true, cancellationToken);
+        if (register is null) return null;
+        var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
         if (command.Enabled)
         {
-            var register = await database.Registers.AsNoTracking().Where(item => item.StoreId == store.Id && item.IsActive).OrderBy(item => item.Name).FirstAsync(cancellationToken);
             if (string.IsNullOrWhiteSpace(store.MercadoPagoAccessTokenProtected) || string.IsNullOrWhiteSpace(register.MercadoPagoTerminalId)) throw new InvalidOperationException("Autoriza la cuenta y selecciona una terminal PDV antes de activar Mercado Pago Point.");
         }
         store.MercadoPagoEnabled = command.Enabled;
@@ -94,13 +96,14 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
 
     public async Task<bool?> DisconnectAsync(string token, CancellationToken cancellationToken)
     {
-        if (!await AuthorizedAsync(token, true, cancellationToken)) return null;
-        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        var register = await CurrentRegisterAsync(token, configure: true, cancellationToken);
+        if (register is null) return null;
+        var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
         var registers = await database.Registers.Where(item => item.StoreId == store.Id).ToListAsync(cancellationToken);
-        foreach (var register in registers)
+        foreach (var storeRegister in registers)
         {
-            register.MercadoPagoTerminalId = string.Empty;
-            register.MercadoPagoTerminalLabel = string.Empty;
+            storeRegister.MercadoPagoTerminalId = string.Empty;
+            storeRegister.MercadoPagoTerminalLabel = string.Empty;
         }
 
         store.MercadoPagoEnabled = false;
@@ -118,13 +121,14 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
 
     public async Task<string?> BeginOAuthAsync(string token, CancellationToken cancellationToken)
     {
-        if (!await AuthorizedAsync(token, true, cancellationToken)) return null;
+        var register = await CurrentRegisterAsync(token, configure: true, cancellationToken);
+        if (register is null) return null;
         var clientId = configuration["MercadoPago:ClientId"] ?? throw new InvalidOperationException("JetVenta todavía no tiene configurado su App ID de Mercado Pago.");
         var redirectUri = configuration["MercadoPago:RedirectUri"] ?? throw new InvalidOperationException("Falta registrar el callback HTTPS de Mercado Pago.");
         var verifier = Base64Url(RandomNumberGenerator.GetBytes(48));
         var challenge = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
         var state = Base64Url(RandomNumberGenerator.GetBytes(32));
-        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
         store.MercadoPagoOAuthState = state;
         store.MercadoPagoOAuthVerifierProtected = Protect(verifier);
         store.MercadoPagoOAuthStateExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10);
@@ -153,13 +157,14 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
 
     public async Task<MercadoPagoOrderResult?> CreateOrderAsync(string token, CreateMercadoPagoOrderCommand command, CancellationToken cancellationToken)
     {
-        if (!await AuthorizedAsync(token, false, cancellationToken)) return null;
+        var register = await CurrentRegisterAsync(token, configure: false, cancellationToken);
+        if (register is null) return null;
         if (command.OperationId == Guid.Empty || command.Amount <= 0m) throw new ArgumentException("La operación y el importe del cobro son obligatorios.");
         var existing = await database.MercadoPagoOrders.SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
+        if (existing is not null && existing.RegisterId != register.Id) throw new InvalidOperationException("El cobro pertenece a otra caja.");
         if (existing is not null && !string.IsNullOrWhiteSpace(existing.ProviderOrderId)) return ToResult(existing);
-        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
         if (!store.MercadoPagoEnabled) throw new InvalidOperationException("Mercado Pago Point no está activado en esta tienda.");
-        var register = await database.Registers.Where(item => item.StoreId == store.Id && item.IsActive).OrderBy(item => item.Name).FirstAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(register.MercadoPagoTerminalId)) throw new InvalidOperationException("Selecciona una terminal Point para esta caja desde Configuración.");
         existing ??= new MercadoPagoOrderRecord { Id = Guid.NewGuid(), StoreId = store.Id, RegisterId = register.Id, OperationId = command.OperationId, Amount = decimal.Round(command.Amount, 2), Status = "Pending", CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow };
         if (database.Entry(existing).State == EntityState.Detached) { database.MercadoPagoOrders.Add(existing); await database.SaveChangesAsync(cancellationToken); }
@@ -171,8 +176,10 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
 
     public async Task<MercadoPagoOrderResult?> RefreshOrderAsync(string token, Guid operationId, CancellationToken cancellationToken)
     {
-        if (!await AuthorizedAsync(token, false, cancellationToken)) return null;
+        var register = await CurrentRegisterAsync(token, configure: false, cancellationToken);
+        if (register is null) return null;
         var record = await database.MercadoPagoOrders.SingleOrDefaultAsync(item => item.OperationId == operationId, cancellationToken) ?? throw new KeyNotFoundException("No se encontró el cobro de Mercado Pago.");
+        if (record.RegisterId != register.Id) throw new InvalidOperationException("El cobro pertenece a otra caja.");
         if (!IsFinished(record.Status))
         {
             var store = await database.Stores.SingleAsync(item => item.Id == record.StoreId, cancellationToken);
@@ -184,8 +191,10 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
 
     public async Task<bool?> CancelOrderAsync(string token, Guid operationId, CancellationToken cancellationToken)
     {
-        if (!await AuthorizedAsync(token, false, cancellationToken)) return null;
+        var register = await CurrentRegisterAsync(token, configure: false, cancellationToken);
+        if (register is null) return null;
         var record = await database.MercadoPagoOrders.SingleAsync(item => item.OperationId == operationId, cancellationToken);
+        if (record.RegisterId != register.Id) throw new InvalidOperationException("El cobro pertenece a otra caja.");
         if (record.Status == "Created")
         {
             var store = await database.Stores.SingleAsync(item => item.Id == record.StoreId, cancellationToken);
@@ -231,13 +240,16 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
     }
     private static string Base64Url(byte[] value) => Convert.ToBase64String(value).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-    private async Task<bool> AuthorizedAsync(string token, bool configure, CancellationToken cancellationToken)
+    private async Task<RegisterRecord?> CurrentRegisterAsync(string token, bool configure, CancellationToken cancellationToken)
     {
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty)));
         var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
-        if (session is null) return false;
-        if (!configure) return true;
-        var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
-        return user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "ConfigureStore", cancellationToken);
+        if (session?.RegisterId is not Guid registerId) return null;
+        if (configure)
+        {
+            var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
+            if (!user.IsAdministrator && !await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "ConfigureStore", cancellationToken)) return null;
+        }
+        return await database.Registers.SingleOrDefaultAsync(item => item.Id == registerId && item.IsActive, cancellationToken);
     }
 }

@@ -1572,19 +1572,19 @@ public partial class MainWindow : Window
             : $"Ticket enviado a {printerName}; no se pudo actualizar el estado de impresión.";
     }
 
-    private async Task<bool> TryOpenCashDrawerAsync(bool explainIfDisabled = false)
+    private Task<bool> TryOpenCashDrawerAsync(bool explainIfDisabled = false)
     {
         try
         {
-            var settings = await Client.GetFromJsonAsync<CashDrawerSettingsResult>("/api/cash-drawer-settings");
-            if (settings is not { Enabled: true })
+            var settings = ApiClient.CashDrawer;
+            if (!settings.Enabled || string.IsNullOrWhiteSpace(settings.PrinterName))
             {
-                if (explainIfDisabled) StatusText.Text = "El cajón no está configurado o está desactivado.";
-                return false;
+                if (explainIfDisabled) StatusText.Text = "El cajón no está configurado o está desactivado en esta computadora.";
+                return Task.FromResult(false);
             }
             TicketWindowsPrinter.OpenCashDrawer(settings.PrinterName, settings.Model);
             StatusText.Text += " Cajón abierto.";
-            return true;
+            return Task.FromResult(true);
         }
         catch (Exception exception)
         {
@@ -1593,11 +1593,9 @@ public partial class MainWindow : Window
                 : explainIfDisabled
                     ? $" No se pudo abrir el cajón: {exception.Message}"
                     : $" La operación quedó registrada, pero no se pudo abrir el cajón: {exception.Message}";
-            return false;
+            return Task.FromResult(false);
         }
     }
-
-    private sealed record CashDrawerSettingsResult(bool Enabled, string PrinterName, string Model, string Port);
 
     private void OnMinimizeClick(object sender, RoutedEventArgs e) =>
         WindowState = WindowState.Minimized;

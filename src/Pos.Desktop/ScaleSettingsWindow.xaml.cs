@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.IO.Ports;
-using System.Net.Http.Json;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -18,21 +17,13 @@ public partial class ScaleSettingsWindow : Window
         Loaded += OnLoaded;
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        LoadPorts();
-        SelectText(BaudRateBox, "9600"); SelectText(ParityBox, "None"); SelectText(DataBitsBox, "8"); SelectText(StopBitsBox, "One"); SelectText(TerminatorBox, "CRLF"); SelectText(UnitBox, "Kilogramo");
-        try
-        {
-            var settings = await ApiClient.Client.GetFromJsonAsync<ScaleSettingsDto>("api/scale-settings");
-            if (settings is not null)
-            {
-                EnabledCheck.IsChecked = settings.Enabled;
-                SelectText(PortBox, settings.Port); SelectText(BaudRateBox, settings.BaudRate.ToString(CultureInfo.InvariantCulture)); SelectText(ParityBox, settings.Parity); SelectText(DataBitsBox, settings.DataBits.ToString(CultureInfo.InvariantCulture)); SelectText(StopBitsBox, settings.StopBits); SelectText(TerminatorBox, settings.Terminator); SelectText(UnitBox, settings.Unit); TimeoutBox.Text = settings.ReadTimeoutMs.ToString(CultureInfo.InvariantCulture);
-            }
-            StatusText.Text = "Selecciona el puerto y prueba una lectura antes de guardar.";
-        }
-        catch (Exception exception) { StatusText.Text = $"No se pudo leer la configuración de la báscula: {exception.Message}"; }
+        var settings = ApiClient.Scale;
+        LoadPorts(settings.Port);
+        EnabledCheck.IsChecked = settings.Enabled;
+        SelectText(BaudRateBox, settings.BaudRate.ToString(CultureInfo.InvariantCulture)); SelectText(ParityBox, settings.Parity); SelectText(DataBitsBox, settings.DataBits.ToString(CultureInfo.InvariantCulture)); SelectText(StopBitsBox, settings.StopBits); SelectText(TerminatorBox, settings.Terminator); SelectText(UnitBox, settings.Unit); TimeoutBox.Text = settings.ReadTimeoutMs.ToString(CultureInfo.InvariantCulture);
+        StatusText.Text = "Selecciona el puerto y prueba una lectura antes de guardar. La configuración se conserva sólo en esta computadora.";
         _loaded = true; UpdateEnabledState();
     }
 
@@ -63,20 +54,13 @@ public partial class ScaleSettingsWindow : Window
         if (_loaded && !enabled) StatusText.Text = "La báscula está desactivada para esta caja.";
     }
 
-    private async void OnSaveClick(object sender, RoutedEventArgs e)
+    private void OnSaveClick(object sender, RoutedEventArgs e)
     {
         if (!TryRead(out var command)) return;
         try
         {
-            using var response = await ApiClient.Client.PutAsJsonAsync("api/scale-settings", command);
-            if (!response.IsSuccessStatusCode)
-            {
-                var message = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo guardar la configuración de la báscula.");
-                StatusText.Text = message;
-                OperationFeedback.Show(this, "Báscula", message, OperationResultKind.Error);
-                return;
-            }
-            StatusText.Text = command.Enabled ? $"Báscula guardada en {command.Port}." : "Báscula desactivada.";
+            ApiClient.SetScaleProfile(new ScaleProfile(command.Enabled, command.Port, command.BaudRate, command.Parity, command.DataBits, command.StopBits, command.Terminator, command.Unit, command.ReadTimeoutMs));
+            StatusText.Text = command.Enabled ? $"Báscula guardada en {command.Port} para esta computadora." : "Báscula desactivada en esta computadora.";
             ConfigurationFeedback.ShowSavedAndClose(this, "Báscula", StatusText.Text);
         }
         catch (Exception exception)
@@ -161,7 +145,6 @@ public partial class ScaleSettingsWindow : Window
     private static Parity ParseParity(string value) => Enum.TryParse<Parity>(value, true, out var parsed) ? parsed : Parity.None;
     private static StopBits ParseStopBits(string value) => Enum.TryParse<StopBits>(value, true, out var parsed) ? parsed : StopBits.One;
     private static string Terminator(string value) => value switch { "CR" => "\r", "LF" => "\n", _ => "\r\n" };
-    private sealed record ScaleSettingsDto(bool Enabled, string Port, int BaudRate, string Parity, int DataBits, string StopBits, string Terminator, string Unit, int ReadTimeoutMs);
     private sealed record ScaleCommand(bool Enabled, string Port, int BaudRate, string Parity, int DataBits, string StopBits, string Terminator, string Unit, int ReadTimeoutMs);
     private sealed record ScaleReading(string Raw, decimal Weight);
 }

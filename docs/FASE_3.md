@@ -68,3 +68,12 @@
   acumulado correctamente.
 - El consecutivo de venta se protege por tienda para impedir folios repetidos
   cuando dos cajas cobran al mismo tiempo.
+
+## Incremento 6 terminado: dispositivos por computadora
+
+- Impresora, lector, cajón y báscula se guardan en el perfil de la computadora
+  y se comparten entre los usuarios que inicien JetVenta en ella.
+- La terminal Mercado Pago Point queda ligada al registro de caja de la sesión
+  autenticada, no a la primera caja que encuentre la API.
+- La cuenta de Mercado Pago permanece como información protegida de la tienda;
+  sólo la terminal física se decide por caja/equipo.

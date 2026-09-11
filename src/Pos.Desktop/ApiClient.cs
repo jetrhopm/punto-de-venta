@@ -27,6 +27,8 @@ public static class ApiClient
     public static bool UseNormalTotals { get; private set; }
     public static int PrinterTicketWidthMm { get; private set; } = 80;
     public static BarcodeScannerProfile BarcodeScanner { get; private set; } = BarcodeScannerProfile.Default;
+    public static CashDrawerProfile CashDrawer { get; private set; } = CashDrawerProfile.Default;
+    public static ScaleProfile Scale { get; private set; } = ScaleProfile.Default;
     private static string? DeviceToken { get; set; }
 
     static ApiClient() => Load();
@@ -95,6 +97,18 @@ public static class ApiClient
         SaveSettings();
     }
 
+    public static void SetCashDrawerProfile(CashDrawerProfile profile)
+    {
+        CashDrawer = profile.Normalize();
+        SaveSettings();
+    }
+
+    public static void SetScaleProfile(ScaleProfile profile)
+    {
+        Scale = profile.Normalize();
+        SaveSettings();
+    }
+
     private static void SaveSettings(string? protectedToken = null)
     {
         EnsureSettingsDirectory();
@@ -104,7 +118,7 @@ public static class ApiClient
             try { currentToken = JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(SettingsPath))?.DeviceTokenProtected; }
             catch (JsonException) { }
         }
-        WriteSettings(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm, BarcodeScanner, PrintingEnabled, 2));
+        WriteSettings(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm, BarcodeScanner, PrintingEnabled, 3, CashDrawer, Scale));
     }
 
     private static void Load()
@@ -130,6 +144,8 @@ public static class ApiClient
                 UseNormalTotals = settings.UseNormalTotals;
                 PrinterTicketWidthMm = settings.PrinterTicketWidthMm == 58 ? 58 : 80;
                 BarcodeScanner = (settings.BarcodeScanner ?? BarcodeScannerProfile.Default).Normalize();
+                CashDrawer = (settings.CashDrawer ?? CashDrawerProfile.Default).Normalize();
+                Scale = (settings.Scale ?? ScaleProfile.Default).Normalize();
                 ReplaceClient(BaseUrl);
                 return;
             }
@@ -233,7 +249,9 @@ public static class ApiClient
         int PrinterTicketWidthMm = 80,
         BarcodeScannerProfile? BarcodeScanner = null,
         bool? PrintingEnabled = null,
-        int SettingsVersion = 1);
+        int SettingsVersion = 1,
+        CashDrawerProfile? CashDrawer = null,
+        ScaleProfile? Scale = null);
 }
 
 public enum BarcodeScannerMode { Keyboard, Serial, Disabled }
@@ -247,4 +265,31 @@ public sealed record BarcodeScannerProfile(BarcodeScannerMode Mode, string? Port
         string.IsNullOrWhiteSpace(PortName) ? null : PortName.Trim().ToUpperInvariant(),
         BaudRate is >= 1200 and <= 115200 ? BaudRate : 9600,
         Terminator is "CR" or "LF" or "CRLF" ? Terminator : "CRLF");
+}
+
+public sealed record CashDrawerProfile(bool Enabled, string? PrinterName, string Model, string Port)
+{
+    public static CashDrawerProfile Default { get; } = new(false, null, "PrinterPulse", "USB");
+
+    public CashDrawerProfile Normalize() => new(
+        Enabled,
+        string.IsNullOrWhiteSpace(PrinterName) ? null : PrinterName.Trim(),
+        Model is "PrinterPulse" or "EpsonDrawer1" or "EpsonDrawer2" or "StarDrawer1" or "StarDrawer2" or "Generic" ? Model : "PrinterPulse",
+        Port is "USB" or "LPT1" or "LPT2" or "LPT3" or "COM1" or "COM2" or "COM3" or "COM4" ? Port : "USB");
+}
+
+public sealed record ScaleProfile(bool Enabled, string? Port, int BaudRate, string Parity, int DataBits, string StopBits, string Terminator, string Unit, int ReadTimeoutMs)
+{
+    public static ScaleProfile Default { get; } = new(false, null, 9600, "None", 8, "One", "CRLF", "Kilogramo", 1500);
+
+    public ScaleProfile Normalize() => new(
+        Enabled,
+        string.IsNullOrWhiteSpace(Port) ? null : Port.Trim().ToUpperInvariant(),
+        BaudRate is 1200 or 2400 or 4800 or 9600 or 19200 or 38400 or 57600 or 115200 ? BaudRate : 9600,
+        Parity is "None" or "Even" or "Odd" ? Parity : "None",
+        DataBits is 7 or 8 ? DataBits : 8,
+        StopBits is "One" or "Two" ? StopBits : "One",
+        Terminator is "CR" or "LF" or "CRLF" ? Terminator : "CRLF",
+        Unit is "Kilogramo" or "Gramo" or "Libra" ? Unit : "Kilogramo",
+        ReadTimeoutMs is >= 200 and <= 5000 ? ReadTimeoutMs : 1500);
 }
