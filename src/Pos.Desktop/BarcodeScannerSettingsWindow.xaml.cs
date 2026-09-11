@@ -38,7 +38,17 @@ public partial class BarcodeScannerSettingsWindow : Window
     private void OnRefreshPortsClick(object sender, RoutedEventArgs e)
     {
         LoadPorts(PortBox.SelectedItem as string);
-        StatusText.Text = PortBox.Items.Count == 0 ? "Windows no detectó puertos COM. Conecta el lector o instala el controlador oficial del adaptador si el fabricante lo requiere." : $"Windows detectó {PortBox.Items.Count} puerto(s) COM.";
+        if (PortBox.Items.Count == 0)
+        {
+            const string message = "Windows no detectó puertos COM. Conecta el lector o instala el controlador oficial del adaptador si el fabricante lo requiere.";
+            StatusText.Text = message;
+            ShowResult("No se detectaron puertos COM", message, OperationResultKind.Warning);
+            return;
+        }
+
+        var status = $"Windows detectó {PortBox.Items.Count} puerto(s) COM.";
+        StatusText.Text = status;
+        ShowResult("Puertos detectados", status, OperationResultKind.Success);
     }
 
     private void OnModeChanged(object sender, RoutedEventArgs e) => UpdateMode();
@@ -64,12 +74,25 @@ public partial class BarcodeScannerSettingsWindow : Window
         try
         {
             var profile = ReadProfile();
-            if (profile.Mode != BarcodeScannerMode.Serial) { StatusText.Text = "El modo teclado se prueba escaneando en Ventas. No requiere abrir un puerto COM."; return; }
+            if (profile.Mode != BarcodeScannerMode.Serial)
+            {
+                const string message = "El modo teclado se prueba escaneando en Ventas. No requiere abrir un puerto COM.";
+                StatusText.Text = message;
+                ShowResult("Prueba de lector", message, OperationResultKind.Information);
+                return;
+            }
             using var port = CreatePort(profile);
             port.Open();
-            StatusText.Text = $"{profile.PortName} está disponible. Guarda para que JetVenta reciba lecturas seriales.";
+            var status = $"{profile.PortName} está disponible. Guarda para que JetVenta reciba lecturas seriales.";
+            StatusText.Text = status;
+            ShowResult("Puerto disponible", status, OperationResultKind.Success);
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo abrir el puerto: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            var message = $"No se pudo abrir el puerto. {exception.Message}";
+            StatusText.Text = message;
+            ShowResult("Puerto no disponible", message, OperationResultKind.Error);
+        }
     }
 
     private void OnSaveClick(object sender, RoutedEventArgs e)
@@ -80,9 +103,16 @@ public partial class BarcodeScannerSettingsWindow : Window
             var status = BarcodeScannerService.ApplyProfile(profile);
             ApiClient.SetBarcodeScannerProfile(profile);
             StatusText.Text = status;
+            ConfigurationFeedback.ShowSavedAndClose(this, "Lector de códigos", status);
         }
-        catch (Exception exception) { StatusText.Text = exception.Message; }
+        catch (Exception exception)
+        {
+            StatusText.Text = exception.Message;
+            ShowResult("Lector no configurado", exception.Message, OperationResultKind.Error);
+        }
     }
+
+    private void ShowResult(string title, string message, OperationResultKind kind) => new OperationResultWindow(title, message, kind) { Owner = this }.ShowDialog();
 
     private static SerialPort CreatePort(BarcodeScannerProfile profile) => new(profile.PortName!, profile.BaudRate, Parity.None, 8, StopBits.One)
     {
