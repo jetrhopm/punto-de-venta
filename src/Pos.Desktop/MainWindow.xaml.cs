@@ -284,10 +284,8 @@ public partial class MainWindow : Window
             var saleId = _lastSaleId;
             if (saleId is null)
             {
-                var from = DateTimeOffset.UtcNow.AddDays(-30).ToString("O");
-                var to = DateTimeOffset.UtcNow.ToString("O");
-                var recent = await Client.GetFromJsonAsync<List<LatestSaleRow>>($"/api/sales/history?from={Uri.EscapeDataString(from)}&to={Uri.EscapeDataString(to)}");
-                saleId = recent?.FirstOrDefault()?.SaleId;
+                var recent = await Client.GetFromJsonAsync<LatestTicketResponse>("/api/sales/latest-ticket");
+                saleId = recent?.SaleId;
             }
 
             if (saleId is null) { StatusText.Text = "No hay una compra confirmada para imprimir."; return; }
@@ -465,9 +463,7 @@ public partial class MainWindow : Window
         if (window.ShowDialog() != true || window.InitialCash is null) return false;
         try
         {
-            var register = await Client.GetFromJsonAsync<RegisterResponse>("/api/shifts/register");
-            if (register is null) { StatusText.Text = "No hay una caja activa configurada."; return false; }
-            using var response = await Client.PostAsJsonAsync("/api/shifts/open", new { registerId = register.Id, initialCash = window.InitialCash.Value });
+            using var response = await Client.PostAsJsonAsync("/api/shifts/open", new { initialCash = window.InitialCash.Value });
             if (response.IsSuccessStatusCode)
             {
                 StatusText.Text = "Turno abierto correctamente.";
@@ -1244,14 +1240,13 @@ public partial class MainWindow : Window
     private sealed record SaleResponse(Guid SaleId, decimal Total, decimal Change, bool Existing);
     private sealed record LicenseStatusResponse(bool IsActive, string State, string Message);
     private sealed record StoreOptionsResponse(bool InventoryEnabled, string InventoryCostMethod, bool CreditSalesEnabled, bool CommonProductsEnabled, bool AutoPriceWithProfit, decimal DefaultProfitPercent, bool RoundSaleAmounts, string RoundingMode, string OccasionalNotice, int OccasionalNoticeEverySales);
-    private sealed record RegisterResponse(Guid Id, string Name);
     private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
     private sealed record CutSettingsResponse(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, bool BlockSalesWhenCashLimitReached, decimal CashLimit, string CashLimitMessage);
     private sealed record CashCutResponse(decimal InitialCash, decimal TotalSales, int SalesCount, decimal CashSales, decimal CardSales, decimal TransferSales, decimal CreditSales, decimal CashIn, decimal CashOut, decimal CashReturns, decimal Profit, decimal ExpectedCash);
     private sealed record MercadoPagoStatus(bool Enabled);
     private sealed record CurrentShiftResponse(Guid ShiftId, Guid RegisterId, Guid UserId, decimal InitialCash, DateTimeOffset OpenedAtUtc);
     private sealed record OpenShiftConflictResponse(string? Code, string? Message, string? OpenedBy, DateTimeOffset OpenedAtUtc);
-    private sealed record LatestSaleRow(Guid SaleId, DateTimeOffset CreatedAtUtc, decimal Total, string Status);
+    private sealed record LatestTicketResponse(Guid SaleId);
 
     private async void OnNewTicketClick(object sender, RoutedEventArgs e) => await CreateNewTicketAsync();
 

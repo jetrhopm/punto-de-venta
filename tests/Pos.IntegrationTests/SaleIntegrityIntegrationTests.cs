@@ -157,11 +157,11 @@ public sealed class SaleIntegrityIntegrationTests
             var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda integridad " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow };
             var user = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "INT_" + suffix, DisplayName = "Prueba integridad", PasswordHash = "test", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
             var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja " + suffix, IsActive = true };
-            var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+            var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, RegisterId = register.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
             var product = new ProductRecord { Id = Guid.NewGuid(), Code = "INT-" + suffix, NormalizedCode = ("INT-" + suffix).ToUpperInvariant(), Description = "Producto integridad", Price = 10m, WholesalePrice = 8m, WholesaleMinimumQuantity = 3m, Stock = 10m, IsActive = true };
             database.AddRange(store, user, register, session, product);
             await database.SaveChangesAsync();
-            var shift = await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(register.Id, 0m), CancellationToken.None);
+            var shift = await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(0m), CancellationToken.None);
             return new SaleContext(database, token, product, shift!.ShiftId, user.Id, register.Id, store.Id);
         }
 

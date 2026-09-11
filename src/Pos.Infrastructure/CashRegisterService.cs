@@ -126,7 +126,9 @@ public sealed class CashRegisterService(PosDbContext database)
     {
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty)));
         var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
-        return session is null ? null : await database.Shifts.SingleOrDefaultAsync(item => item.UserId == session.UserId && item.Status == "Open", cancellationToken);
+        return session?.RegisterId is not Guid registerId
+            ? null
+            : await database.Shifts.SingleOrDefaultAsync(item => item.UserId == session.UserId && item.RegisterId == registerId && item.Status == "Open", cancellationToken);
     }
 
     private async Task<UserRecord?> AuthorizedUserAsync(string token, CancellationToken cancellationToken)

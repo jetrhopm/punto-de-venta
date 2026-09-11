@@ -13,15 +13,17 @@ public sealed class SaleReversalService(PosDbContext database, KitService kits)
     public async Task<CancelSaleResult?> CancelAsync(string token, CancelSaleCommand command, CancellationToken cancellationToken)
     {
         if (command.OperationId == Guid.Empty || command.SaleId == Guid.Empty || string.IsNullOrWhiteSpace(command.Reason)) throw new ArgumentException("La cancelacion requiere operacion, venta y motivo.");
-        var user = await GetAuthorizedUserAsync(token, cancellationToken);
-        if (user is null) return null;
+        var authorization = await GetAuthorizationAsync(token, cancellationToken);
+        if (authorization is null) return null;
+        var user = authorization.User;
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var existing = await database.SaleReversals.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new CancelSaleResult(existing.SaleId, existing.OperationId, 0m, true);
-        var sale = await database.Sales.SingleOrDefaultAsync(item => item.Id == command.SaleId, cancellationToken) ?? throw new KeyNotFoundException("Venta no encontrada.");
+        var sale = await database.Sales.SingleOrDefaultAsync(item => item.Id == command.SaleId &&
+            database.Shifts.Any(shift => shift.Id == item.ShiftId && shift.RegisterId == authorization.RegisterId), cancellationToken) ?? throw new KeyNotFoundException("Venta no encontrada en esta caja.");
         if (sale.Status != "Completed") throw new InvalidOperationException("La venta ya no esta activa.");
         if (await database.SaleReversals.AnyAsync(item => item.SaleId == sale.Id, cancellationToken)) throw new InvalidOperationException("La venta ya fue cancelada.");
-        var shift = await database.Shifts.SingleOrDefaultAsync(item => item.UserId == user.Id && item.Status == "Open", cancellationToken) ?? throw new InvalidOperationException("El usuario no tiene un turno abierto.");
+        var shift = await database.Shifts.SingleOrDefaultAsync(item => item.UserId == user.Id && item.RegisterId == authorization.RegisterId && item.Status == "Open", cancellationToken) ?? throw new InvalidOperationException("El usuario no tiene un turno abierto en esta caja.");
         var lines = await database.SaleLines.Where(item => item.SaleId == sale.Id).ToListAsync(cancellationToken);
         foreach (var line in lines)
         {
@@ -43,12 +45,16 @@ public sealed class SaleReversalService(PosDbContext database, KitService kits)
         return new CancelSaleResult(sale.Id, command.OperationId, sale.Total, false);
     }
 
-    private async Task<UserRecord?> GetAuthorizedUserAsync(string token, CancellationToken cancellationToken)
+    private async Task<RegisterAuthorization?> GetAuthorizationAsync(string token, CancellationToken cancellationToken)
     {
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty)));
         var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
-        if (session is null) return null;
+        if (session?.RegisterId is not Guid registerId) return null;
         var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
-        return user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "CancelSales", cancellationToken) ? user : null;
+        return user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "CancelSales", cancellationToken)
+            ? new RegisterAuthorization(user, registerId)
+            : null;
     }
+
+    private sealed record RegisterAuthorization(UserRecord User, Guid RegisterId);
 }

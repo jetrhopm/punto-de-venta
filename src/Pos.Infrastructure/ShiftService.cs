@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Pos.Infrastructure;
 
-public sealed record OpenShiftCommand(Guid RegisterId, decimal InitialCash);
+public sealed record OpenShiftCommand(decimal InitialCash);
 public sealed record OpenShiftResult(Guid ShiftId, Guid RegisterId, Guid UserId, decimal InitialCash, DateTimeOffset OpenedAtUtc);
 public sealed record CurrentShiftResult(Guid ShiftId, Guid RegisterId, Guid UserId, decimal InitialCash, DateTimeOffset OpenedAtUtc);
 public sealed record OpenRegisterShiftConflict(string OpenedBy, DateTimeOffset OpenedAtUtc);
@@ -22,24 +22,27 @@ public sealed class ShiftService(PosDbContext database)
     {
         var session = await GetSessionAsync(accessToken, cancellationToken);
         if (session is null) return null;
-        var shift = await database.Shifts.AsNoTracking().SingleOrDefaultAsync(item => item.UserId == session.UserId && item.Status == "Open", cancellationToken);
+        if (session.RegisterId is not Guid registerId) return null;
+        var shift = await database.Shifts.AsNoTracking().SingleOrDefaultAsync(item => item.UserId == session.UserId && item.RegisterId == registerId && item.Status == "Open", cancellationToken);
         return shift is null ? null : new CurrentShiftResult(shift.Id, shift.RegisterId, shift.UserId, shift.InitialCash, shift.OpenedAtUtc);
     }
 
     public async Task<OpenShiftResult?> OpenAsync(string accessToken, OpenShiftCommand command, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(accessToken) || command.RegisterId == Guid.Empty || command.InitialCash < 0m) return null;
+        if (string.IsNullOrWhiteSpace(accessToken) || command.InitialCash < 0m) return null;
         var session = await GetSessionAsync(accessToken, cancellationToken);
-        if (session is null) return null;
+        if (session?.RegisterId is not Guid registerId) return null;
+        var registerIsActive = await database.Registers.AsNoTracking().AnyAsync(item => item.Id == registerId && item.IsActive, cancellationToken);
+        if (!registerIsActive) return null;
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var existingShift = await (
             from openShift in database.Shifts.AsNoTracking()
             join user in database.Users.AsNoTracking() on openShift.UserId equals user.Id
-            where openShift.RegisterId == command.RegisterId && openShift.Status == "Open"
+            where openShift.RegisterId == registerId && openShift.Status == "Open"
             select new OpenRegisterShiftConflict(user.DisplayName, openShift.OpenedAtUtc)
         ).SingleOrDefaultAsync(cancellationToken);
         if (existingShift is not null) throw new RegisterShiftAlreadyOpenException(existingShift);
-        var shift = new ShiftRecord { Id = Guid.NewGuid(), RegisterId = command.RegisterId, UserId = session.UserId, InitialCash = decimal.Round(command.InitialCash, 2), OpenedAtUtc = DateTimeOffset.UtcNow };
+        var shift = new ShiftRecord { Id = Guid.NewGuid(), RegisterId = registerId, UserId = session.UserId, InitialCash = decimal.Round(command.InitialCash, 2), OpenedAtUtc = DateTimeOffset.UtcNow };
         database.Shifts.Add(shift);
         await database.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

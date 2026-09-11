@@ -15,13 +15,15 @@ public sealed class SaleReturnService(PosDbContext database, KitService kits)
     public async Task<ReturnSaleResult?> ReturnAsync(string token, ReturnSaleCommand command, CancellationToken cancellationToken)
     {
         if (command.OperationId == Guid.Empty || command.SaleId == Guid.Empty || command.Lines.Count == 0 || string.IsNullOrWhiteSpace(command.Reason)) throw new ArgumentException("La devolucion requiere operacion, venta, partidas y motivo.");
-        var user = await AuthorizedUserAsync(token, cancellationToken);
-        if (user is null) return null;
+        var authorization = await AuthorizedAsync(token, cancellationToken);
+        if (authorization is null) return null;
+        var user = authorization.User;
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var existing = await database.Returns.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new ReturnSaleResult(existing.Id, existing.SaleId, existing.Amount, true);
-        var sale = await database.Sales.SingleOrDefaultAsync(item => item.Id == command.SaleId && item.Status == "Completed", cancellationToken) ?? throw new InvalidOperationException("La venta no esta activa para devolucion.");
-        var shift = await database.Shifts.SingleOrDefaultAsync(item => item.UserId == user.Id && item.Status == "Open", cancellationToken) ?? throw new InvalidOperationException("El usuario no tiene un turno abierto.");
+        var sale = await database.Sales.SingleOrDefaultAsync(item => item.Id == command.SaleId && item.Status == "Completed" &&
+            database.Shifts.Any(shift => shift.Id == item.ShiftId && shift.RegisterId == authorization.RegisterId), cancellationToken) ?? throw new InvalidOperationException("La venta no está activa para devolución en esta caja.");
+        var shift = await database.Shifts.SingleOrDefaultAsync(item => item.UserId == user.Id && item.RegisterId == authorization.RegisterId && item.Status == "Open", cancellationToken) ?? throw new InvalidOperationException("El usuario no tiene un turno abierto en esta caja.");
         var sold = await database.SaleLines.Where(item => item.SaleId == sale.Id).ToDictionaryAsync(item => item.ProductId, cancellationToken);
         var returned = await database.ReturnLines.Where(item => item.ReturnId != Guid.Empty && database.Returns.Any(ret => ret.Id == item.ReturnId && ret.SaleId == sale.Id)).GroupBy(item => item.ProductId).Select(group => new { ProductId = group.Key, Quantity = group.Sum(item => item.Quantity) }).ToDictionaryAsync(item => item.ProductId, item => item.Quantity, cancellationToken);
         var lines = new List<ReturnLineRecord>(); var amount = 0m;
@@ -61,13 +63,25 @@ public sealed class SaleReturnService(PosDbContext database, KitService kits)
 
     public async Task<IReadOnlyList<SaleLineForReturn>?> LinesAsync(string token, Guid saleId, CancellationToken cancellationToken)
     {
-        if (await AuthorizedUserAsync(token, cancellationToken) is null) return null;
+        var authorization = await AuthorizedAsync(token, cancellationToken);
+        if (authorization is null) return null;
+        var belongsToRegister = await database.Sales.AsNoTracking().AnyAsync(item => item.Id == saleId &&
+            database.Shifts.Any(shift => shift.Id == item.ShiftId && shift.RegisterId == authorization.RegisterId), cancellationToken);
+        if (!belongsToRegister) return [];
         var sold = await (from line in database.SaleLines.AsNoTracking() join product in database.Products.AsNoTracking() on line.ProductId equals product.Id where line.SaleId == saleId select new SaleLineForReturn(line.ProductId, product.Description, line.Quantity, 0m, line.UnitPrice)).ToListAsync(cancellationToken);
         var returned = await database.ReturnLines.Where(item => database.Returns.Any(ret => ret.SaleId == saleId && ret.Id == item.ReturnId)).GroupBy(item => item.ProductId).Select(group => new { ProductId = group.Key, Quantity = group.Sum(item => item.Quantity) }).ToDictionaryAsync(item => item.ProductId, item => item.Quantity, cancellationToken);
         return sold.Select(item => item with { ReturnedQuantity = returned.GetValueOrDefault(item.ProductId) }).ToArray();
     }
-    private async Task<UserRecord?> AuthorizedUserAsync(string token, CancellationToken cancellationToken)
+    private async Task<RegisterAuthorization?> AuthorizedAsync(string token, CancellationToken cancellationToken)
     {
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty))); var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken); if (session is null) return null; var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken); return user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "ProcessReturns", cancellationToken) ? user : null;
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty)));
+        var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
+        if (session?.RegisterId is not Guid registerId) return null;
+        var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
+        return user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "ProcessReturns", cancellationToken)
+            ? new RegisterAuthorization(user, registerId)
+            : null;
     }
+
+    private sealed record RegisterAuthorization(UserRecord User, Guid RegisterId);
 }

@@ -18,7 +18,7 @@ public sealed class SaleWithoutStockIntegrationTests
         var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda venta sin existencia " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow };
         var user = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "SIN_STOCK_" + suffix, DisplayName = "Venta sin existencia", PasswordHash = "test", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
         var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja " + suffix, IsActive = true };
-        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, RegisterId = register.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
         var product = new ProductRecord { Id = Guid.NewGuid(), Code = "SIN-" + suffix, NormalizedCode = "SIN-" + suffix.ToUpperInvariant(), Description = "Producto sin existencia", Price = 25m, Stock = 0m, IsActive = true };
 
         database.AddRange(store, user, register, session, product);
@@ -26,7 +26,7 @@ public sealed class SaleWithoutStockIntegrationTests
 
         try
         {
-            var shift = await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(register.Id, 0m), CancellationToken.None);
+            var shift = await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(0m), CancellationToken.None);
             Assert.NotNull(shift);
 
             var operationId = Guid.NewGuid();
@@ -72,7 +72,7 @@ public sealed class SaleWithoutStockIntegrationTests
         var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda producto temporal " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow };
         var user = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "TEMP_" + suffix, DisplayName = "Producto temporal", PasswordHash = "test", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
         var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja " + suffix, IsActive = true };
-        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, RegisterId = register.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
         var product = new ProductRecord { Id = Guid.NewGuid(), Code = "TEMP-" + suffix, NormalizedCode = "TEMP-" + suffix.ToUpperInvariant(), Description = "Articulo temporal", Price = 12m, Stock = 7m, IsCommonProduct = true, IsTemporary = true, IsActive = true };
 
         database.AddRange(store, user, register, session, product);
@@ -80,7 +80,7 @@ public sealed class SaleWithoutStockIntegrationTests
 
         try
         {
-            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(register.Id, 0m), CancellationToken.None));
+            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(0m), CancellationToken.None));
 
             var operationId = Guid.NewGuid();
             var result = await new SaleService(database, new PromotionService(database), new KitService(database)).CompleteAsync(

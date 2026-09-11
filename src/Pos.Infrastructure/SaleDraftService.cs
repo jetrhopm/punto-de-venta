@@ -19,7 +19,8 @@ public sealed class SaleDraftService(PosDbContext database)
 
         var drafts = await database.SaleDrafts
             .Include(item => item.Lines)
-            .Where(item => item.UserId == context.UserId && item.Status == "Open" && item.Lines.Any())
+            .Where(item => item.UserId == context.UserId && item.Status == "Open" && item.Lines.Any() &&
+                           database.Shifts.Any(shift => shift.Id == item.ShiftId && shift.RegisterId == context.RegisterId))
             .OrderBy(item => item.TicketNumber)
             .ToListAsync(cancellationToken);
 
@@ -74,7 +75,8 @@ public sealed class SaleDraftService(PosDbContext database)
 
         var context = await GetOpenShiftContextAsync(accessToken, cancellationToken);
         if (context is null) return null;
-        var draft = await database.SaleDrafts.Include(item => item.Lines).SingleOrDefaultAsync(item => item.Id == draftId && item.UserId == context.UserId && item.Status == "Open", cancellationToken)
+        var draft = await database.SaleDrafts.Include(item => item.Lines).SingleOrDefaultAsync(item => item.Id == draftId && item.UserId == context.UserId && item.Status == "Open" &&
+            database.Shifts.Any(shift => shift.Id == item.ShiftId && shift.RegisterId == context.RegisterId), cancellationToken)
             ?? throw new KeyNotFoundException("El ticket en atención no existe o ya fue finalizado.");
 
         var productIds = command.Lines.Select(item => item.ProductId).ToArray();
@@ -111,7 +113,8 @@ public sealed class SaleDraftService(PosDbContext database)
     {
         var context = await GetOpenShiftContextAsync(accessToken, cancellationToken);
         if (context is null) return null;
-        var draft = await database.SaleDrafts.SingleOrDefaultAsync(item => item.Id == draftId && item.UserId == context.UserId && item.Status == "Open", cancellationToken);
+        var draft = await database.SaleDrafts.SingleOrDefaultAsync(item => item.Id == draftId && item.UserId == context.UserId && item.Status == "Open" &&
+            database.Shifts.Any(shift => shift.Id == item.ShiftId && shift.RegisterId == context.RegisterId), cancellationToken);
         if (draft is null) return false;
         draft.Status = "Discarded";
         draft.UpdatedAtUtc = DateTimeOffset.UtcNow;
@@ -138,13 +141,13 @@ public sealed class SaleDraftService(PosDbContext database)
     {
         var tokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(accessToken ?? string.Empty)));
         var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == tokenHash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
-        if (session is null) return null;
+        if (session?.RegisterId is not Guid registerId) return null;
         var user = await database.Users.AsNoTracking().SingleOrDefaultAsync(item => item.Id == session.UserId && item.IsActive, cancellationToken);
         if (user is null) return null;
         if (!user.IsAdministrator && !await database.Permissions.AsNoTracking().AnyAsync(item => item.UserId == user.Id && item.Code == "Sell", cancellationToken)) return null;
-        var shift = await database.Shifts.AsNoTracking().SingleOrDefaultAsync(item => item.UserId == session.UserId && item.Status == "Open", cancellationToken);
-        return shift is null ? null : new OpenShiftContext(session.UserId, shift.Id);
+        var shift = await database.Shifts.AsNoTracking().SingleOrDefaultAsync(item => item.UserId == session.UserId && item.RegisterId == registerId && item.Status == "Open", cancellationToken);
+        return shift is null ? null : new OpenShiftContext(session.UserId, registerId, shift.Id);
     }
 
-    private sealed record OpenShiftContext(Guid UserId, Guid ShiftId);
+    private sealed record OpenShiftContext(Guid UserId, Guid RegisterId, Guid ShiftId);
 }

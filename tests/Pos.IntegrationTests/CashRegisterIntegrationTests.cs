@@ -23,13 +23,13 @@ public sealed class CashRegisterIntegrationTests
         var cashier = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = ("CASHIER_CUT_" + suffix).ToUpperInvariant(), DisplayName = "Cajero sin corte", IsAdministrator = false, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
         cashier.PasswordHash = hasher.HashPassword(cashier, "clave-cajero");
         var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja autorización " + suffix, IsActive = true };
-        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = cashier.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = cashier.Id, RegisterId = register.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
         database.AddRange(store, administrator, cashier, register, session);
         await database.SaveChangesAsync();
 
         try
         {
-            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(register.Id, 250m), CancellationToken.None));
+            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(250m), CancellationToken.None));
             Assert.Null(await new CutSettingsService(database).GetAsync(token, CancellationToken.None));
             Assert.Null(await new CashRegisterService(database).CloseAsync(token, new CloseShiftCommand(250m), CancellationToken.None));
 
@@ -47,7 +47,7 @@ public sealed class CashRegisterIntegrationTests
             Assert.False(await database.Shifts.AnyAsync(item => item.RegisterId == register.Id && item.Status == "Open"));
             Assert.False(await database.Permissions.IgnoreQueryFilters().AnyAsync(item => item.Id == grant!.GrantId));
 
-            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(register.Id, 100m), CancellationToken.None));
+            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(100m), CancellationToken.None));
             var expiredGrant = new PermissionRecord
             {
                 Id = Guid.NewGuid(),
@@ -107,7 +107,7 @@ public sealed class CashRegisterIntegrationTests
         var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda corte " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow };
         var user = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "CORTE_" + suffix, DisplayName = "Prueba de corte", PasswordHash = "test", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
         var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja " + suffix, IsActive = true };
-        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, RegisterId = register.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
 
         database.AddRange(store, user, register, session);
         await database.SaveChangesAsync();
@@ -116,7 +116,7 @@ public sealed class CashRegisterIntegrationTests
         {
             var shifts = new ShiftService(database);
             var cash = new CashRegisterService(database);
-            var first = await shifts.OpenAsync(token, new OpenShiftCommand(register.Id, 500m), CancellationToken.None);
+            var first = await shifts.OpenAsync(token, new OpenShiftCommand(500m), CancellationToken.None);
             Assert.NotNull(first);
 
             var firstFolio = Random.Shared.NextInt64(1, long.MaxValue / 2);
@@ -140,7 +140,7 @@ public sealed class CashRegisterIntegrationTests
             Assert.Equal(615m, firstSummary.ExpectedCash);
             Assert.Equal(0m, firstSummary.Difference);
 
-            var second = await shifts.OpenAsync(token, new OpenShiftCommand(register.Id, 300m), CancellationToken.None);
+            var second = await shifts.OpenAsync(token, new OpenShiftCommand(300m), CancellationToken.None);
             Assert.NotNull(second);
             var secondSummary = await cash.CloseAsync(token, new CloseShiftCommand(300m), CancellationToken.None);
 

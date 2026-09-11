@@ -35,7 +35,7 @@ public sealed class KitInventoryIntegrationTests
         var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda kits " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow };
         var user = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "KIT_" + suffix, DisplayName = "Prueba kits", PasswordHash = "test", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
         var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja " + suffix, IsActive = true };
-        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, RegisterId = register.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
         var component = new ProductRecord { Id = Guid.NewGuid(), Code = "COMP-" + suffix, NormalizedCode = ("COMP-" + suffix).ToUpperInvariant(), Description = "Componente del kit", Price = 8m, Stock = 10m, IsActive = true };
         var kit = new ProductRecord { Id = Guid.NewGuid(), Code = "KIT-" + suffix, NormalizedCode = ("KIT-" + suffix).ToUpperInvariant(), Description = "Kit de prueba", Price = 25m, Stock = 10m, IsKit = true, IsActive = true };
         database.AddRange(store, user, register, session, component, kit);
@@ -43,7 +43,7 @@ public sealed class KitInventoryIntegrationTests
 
         try
         {
-            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(register.Id, 50m), CancellationToken.None));
+            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(50m), CancellationToken.None));
             var kits = new KitService(database);
             var configured = await kits.SetAsync(token, new KitCommand(kit.Id, [new KitComponentCommand(component.Id, 2m)]), CancellationToken.None);
             Assert.NotNull(configured);

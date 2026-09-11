@@ -727,6 +727,11 @@ app.MapPost("/api/sales/return", async (HttpRequest request, ReturnSaleCommand c
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
+app.MapGet("/api/sales/latest-ticket", async (HttpRequest request, TicketService tickets, CancellationToken cancellationToken) =>
+{
+    var result = await tickets.LatestSaleIdAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.NoContent() : Results.Ok(new { saleId = result.Value });
+});
 app.MapGet("/api/sales/{saleId:guid}/return-lines", async (Guid saleId, HttpRequest request, SaleReturnService returns, CancellationToken cancellationToken) =>
 {
     var result = await returns.LinesAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), saleId, cancellationToken);
@@ -958,12 +963,6 @@ app.MapGet("/api/shifts/current", async (HttpRequest request, ShiftService shift
     var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
     var result = await shifts.CurrentAsync(token, cancellationToken);
     return result is null ? Results.NotFound() : Results.Ok(result);
-});
-
-app.MapGet("/api/shifts/register", async (PosDbContext database, CancellationToken cancellationToken) =>
-{
-    var register = await database.Registers.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.Name).Select(item => new { item.Id, item.Name }).FirstOrDefaultAsync(cancellationToken);
-    return register is null ? Results.NotFound() : Results.Ok(register);
 });
 
 app.Run();

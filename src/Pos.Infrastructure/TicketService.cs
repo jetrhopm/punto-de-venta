@@ -9,6 +9,17 @@ public sealed record TicketResult(byte[] Content, string FileName);
 
 public sealed class TicketService(PosDbContext database)
 {
+    public async Task<Guid?> LatestSaleIdAsync(string token, CancellationToken cancellationToken)
+    {
+        var viewer = await AuthorizedUserAsync(token, cancellationToken);
+        if (viewer is null) return null;
+        return await database.Sales.AsNoTracking()
+            .Where(item => database.Shifts.Any(shift => shift.Id == item.ShiftId && shift.RegisterId == viewer.RegisterId))
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .Select(item => (Guid?)item.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<TicketResult?> GenerateAsync(string token, Guid saleId, CancellationToken cancellationToken)
     {
         var ticket = await GetDataAsync(token, saleId, cancellationToken);
@@ -21,8 +32,10 @@ public sealed class TicketService(PosDbContext database)
 
     public async Task<TicketPdfData?> GetDataAsync(string token, Guid saleId, CancellationToken cancellationToken)
     {
-        if (await AuthorizedUserAsync(token, cancellationToken) is null) return null;
-        var sale = await database.Sales.AsNoTracking().SingleOrDefaultAsync(item => item.Id == saleId, cancellationToken);
+        var viewer = await AuthorizedUserAsync(token, cancellationToken);
+        if (viewer is null) return null;
+        var sale = await database.Sales.AsNoTracking().SingleOrDefaultAsync(item => item.Id == saleId &&
+            database.Shifts.Any(shift => shift.Id == item.ShiftId && shift.RegisterId == viewer.RegisterId), cancellationToken);
         if (sale is null) throw new KeyNotFoundException("Venta no encontrada.");
         var lines = await (from line in database.SaleLines.AsNoTracking()
                            join product in database.Products.AsNoTracking() on line.ProductId equals product.Id
@@ -71,7 +84,11 @@ public sealed class TicketService(PosDbContext database)
 
     public async Task<bool?> MarkPrintedAsync(string token, Guid saleId, CancellationToken cancellationToken)
     {
-        if (await AuthorizedUserAsync(token, cancellationToken) is null) return null;
+        var viewer = await AuthorizedUserAsync(token, cancellationToken);
+        if (viewer is null) return null;
+        var belongsToRegister = await database.Sales.AsNoTracking().AnyAsync(item => item.Id == saleId &&
+            database.Shifts.Any(shift => shift.Id == item.ShiftId && shift.RegisterId == viewer.RegisterId), cancellationToken);
+        if (!belongsToRegister) return false;
         var job = await database.PrintJobs.SingleOrDefaultAsync(item => item.SaleId == saleId && item.Status != "Printed", cancellationToken);
         if (job is null) return false;
         job.Status = "Printed";
@@ -81,12 +98,16 @@ public sealed class TicketService(PosDbContext database)
         return true;
     }
 
-    private async Task<UserRecord?> AuthorizedUserAsync(string token, CancellationToken cancellationToken)
+    private async Task<TicketViewer?> AuthorizedUserAsync(string token, CancellationToken cancellationToken)
     {
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty)));
         var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
-        if (session is null) return null;
+        if (session?.RegisterId is not Guid registerId) return null;
         var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
-        return user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && (item.Code == "Sell" || item.Code == "ReprintTickets"), cancellationToken) ? user : null;
+        return user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && (item.Code == "Sell" || item.Code == "ReprintTickets"), cancellationToken)
+            ? new TicketViewer(user.Id, registerId)
+            : null;
     }
+
+    private sealed record TicketViewer(Guid UserId, Guid RegisterId);
 }

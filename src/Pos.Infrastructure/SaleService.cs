@@ -18,7 +18,7 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         if (command.OperationId == Guid.Empty || command.Lines.Count == 0 || command.CashReceived < 0m || command.CardAmount < 0m || command.TransferAmount < 0m || command.PaymentMethod is not ("Cash" or "Card" or "Transfer" or "Mixed" or "Credit")) throw new ArgumentException("La operacion, las partidas y la forma de pago son obligatorias.");
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(accessToken ?? string.Empty)));
         var session = await database.Sessions.SingleOrDefaultAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
-        if (session is null) return null;
+        if (session?.RegisterId is not Guid registerId) return null;
         var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
         if (!user.IsAdministrator && !await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "Sell", cancellationToken)) return null;
         var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
@@ -28,7 +28,7 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var existing = await database.Sales.AsNoTracking().SingleOrDefaultAsync(sale => sale.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new CompleteSaleResult(existing.Id, existing.OperationId, existing.Total, 0m, 0m, true);
-        var shift = await database.Shifts.SingleOrDefaultAsync(item => item.UserId == user.Id && item.Status == "Open", cancellationToken) ?? throw new InvalidOperationException("El usuario no tiene un turno abierto.");
+        var shift = await database.Shifts.SingleOrDefaultAsync(item => item.UserId == user.Id && item.RegisterId == registerId && item.Status == "Open", cancellationToken) ?? throw new InvalidOperationException("El usuario no tiene un turno abierto en esta caja.");
         SaleDraftRecord? draft = null;
         IReadOnlyDictionary<Guid, SaleDraftLineRecord>? draftLines = null;
         if (command.DraftId is not null)

@@ -50,14 +50,14 @@ public sealed class SaleDraftIntegrationTests
         var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda tickets " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow };
         var user = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "TICKETS_" + suffix, DisplayName = "Prueba de tickets", PasswordHash = "test", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
         var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja " + suffix, IsActive = true };
-        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, RegisterId = register.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
         var product = new ProductRecord { Id = Guid.NewGuid(), Code = "TICKET-" + suffix, NormalizedCode = "TICKET-" + suffix.ToUpperInvariant(), Description = "Producto de ticket", Price = 18m, Stock = 4m, IsActive = true };
         database.AddRange(store, user, register, session, product);
         await database.SaveChangesAsync();
 
         try
         {
-            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(register.Id, 50m), CancellationToken.None));
+            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(50m), CancellationToken.None));
             var drafts = new SaleDraftService(database);
             var draft = await drafts.CreateAsync(token, CancellationToken.None);
             Assert.NotNull(draft);
@@ -81,7 +81,7 @@ public sealed class SaleDraftIntegrationTests
             Assert.Empty(await database.CashMovements.Where(item => item.ShiftId == shiftId).ToListAsync());
 
             Assert.NotNull(await new CashRegisterService(database).CloseAsync(token, new CloseShiftCommand(50m), CancellationToken.None));
-            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(register.Id, 30m), CancellationToken.None));
+            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(30m), CancellationToken.None));
             var resumedDrafts = await drafts.ListOpenAsync(token, CancellationToken.None);
             Assert.NotNull(resumedDrafts);
             var resumed = Assert.Single(resumedDrafts);

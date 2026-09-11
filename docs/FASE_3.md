@@ -43,3 +43,16 @@
 - Un usuario puede volver a entrar en la misma caja; su sesión anterior de esa caja se revoca de forma controlada.
 - JetVenta bloquea iniciar sesión en otra caja si el usuario tiene sesión o turno abierto en una distinta, e informa el nombre de la caja que debe atender.
 - Una conexión por red sin emparejar no puede iniciar sesión. La caja principal local conserva la operación monocaja mediante conexión de bucle local.
+
+## Incremento 4 terminado: operación aislada por caja
+
+- La API obtiene la caja exclusivamente de la sesión autenticada; abrir turno
+  ya no acepta una caja elegida desde el escritorio.
+- Turnos, efectivo, borradores, ventas, cancelaciones, devoluciones, datos de
+  ticket e impresión se resuelven contra la caja de la sesión.
+- Los borradores pendientes pueden recuperarse al regresar al mismo equipo,
+  pero no se transfieren a otra caja.
+- Las existencias continúan siendo únicas para la tienda; cada venta conserva
+  la transacción serializable existente para descontarlas.
+- La prueba de integración de dos cajas verifica el aislamiento de borrador,
+  efectivo y último ticket.
