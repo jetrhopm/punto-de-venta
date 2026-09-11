@@ -113,11 +113,12 @@ public partial class PurchasePlanningWindow : Window
         else line.Quantity += suggestion.Quantity;
     }
 
-    private async void OnProductSearchKeyDown(object sender, KeyEventArgs e)
+    private async void OnProductSearchPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Enter) return;
-        await AddExactProductAsync(ProductSearchTextBox.Text.Trim());
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is not Key.Enter and not Key.Return) return;
         e.Handled = true;
+        await AddExactProductAsync(ProductSearchTextBox.Text.Trim());
     }
 
     private void OnBarcodeScanned(object? sender, string code) => Dispatcher.BeginInvoke(async () =>
