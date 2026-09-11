@@ -870,10 +870,21 @@ app.MapPost("/api/setup/initial", async (InitialSetupCommand command, InitialSet
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 
-app.MapPost("/api/auth/login", async (LoginCommand command, AuthenticationService authentication, CancellationToken cancellationToken) =>
+app.MapPost("/api/auth/login", async (HttpRequest request, LoginCommand command, AuthenticationService authentication, CancellationToken cancellationToken) =>
 {
-    var result = await authentication.LoginAsync(command, cancellationToken);
-    return result is null ? Results.Unauthorized() : Results.Ok(result);
+    var deviceToken = request.Headers["X-JetVenta-Device-Token"].ToString();
+    var remoteAddress = request.HttpContext.Connection.RemoteIpAddress;
+    var isLocalConnection = remoteAddress is not null && System.Net.IPAddress.IsLoopback(remoteAddress);
+    var attempt = await authentication.LoginDetailedAsync(command, deviceToken, isLocalConnection, cancellationToken);
+    if (attempt.Session is not null) return Results.Ok(attempt.Session);
+
+    var statusCode = attempt.FailureCode switch
+    {
+        "invalid_credentials" => StatusCodes.Status401Unauthorized,
+        "session_active_elsewhere" or "shift_open_elsewhere" => StatusCodes.Status409Conflict,
+        _ => StatusCodes.Status403Forbidden
+    };
+    return Results.Json(new { code = attempt.FailureCode, message = attempt.FailureMessage }, statusCode: statusCode);
 });
 app.MapPost("/api/auth/temporary-permission", async (HttpRequest request, TemporaryPermissionAuthorizationCommand command, AuthenticationService authentication, CancellationToken cancellationToken) =>
 {

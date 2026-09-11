@@ -31,8 +31,15 @@
 
 ## Pendiente del siguiente incremento
 
-- Enlazar sesiones, turnos, tickets y efectivo a la caja emparejada.
+- Enlazar turnos, tickets y efectivo a la caja emparejada.
 - Validacion de version cliente/API durante el emparejamiento.
 - SignalR para avisos de cambios, sin usarlo como garantia de consistencia.
 - Pruebas con dos cajas y fallas de red.
 - Enviar la identidad de caja en las solicitudes protegidas y validar su estado activo en la API.
+
+## Incremento 3 terminado: sesiones por caja
+
+- La sesión incluye la caja y, cuando aplica, el dispositivo emparejado que la inició.
+- Un usuario puede volver a entrar en la misma caja; su sesión anterior de esa caja se revoca de forma controlada.
+- JetVenta bloquea iniciar sesión en otra caja si el usuario tiene sesión o turno abierto en una distinta, e informa el nombre de la caja que debe atender.
+- Una conexión por red sin emparejar no puede iniciar sesión. La caja principal local conserva la operación monocaja mediante conexión de bucle local.

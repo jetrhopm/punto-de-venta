@@ -187,12 +187,13 @@ public partial class LoginWindow : Window
             });
             if (!response.IsSuccessStatusCode)
             {
-                SetStatus(response.StatusCode switch
+                var fallback = response.StatusCode switch
                 {
                     HttpStatusCode.Unauthorized => "El usuario o la contraseña son incorrectos.",
                     HttpStatusCode.ServiceUnavailable => "Los datos de la tienda aún no están disponibles. Espera unos segundos y vuelve a intentar.",
                     _ => $"No se pudo iniciar sesión. Código {(int)response.StatusCode}."
-                }, StatusKind.Error);
+                };
+                SetStatus(await ConfigurationFeedback.ReadErrorAsync(response, fallback), StatusKind.Error);
                 PasswordBox.SelectAll();
                 PasswordBox.Focus();
                 return;

@@ -27,6 +27,7 @@ public static class ApiClient
     public static bool UseNormalTotals { get; private set; }
     public static int PrinterTicketWidthMm { get; private set; } = 80;
     public static BarcodeScannerProfile BarcodeScanner { get; private set; } = BarcodeScannerProfile.Default;
+    private static string? DeviceToken { get; set; }
 
     static ApiClient() => Load();
 
@@ -67,9 +68,10 @@ public static class ApiClient
 
     public static void SaveDeviceIdentity(Guid deviceId, Guid storeId, Guid registerId, string deviceToken)
     {
-        DeviceId = deviceId; StoreId = storeId; RegisterId = registerId;
+        DeviceId = deviceId; StoreId = storeId; RegisterId = registerId; DeviceToken = deviceToken;
         var protectedToken = ProtectForMachine(deviceToken);
         SaveSettings(protectedToken);
+        ApplyDeviceIdentity(ClientInstance);
     }
 
     public static void SetPrinterProfile(string? printerName, string fontFamily, double fontSize, bool useNormalTotals, int widthMm, bool? printingEnabled = null)
@@ -114,6 +116,13 @@ public static class ApiClient
             {
                 BaseUrl = settings.BaseUrl.TrimEnd('/');
                 DeviceId = settings.DeviceId; StoreId = settings.StoreId; RegisterId = settings.RegisterId;
+                DeviceToken = UnprotectForMachine(settings.DeviceTokenProtected);
+                if (DeviceId is not null && string.IsNullOrWhiteSpace(DeviceToken))
+                {
+                    DeviceId = null;
+                    StoreId = null;
+                    RegisterId = null;
+                }
                 PrinterName = settings.PrinterName;
                 PrintingEnabled = settings.PrintingEnabled ?? !string.IsNullOrWhiteSpace(settings.PrinterName);
                 PrinterFontFamily = string.IsNullOrWhiteSpace(settings.PrinterFontFamily) ? "Consolas" : settings.PrinterFontFamily;
@@ -169,6 +178,16 @@ public static class ApiClient
 
     private static string ProtectForMachine(string token) => Convert.ToBase64String(ProtectedData.Protect(System.Text.Encoding.UTF8.GetBytes(token), null, DataProtectionScope.LocalMachine));
 
+    private static string? UnprotectForMachine(string? protectedToken)
+    {
+        if (string.IsNullOrWhiteSpace(protectedToken)) return null;
+        try
+        {
+            return System.Text.Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(protectedToken), null, DataProtectionScope.LocalMachine));
+        }
+        catch (Exception exception) when (exception is CryptographicException or FormatException) { return null; }
+    }
+
     private static void EnsureSettingsDirectory() => Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
 
     private static void WriteSettings(ClientSettings settings)
@@ -190,8 +209,15 @@ public static class ApiClient
         var replacement = CreateClient(baseUrl);
         var authorization = previous.DefaultRequestHeaders.Authorization;
         if (authorization is not null) replacement.DefaultRequestHeaders.Authorization = authorization;
+        ApplyDeviceIdentity(replacement);
         ClientInstance = replacement;
         previous.Dispose();
+    }
+
+    private static void ApplyDeviceIdentity(HttpClient client)
+    {
+        client.DefaultRequestHeaders.Remove("X-JetVenta-Device-Token");
+        if (!string.IsNullOrWhiteSpace(DeviceToken)) client.DefaultRequestHeaders.TryAddWithoutValidation("X-JetVenta-Device-Token", DeviceToken);
     }
 
     private sealed record ClientSettings(

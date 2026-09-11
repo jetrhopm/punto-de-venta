@@ -192,6 +192,9 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             entity.HasIndex(session => session.TokenHash).IsUnique();
             entity.Property(session => session.ExpiresAtUtc).HasColumnType("timestamp with time zone");
             entity.HasOne<UserRecord>().WithMany().HasForeignKey(session => session.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(session => new { session.UserId, session.RegisterId });
+            entity.HasOne<RegisterRecord>().WithMany().HasForeignKey(session => session.RegisterId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<DeviceRecord>().WithMany().HasForeignKey(session => session.DeviceId).OnDelete(DeleteBehavior.Restrict);
         });
         modelBuilder.Entity<PermissionRecord>(entity =>
         {
@@ -330,7 +333,7 @@ public sealed class DepartmentRecord { public Guid Id { get; set; } public strin
 public sealed class ImportBatchRecord { public Guid Id { get; set; } public Guid OperationId { get; set; } public Guid UserId { get; set; } public string SourceFileName { get; set; } = string.Empty; public string DuplicateRule { get; set; } = "Skip"; public int CreatedCount { get; set; } public int UpdatedCount { get; set; } public int SkippedCount { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class PromotionRecord { public Guid Id { get; set; } public Guid ProductId { get; set; } public string Name { get; set; } = string.Empty; public decimal Percent { get; set; } public decimal DiscountAmount { get; set; } public decimal BuyQuantity { get; set; } public decimal PayQuantity { get; set; } public DateTimeOffset? StartsAtUtc { get; set; } public DateTimeOffset? EndsAtUtc { get; set; } public bool IsActive { get; set; } }
 public sealed class KitComponentRecord { public Guid Id { get; set; } public Guid KitProductId { get; set; } public Guid ComponentProductId { get; set; } public decimal Quantity { get; set; } }
-public sealed class SessionRecord { public Guid Id { get; set; } public Guid UserId { get; set; } public string TokenHash { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset ExpiresAtUtc { get; set; } public DateTimeOffset? RevokedAtUtc { get; set; } }
+public sealed class SessionRecord { public Guid Id { get; set; } public Guid UserId { get; set; } public Guid? DeviceId { get; set; } public Guid? RegisterId { get; set; } public string TokenHash { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset ExpiresAtUtc { get; set; } public DateTimeOffset? RevokedAtUtc { get; set; } }
 public sealed class PermissionRecord { public Guid Id { get; set; } public Guid UserId { get; set; } public string Code { get; set; } = string.Empty; public Guid? GrantedByUserId { get; set; } public DateTimeOffset? ExpiresAtUtc { get; set; } }
 public sealed class ShiftRecord { public Guid Id { get; set; } public Guid RegisterId { get; set; } public Guid UserId { get; set; } public decimal InitialCash { get; set; } public string Status { get; set; } = "Open"; public DateTimeOffset OpenedAtUtc { get; set; } public DateTimeOffset? ClosedAtUtc { get; set; } public decimal? CountedCash { get; set; } public decimal? Difference { get; set; } }
 public sealed class SaleRecord { public Guid Id { get; set; } public Guid OperationId { get; set; } public Guid ShiftId { get; set; } public Guid? CustomerId { get; set; } public long Folio { get; set; } public decimal Total { get; set; } public string Status { get; set; } = "Completed"; public DateTimeOffset CreatedAtUtc { get; set; } }

@@ -6,7 +6,8 @@ using System.Text;
 namespace Pos.Infrastructure;
 
 public sealed record LoginCommand(string UserName, string Password);
-public sealed record LoginResult(Guid SessionId, string AccessToken, Guid UserId, string DisplayName, bool IsAdministrator, DateTimeOffset ExpiresAtUtc, IReadOnlyList<string> Permissions);
+public sealed record LoginResult(Guid SessionId, string AccessToken, Guid UserId, Guid RegisterId, string DisplayName, bool IsAdministrator, DateTimeOffset ExpiresAtUtc, IReadOnlyList<string> Permissions);
+public sealed record LoginAttempt(LoginResult? Session, string? FailureCode, string? FailureMessage);
 public sealed record TemporaryPermissionAuthorizationCommand(string UserName, string Password, string Permission);
 public sealed record TemporaryPermissionAuthorizationResult(Guid? GrantId, DateTimeOffset ExpiresAtUtc, string AuthorizedBy);
 public sealed record TemporaryPermissionAuthorizationAttempt(
@@ -16,26 +17,52 @@ public sealed record TemporaryPermissionAuthorizationAttempt(
 
 public sealed class AuthenticationService(PosDbContext database, PasswordHasher<UserRecord> passwordHasher)
 {
-    public async Task<LoginResult?> LoginAsync(LoginCommand command, CancellationToken cancellationToken)
+    public async Task<LoginResult?> LoginAsync(LoginCommand command, CancellationToken cancellationToken) =>
+        (await LoginDetailedAsync(command, null, true, cancellationToken)).Session;
+
+    public async Task<LoginAttempt> LoginDetailedAsync(LoginCommand command, string? deviceToken, bool isLocalConnection, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(command.UserName) || string.IsNullOrEmpty(command.Password)) return null;
+        if (string.IsNullOrWhiteSpace(command.UserName) || string.IsNullOrEmpty(command.Password)) return FailedLogin("invalid_credentials", "El usuario o la contraseña son incorrectos.");
         var normalized = InitialSetupService.NormalizeUserName(command.UserName);
         var user = await database.Users.SingleOrDefaultAsync(item => item.NormalizedUserName == normalized && item.IsActive, cancellationToken);
-        if (user is null || passwordHasher.VerifyHashedPassword(user, user.PasswordHash, command.Password) == PasswordVerificationResult.Failed) return null;
+        if (user is null || passwordHasher.VerifyHashedPassword(user, user.PasswordHash, command.Password) == PasswordVerificationResult.Failed) return FailedLogin("invalid_credentials", "El usuario o la contraseña son incorrectos.");
+
+        var station = await ResolveStationAsync(deviceToken, isLocalConnection, cancellationToken);
+        if (station is null) return FailedLogin("device_required", "Esta computadora no está emparejada con una caja autorizada. Solicita al administrador un código de emparejamiento.");
+
+        var activeElsewhere = await FindActiveSessionElsewhereAsync(user.Id, station.RegisterId, cancellationToken);
+        if (activeElsewhere is not null)
+        {
+            return FailedLogin("session_active_elsewhere", $"{user.DisplayName} tiene una sesión activa en la caja {activeElsewhere}. Cierra sesión en esa caja antes de iniciar aquí.");
+        }
+
+        var openShiftElsewhere = await database.Shifts.AsNoTracking()
+            .Where(item => item.UserId == user.Id && item.Status == "Open" && item.RegisterId != station.RegisterId)
+            .Join(database.Registers.AsNoTracking(), shift => shift.RegisterId, register => register.Id, (_, register) => register.Name)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!string.IsNullOrWhiteSpace(openShiftElsewhere))
+        {
+            return FailedLogin("shift_open_elsewhere", $"{user.DisplayName} dejó abierto el turno de la caja {openShiftElsewhere}. Debe cerrarlo antes de iniciar en otra caja.");
+        }
 
         var staleTemporaryPermissions = await database.Permissions.IgnoreQueryFilters()
             .Where(item => item.UserId == user.Id && item.ExpiresAtUtc != null)
             .ToListAsync(cancellationToken);
         database.Permissions.RemoveRange(staleTemporaryPermissions);
 
+        var sessionsForThisRegister = await database.Sessions
+            .Where(item => item.UserId == user.Id && item.RegisterId == station.RegisterId && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow)
+            .ToListAsync(cancellationToken);
+        foreach (var existingSession in sessionsForThisRegister) existingSession.RevokedAtUtc = DateTimeOffset.UtcNow;
+
         var accessToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, TokenHash = Hash(accessToken), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddHours(8) };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, DeviceId = station.DeviceId, RegisterId = station.RegisterId, TokenHash = Hash(accessToken), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddHours(8) };
         database.Sessions.Add(session);
         await database.SaveChangesAsync(cancellationToken);
         IReadOnlyList<string> permissions = user.IsAdministrator
             ? Enum.GetNames<Pos.Domain.Permission>()
             : await database.Permissions.Where(item => item.UserId == user.Id && item.ExpiresAtUtc == null).Select(item => item.Code).ToListAsync(cancellationToken);
-        return new LoginResult(session.Id, accessToken, user.Id, user.DisplayName, user.IsAdministrator, session.ExpiresAtUtc, permissions);
+        return new LoginAttempt(new LoginResult(session.Id, accessToken, user.Id, station.RegisterId, user.DisplayName, user.IsAdministrator, session.ExpiresAtUtc, permissions), null, null);
     }
 
     public async Task<bool> LogoutAsync(string actorToken, CancellationToken cancellationToken)
@@ -133,6 +160,36 @@ public sealed class AuthenticationService(PosDbContext database, PasswordHasher<
 
     private static TemporaryPermissionAuthorizationAttempt Failed(string code, string message) =>
         new(null, code, message);
+
+    private static LoginAttempt FailedLogin(string code, string message) => new(null, code, message);
+
+    private async Task<StationIdentity?> ResolveStationAsync(string? deviceToken, bool isLocalConnection, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(deviceToken))
+        {
+            var device = await database.Devices.AsNoTracking()
+                .SingleOrDefaultAsync(item => item.DeviceTokenHash == Hash(deviceToken) && item.IsActive, cancellationToken);
+            if (device is null) return null;
+            var register = await database.Registers.AsNoTracking().SingleOrDefaultAsync(item => item.Id == device.RegisterId && item.IsActive, cancellationToken);
+            return register is null ? null : new StationIdentity(device.Id, register.Id);
+        }
+
+        if (!isLocalConnection) return null;
+        var localRegister = await database.Registers.AsNoTracking()
+            .Where(item => item.IsActive)
+            .OrderBy(item => database.Devices.Any(device => device.RegisterId == item.Id) ? 1 : 0)
+            .ThenBy(item => item.Name)
+            .FirstOrDefaultAsync(cancellationToken);
+        return localRegister is null ? null : new StationIdentity(null, localRegister.Id);
+    }
+
+    private async Task<string?> FindActiveSessionElsewhereAsync(Guid userId, Guid registerId, CancellationToken cancellationToken) =>
+        await database.Sessions.AsNoTracking()
+            .Where(item => item.UserId == userId && item.RegisterId != null && item.RegisterId != registerId && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow)
+            .Join(database.Registers.AsNoTracking(), session => session.RegisterId, register => register.Id, (_, register) => register.Name)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private sealed record StationIdentity(Guid? DeviceId, Guid RegisterId);
 
     public async Task<bool> RevokeTemporaryPermissionAsync(string actorToken, Guid grantId, CancellationToken cancellationToken)
     {
