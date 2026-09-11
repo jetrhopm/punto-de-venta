@@ -28,6 +28,8 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     public DbSet<SupplierRecord> Suppliers => Set<SupplierRecord>();
     public DbSet<PurchaseRecord> Purchases => Set<PurchaseRecord>();
     public DbSet<PurchaseLineRecord> PurchaseLines => Set<PurchaseLineRecord>();
+    public DbSet<PurchaseOrderRecord> PurchaseOrders => Set<PurchaseOrderRecord>();
+    public DbSet<PurchaseOrderLineRecord> PurchaseOrderLines => Set<PurchaseOrderLineRecord>();
     public DbSet<SaleReversalRecord> SaleReversals => Set<SaleReversalRecord>();
     public DbSet<ReturnRecord> Returns => Set<ReturnRecord>();
     public DbSet<ReturnLineRecord> ReturnLines => Set<ReturnLineRecord>();
@@ -294,6 +296,14 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
         {
             entity.ToTable("purchase_line"); entity.HasKey(item => item.Id); entity.Property(item => item.Quantity).HasPrecision(18, 3); entity.Property(item => item.UnitCost).HasPrecision(18, 2); entity.Property(item => item.LineTotal).HasPrecision(18, 2); entity.HasOne<PurchaseRecord>().WithMany().HasForeignKey(item => item.PurchaseId).OnDelete(DeleteBehavior.Restrict); entity.HasOne<ProductRecord>().WithMany().HasForeignKey(item => item.ProductId).OnDelete(DeleteBehavior.Restrict);
         });
+        modelBuilder.Entity<PurchaseOrderRecord>(entity =>
+        {
+            entity.ToTable("purchase_order"); entity.HasKey(item => item.Id); entity.Property(item => item.OperationId).IsRequired(); entity.HasIndex(item => item.OperationId).IsUnique(); entity.Property(item => item.Status).HasMaxLength(20).IsRequired(); entity.Property(item => item.Notes).HasMaxLength(500); entity.Property(item => item.Total).HasPrecision(18, 2); entity.Property(item => item.CreatedAtUtc).HasColumnType("timestamp with time zone"); entity.Property(item => item.ClosedAtUtc).HasColumnType("timestamp with time zone"); entity.HasOne<SupplierRecord>().WithMany().HasForeignKey(item => item.SupplierId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<PurchaseOrderLineRecord>(entity =>
+        {
+            entity.ToTable("purchase_order_line"); entity.HasKey(item => item.Id); entity.Property(item => item.Quantity).HasPrecision(18, 3); entity.Property(item => item.UnitCost).HasPrecision(18, 2); entity.Property(item => item.LineTotal).HasPrecision(18, 2); entity.HasOne<PurchaseOrderRecord>().WithMany().HasForeignKey(item => item.PurchaseOrderId).OnDelete(DeleteBehavior.Cascade); entity.HasOne<ProductRecord>().WithMany().HasForeignKey(item => item.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
         modelBuilder.Entity<SaleReversalRecord>(entity =>
         {
             entity.ToTable("sale_reversal"); entity.HasKey(item => item.Id); entity.Property(item => item.Reason).HasMaxLength(200).IsRequired(); entity.Property(item => item.CreatedAtUtc).HasColumnType("timestamp with time zone"); entity.HasIndex(item => item.OperationId).IsUnique(); entity.HasIndex(item => item.SaleId).IsUnique(); entity.HasOne<SaleRecord>().WithMany().HasForeignKey(item => item.SaleId).OnDelete(DeleteBehavior.Restrict);
@@ -337,6 +347,8 @@ public sealed class CreditTransactionRecord { public Guid Id { get; set; } publi
 public sealed class SupplierRecord { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string? Phone { get; set; } public string? Email { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class PurchaseRecord { public Guid Id { get; set; } public Guid OperationId { get; set; } public Guid SupplierId { get; set; } public Guid UserId { get; set; } public decimal Total { get; set; } public string Status { get; set; } = "Received"; public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class PurchaseLineRecord { public Guid Id { get; set; } public Guid PurchaseId { get; set; } public Guid ProductId { get; set; } public decimal Quantity { get; set; } public decimal UnitCost { get; set; } public decimal LineTotal { get; set; } }
+public sealed class PurchaseOrderRecord { public Guid Id { get; set; } public Guid OperationId { get; set; } public Guid? SupplierId { get; set; } public Guid UserId { get; set; } public string Status { get; set; } = "Open"; public string? Notes { get; set; } public decimal Total { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset? ClosedAtUtc { get; set; } }
+public sealed class PurchaseOrderLineRecord { public Guid Id { get; set; } public Guid PurchaseOrderId { get; set; } public Guid ProductId { get; set; } public decimal Quantity { get; set; } public decimal UnitCost { get; set; } public decimal LineTotal { get; set; } }
 public sealed class SaleReversalRecord { public Guid Id { get; set; } public Guid SaleId { get; set; } public Guid UserId { get; set; } public Guid OperationId { get; set; } public string Reason { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class ReturnRecord { public Guid Id { get; set; } public Guid SaleId { get; set; } public Guid UserId { get; set; } public Guid OperationId { get; set; } public decimal Amount { get; set; } public string Reason { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class ReturnLineRecord { public Guid Id { get; set; } public Guid ReturnId { get; set; } public Guid ProductId { get; set; } public decimal Quantity { get; set; } public decimal UnitPrice { get; set; } public decimal Amount { get; set; } }

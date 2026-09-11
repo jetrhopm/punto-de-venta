@@ -115,6 +115,7 @@ public partial class PurchaseWindow : UserControl
         }
         catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableNotConfirmed; }
     }
+    private void OnPlanningClick(object sender, RoutedEventArgs e) => new PurchasePlanningWindow { Owner = Window.GetWindow(this) }.ShowDialog();
     private void ShowSelectedProduct(ProductResult product)
     {
         SelectedProductText.Text = $"{product.Code} | {product.Description}";

@@ -46,12 +46,17 @@
                         <TextBlock Text="Recibe mercancía y actualiza el inventario de tu tienda" Foreground="#637589" Margin="0,3,0,0"/>
                     </StackPanel>
                 </StackPanel>
-                <Border Grid.Column="1" Background="#EAF3F8" BorderBrush="#C9DCE8" BorderThickness="1" CornerRadius="16" Padding="12,7" VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal">
-                        <icons:PackIconMaterial Kind="InformationOutline" Width="17" Height="17" Foreground="{StaticResource PrimaryBrush}" Margin="0,0,6,0"/>
-                        <TextBlock Text="La compra aumenta existencias" Foreground="#31566D" FontSize="12" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Border>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="#EAF3F8" BorderBrush="#C9DCE8" BorderThickness="1" CornerRadius="16" Padding="12,7">
+                        <StackPanel Orientation="Horizontal">
+                            <icons:PackIconMaterial Kind="InformationOutline" Width="17" Height="17" Foreground="{StaticResource PrimaryBrush}" Margin="0,0,6,0"/>
+                            <TextBlock Text="La compra aumenta existencias" Foreground="#31566D" FontSize="12" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <Button Style="{StaticResource PrimaryButtonStyle}" Margin="10,0,0,0" Padding="14,8" Click="OnPlanningClick">
+                        <StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ClipboardTextOutline" Width="18" Height="18" Margin="0,0,7,0"/><TextBlock Text="Planificar compras"/></StackPanel>
+                    </Button>
+                </StackPanel>
             </Grid>
 
             <Border Grid.Row="1" Style="{StaticResource PurchaseSection}" Background="#F7FBFD">

@@ -560,6 +560,27 @@ app.MapDelete("/api/products/{id:guid}", async (Guid id, HttpRequest request, Pr
     }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
+app.MapGet("/api/purchase-planning/suggestions", async (Guid? supplierId, Guid? departmentId, HttpRequest request, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
+{
+    try { var result = await purchases.SuggestionsAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), supplierId, departmentId, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+});
+app.MapGet("/api/purchase-orders", async (string? status, Guid? supplierId, HttpRequest request, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
+{
+    var result = await purchases.ListOrdersAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), status, supplierId, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapPost("/api/purchase-orders", async (HttpRequest request, PurchaseOrderCommand command, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
+{
+    try { var result = await purchases.CreateOrderAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Created($"/api/purchase-orders/{result.Id}", result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["order"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+});
+app.MapPost("/api/purchase-orders/{id:guid}/close", async (Guid id, HttpRequest request, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
+{
+    try { var result = await purchases.CloseOrderAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), id, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+});
 app.MapPut("/api/products/status", async (HttpRequest request, ProductBulkStatusCommand command, ProductCatalogService catalog, CancellationToken cancellationToken) =>
 {
     try

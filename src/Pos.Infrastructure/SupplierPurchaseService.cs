@@ -10,6 +10,10 @@ public sealed record SupplierResult(Guid Id, string Name, string? Phone, string?
 public sealed record PurchaseLineCommand(Guid ProductId, decimal Quantity, decimal UnitCost, decimal? SalePrice = null);
 public sealed record ReceivePurchaseCommand(Guid OperationId, Guid? SupplierId, IReadOnlyList<PurchaseLineCommand> Lines);
 public sealed record ReceivePurchaseResult(Guid PurchaseId, Guid OperationId, decimal Total, bool Existing);
+public sealed record PurchaseSuggestion(Guid ProductId, string Code, string Description, Guid? DepartmentId, string? Department, Guid? SupplierId, string? Supplier, decimal Stock, decimal MinimumStock, decimal SuggestedQuantity, decimal UnitCost, decimal EstimatedTotal, string UnitOfMeasure);
+public sealed record PurchaseOrderLineCommand(Guid ProductId, decimal Quantity, decimal UnitCost);
+public sealed record PurchaseOrderCommand(Guid OperationId, Guid? SupplierId, string? Notes, IReadOnlyList<PurchaseOrderLineCommand> Lines);
+public sealed record PurchaseOrderResult(Guid Id, Guid OperationId, Guid? SupplierId, string? Supplier, string Status, string? Notes, decimal Total, int LineCount, DateTimeOffset CreatedAtUtc, DateTimeOffset? ClosedAtUtc);
 
 public sealed class SupplierPurchaseService(PosDbContext database)
 {
@@ -73,6 +77,80 @@ public sealed class SupplierPurchaseService(PosDbContext database)
         }
         purchase.Total = decimal.Round(total, 2); database.Purchases.Add(purchase); await database.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
         return new ReceivePurchaseResult(purchase.Id, purchase.OperationId, purchase.Total, false);
+    }
+
+    public async Task<IReadOnlyList<PurchaseSuggestion>?> SuggestionsAsync(string token, Guid? supplierId, Guid? departmentId, CancellationToken cancellationToken)
+    {
+        if (await UserAsync(token, cancellationToken) is null) return null;
+        if (supplierId is Guid supplied && supplied != Guid.Empty && !await database.Suppliers.AnyAsync(item => item.Id == supplied, cancellationToken)) throw new KeyNotFoundException("Proveedor no encontrado.");
+        if (departmentId is Guid department && department != Guid.Empty && !await database.Departments.AnyAsync(item => item.Id == department, cancellationToken)) throw new KeyNotFoundException("Departamento no encontrado.");
+        var products = await database.Products.AsNoTracking()
+            .Where(item => item.IsActive && !item.IsTemporary && item.MinimumStock > 0m && item.Stock <= item.MinimumStock)
+            .Where(item => !supplierId.HasValue || item.PrimarySupplierId == supplierId)
+            .Where(item => !departmentId.HasValue || item.DepartmentId == departmentId)
+            .OrderBy(item => item.Department == null ? string.Empty : item.Department.Name).ThenBy(item => item.Description)
+            .Select(item => new { item.Id, item.Code, item.Description, item.DepartmentId, Department = item.Department == null ? null : item.Department.Name, item.PrimarySupplierId, Supplier = item.PrimarySupplierId == null ? null : database.Suppliers.Where(supplier => supplier.Id == item.PrimarySupplierId).Select(supplier => supplier.Name).FirstOrDefault(), item.Stock, item.MinimumStock, item.Cost, item.UnitOfMeasure })
+            .ToListAsync(cancellationToken);
+        return products.Select(item =>
+        {
+            var suggestedQuantity = decimal.Round(Math.Max(item.MinimumStock - item.Stock, 1m), 3, MidpointRounding.AwayFromZero);
+            var total = decimal.Round(suggestedQuantity * item.Cost, 2, MidpointRounding.AwayFromZero);
+            return new PurchaseSuggestion(item.Id, item.Code, item.Description, item.DepartmentId, item.Department, item.PrimarySupplierId, item.Supplier, item.Stock, item.MinimumStock, suggestedQuantity, item.Cost, total, item.UnitOfMeasure);
+        }).ToList();
+    }
+
+    public async Task<IReadOnlyList<PurchaseOrderResult>?> ListOrdersAsync(string token, string? status, Guid? supplierId, CancellationToken cancellationToken)
+    {
+        if (await UserAsync(token, cancellationToken) is null) return null;
+        var normalizedStatus = string.Equals(status, "Closed", StringComparison.OrdinalIgnoreCase) ? "Closed" : string.Equals(status, "Open", StringComparison.OrdinalIgnoreCase) ? "Open" : null;
+        var orders = await database.PurchaseOrders.AsNoTracking()
+            .Where(item => normalizedStatus == null || item.Status == normalizedStatus)
+            .Where(item => !supplierId.HasValue || item.SupplierId == supplierId)
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .Take(200)
+            .Select(item => new { item.Id, item.OperationId, item.SupplierId, Supplier = item.SupplierId == null ? null : database.Suppliers.Where(supplier => supplier.Id == item.SupplierId).Select(supplier => supplier.Name).FirstOrDefault(), item.Status, item.Notes, item.Total, item.CreatedAtUtc, item.ClosedAtUtc, LineCount = database.PurchaseOrderLines.Count(line => line.PurchaseOrderId == item.Id) })
+            .ToListAsync(cancellationToken);
+        return orders.Select(item => new PurchaseOrderResult(item.Id, item.OperationId, item.SupplierId, item.Supplier, item.Status, item.Notes, item.Total, item.LineCount, item.CreatedAtUtc, item.ClosedAtUtc)).ToList();
+    }
+
+    public async Task<PurchaseOrderResult?> CreateOrderAsync(string token, PurchaseOrderCommand command, CancellationToken cancellationToken)
+    {
+        var user = await UserAsync(token, cancellationToken);
+        if (user is null) return null;
+        if (command.OperationId == Guid.Empty || command.Lines.Count == 0) throw new ArgumentException("La orden requiere al menos una partida.");
+        if (command.Notes?.Length > 500) throw new ArgumentException("Las notas no pueden exceder 500 caracteres.");
+        if (command.Lines.Any(line => line.ProductId == Guid.Empty || line.Quantity <= 0m || line.UnitCost < 0m) || command.Lines.Select(line => line.ProductId).Distinct().Count() != command.Lines.Count) throw new ArgumentException("Revisa productos, cantidades y costos de la orden.");
+        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        var existing = await database.PurchaseOrders.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
+        if (existing is not null) return await OrderResultAsync(existing, cancellationToken);
+        if (command.SupplierId is Guid supplierId && supplierId != Guid.Empty && !await database.Suppliers.AnyAsync(item => item.Id == supplierId, cancellationToken)) throw new KeyNotFoundException("Proveedor no encontrado.");
+        var productIds = command.Lines.Select(line => line.ProductId).ToArray();
+        var products = await database.Products.Where(item => productIds.Contains(item.Id) && item.IsActive && !item.IsTemporary).ToDictionaryAsync(item => item.Id, cancellationToken);
+        if (products.Count != productIds.Length) throw new KeyNotFoundException("Una o más partidas no existen o están inactivas.");
+        var order = new PurchaseOrderRecord { Id = Guid.NewGuid(), OperationId = command.OperationId, SupplierId = command.SupplierId is Guid id && id != Guid.Empty ? id : null, UserId = user.Id, Status = "Open", Notes = Clean(command.Notes), CreatedAtUtc = DateTimeOffset.UtcNow };
+        foreach (var line in command.Lines)
+        {
+            var lineTotal = decimal.Round(line.Quantity * line.UnitCost, 2, MidpointRounding.AwayFromZero);
+            order.Total += lineTotal;
+            database.PurchaseOrderLines.Add(new PurchaseOrderLineRecord { Id = Guid.NewGuid(), PurchaseOrderId = order.Id, ProductId = line.ProductId, Quantity = decimal.Round(line.Quantity, 3), UnitCost = decimal.Round(line.UnitCost, 2), LineTotal = lineTotal });
+        }
+        order.Total = decimal.Round(order.Total, 2); database.PurchaseOrders.Add(order); await database.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
+        return await OrderResultAsync(order, cancellationToken);
+    }
+
+    public async Task<PurchaseOrderResult?> CloseOrderAsync(string token, Guid orderId, CancellationToken cancellationToken)
+    {
+        if (await UserAsync(token, cancellationToken) is null) return null;
+        var order = await database.PurchaseOrders.SingleOrDefaultAsync(item => item.Id == orderId, cancellationToken) ?? throw new KeyNotFoundException("Orden no encontrada.");
+        if (order.Status == "Open") { order.Status = "Closed"; order.ClosedAtUtc = DateTimeOffset.UtcNow; await database.SaveChangesAsync(cancellationToken); }
+        return await OrderResultAsync(order, cancellationToken);
+    }
+
+    private async Task<PurchaseOrderResult> OrderResultAsync(PurchaseOrderRecord order, CancellationToken cancellationToken)
+    {
+        var supplier = order.SupplierId is Guid supplierId ? await database.Suppliers.AsNoTracking().Where(item => item.Id == supplierId).Select(item => item.Name).SingleOrDefaultAsync(cancellationToken) : null;
+        var lineCount = await database.PurchaseOrderLines.CountAsync(item => item.PurchaseOrderId == order.Id, cancellationToken);
+        return new PurchaseOrderResult(order.Id, order.OperationId, order.SupplierId, supplier, order.Status, order.Notes, order.Total, lineCount, order.CreatedAtUtc, order.ClosedAtUtc);
     }
 
     private async Task<UserRecord?> UserAsync(string token, CancellationToken cancellationToken)
