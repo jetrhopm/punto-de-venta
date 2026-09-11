@@ -12,8 +12,8 @@ public partial class SystemDetailsWindow : Window
         Loaded += async (_, _) => await RefreshAsync();
     }
 
-    private async void OnRefreshClick(object sender, RoutedEventArgs e) => await RefreshAsync();
-    private async Task RefreshAsync()
+    private async void OnRefreshClick(object sender, RoutedEventArgs e) => await RefreshAsync(showResult: true);
+    private async Task RefreshAsync(bool showResult = false)
     {
         DetailsText.Text = "Consultando el estado de JetVenta...";
         var apiOk = await ApiClient.WaitUntilAvailableAsync();
@@ -40,6 +40,13 @@ public partial class SystemDetailsWindow : Window
             apiOk ? "Resultado: los servicios principales responden." : "Resultado: JetVenta no responde. Ve a Configuración > Diagnóstico y pulsa Levantar API."
         };
         DetailsText.Text = string.Join(Environment.NewLine, lines);
+        if (showResult)
+        {
+            var message = apiOk
+                ? "La aplicación y los servicios principales responden correctamente."
+                : "JetVenta no responde. Ve a Configuración > Diagnóstico y pulsa Levantar API.";
+            OperationFeedback.Show(this, apiOk ? "Detalles actualizados" : "JetVenta no responde", message, apiOk ? OperationResultKind.Success : OperationResultKind.Warning);
+        }
     }
 
     private void OnCopyClick(object sender, RoutedEventArgs e)

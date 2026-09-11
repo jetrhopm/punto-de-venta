@@ -21,10 +21,12 @@ public partial class AutomaticStartSettingsWindow : Window
             StatusText.Text = EnabledCheck.IsChecked == true
                 ? "Inicio automático activado correctamente."
                 : "Inicio automático desactivado correctamente.";
+            OperationFeedback.Show(this, "Inicio automático", StatusText.Text, OperationResultKind.Success);
         }
         catch (Exception exception)
         {
             StatusText.Text = $"No se pudo guardar el inicio automático: {exception.Message}";
+            OperationFeedback.Show(this, "Inicio automático", StatusText.Text, OperationResultKind.Error);
         }
     }
 }

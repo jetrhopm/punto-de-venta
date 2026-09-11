@@ -36,7 +36,7 @@ public partial class ScaleSettingsWindow : Window
         _loaded = true; UpdateEnabledState();
     }
 
-    private void LoadPorts(string? preferred = null)
+    private void LoadPorts(string? preferred = null, bool showResult = false)
     {
         try
         {
@@ -45,11 +45,16 @@ public partial class ScaleSettingsWindow : Window
             PortBox.ItemsSource = ports;
             if (ports.Count > 0) PortBox.SelectedItem = ports.FirstOrDefault(item => string.Equals(item, preferred, StringComparison.OrdinalIgnoreCase)) ?? ports[0];
             StatusText.Text = ports.Count == 0 ? "No se detectaron puertos COM. Conecta la báscula o instala el controlador del fabricante." : $"Windows reportó {ports.Count} puerto(s) COM.";
+            if (showResult) OperationFeedback.Show(this, "Puertos de báscula", StatusText.Text, ports.Count == 0 ? OperationResultKind.Warning : OperationResultKind.Success);
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudieron consultar los puertos COM: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"No se pudieron consultar los puertos COM: {exception.Message}";
+            if (showResult) OperationFeedback.Show(this, "Puertos de báscula", StatusText.Text, OperationResultKind.Error);
+        }
     }
 
-    private void OnRefreshPortsClick(object sender, RoutedEventArgs e) => LoadPorts(PortBox.SelectedItem as string);
+    private void OnRefreshPortsClick(object sender, RoutedEventArgs e) => LoadPorts(PortBox.SelectedItem as string, showResult: true);
     private void OnEnabledChanged(object sender, RoutedEventArgs e) => UpdateEnabledState();
     private void UpdateEnabledState()
     {
@@ -64,24 +69,47 @@ public partial class ScaleSettingsWindow : Window
         try
         {
             using var response = await ApiClient.Client.PutAsJsonAsync("api/scale-settings", command);
-            if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo guardar la configuración de la báscula.");
+                StatusText.Text = message;
+                OperationFeedback.Show(this, "Báscula", message, OperationResultKind.Error);
+                return;
+            }
             StatusText.Text = command.Enabled ? $"Báscula guardada en {command.Port}." : "Báscula desactivada.";
+            OperationFeedback.Show(this, "Báscula", StatusText.Text, OperationResultKind.Success);
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo guardar la configuración: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"No se pudo guardar la configuración: {exception.Message}";
+            OperationFeedback.Show(this, "Báscula", StatusText.Text, OperationResultKind.Error);
+        }
     }
 
     private async void OnTestClick(object sender, RoutedEventArgs e)
     {
         if (!TryRead(out var command)) return;
-        if (!command.Enabled) { StatusText.Text = "Activa la báscula para ejecutar una prueba."; return; }
+        if (!command.Enabled)
+        {
+            StatusText.Text = "Activa la báscula para ejecutar una prueba.";
+            OperationFeedback.Show(this, "Báscula", StatusText.Text, OperationResultKind.Warning);
+            return;
+        }
         try
         {
             var reading = await Task.Run(() => ReadSerial(command));
             RawReadingText.Text = $"Texto recibido: {reading.Raw}";
             ParsedReadingText.Text = $"Peso: {reading.Weight:0.###} {command.Unit.ToLowerInvariant()}";
             StatusText.Text = "Lectura recibida. La estabilidad depende del indicador y protocolo de cada modelo.";
+            OperationFeedback.Show(this, "Prueba de báscula", ParsedReadingText.Text, OperationResultKind.Success);
         }
-        catch (Exception exception) { RawReadingText.Text = "Sin lectura"; ParsedReadingText.Text = "Peso: --"; StatusText.Text = $"No se pudo leer la báscula: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            RawReadingText.Text = "Sin lectura";
+            ParsedReadingText.Text = "Peso: --";
+            StatusText.Text = $"No se pudo leer la báscula: {exception.Message}";
+            OperationFeedback.Show(this, "Prueba de báscula", StatusText.Text, OperationResultKind.Error);
+        }
     }
 
     private static ScaleReading ReadSerial(ScaleCommand command)
@@ -99,8 +127,18 @@ public partial class ScaleSettingsWindow : Window
     private bool TryRead(out ScaleCommand command)
     {
         command = new ScaleCommand(EnabledCheck.IsChecked == true, PortBox.SelectedItem as string ?? PortBox.Text.Trim(), ParseInt(BaudRateBox.Text, 9600), TextOf(ParityBox, "None"), ParseInt(TextOf(DataBitsBox, "8"), 8), TextOf(StopBitsBox, "One"), TextOf(TerminatorBox, "CRLF"), TextOf(UnitBox, "Kilogramo"), ParseInt(TimeoutBox.Text, 1500));
-        if (command.Enabled && string.IsNullOrWhiteSpace(command.Port)) { StatusText.Text = "Selecciona el puerto COM de la báscula."; return false; }
-        if (command.ReadTimeoutMs is < 200 or > 5000) { StatusText.Text = "El tiempo de espera debe estar entre 200 y 5000 ms."; return false; }
+        if (command.Enabled && string.IsNullOrWhiteSpace(command.Port))
+        {
+            StatusText.Text = "Selecciona el puerto COM de la báscula.";
+            OperationFeedback.Show(this, "Báscula", StatusText.Text, OperationResultKind.Warning);
+            return false;
+        }
+        if (command.ReadTimeoutMs is < 200 or > 5000)
+        {
+            StatusText.Text = "El tiempo de espera debe estar entre 200 y 5000 ms.";
+            OperationFeedback.Show(this, "Báscula", StatusText.Text, OperationResultKind.Warning);
+            return false;
+        }
         return true;
     }
 

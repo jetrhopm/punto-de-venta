@@ -201,6 +201,7 @@ public partial class UserAdministrationWindow : Window
         if (_editingUser is null && string.IsNullOrEmpty(password))
         {
             EditorStatusText.Text = "Escribe una contraseña para crear el usuario.";
+            OperationFeedback.Show(this, "Usuario y permisos", EditorStatusText.Text, OperationResultKind.Warning);
             NewPasswordBox.Focus();
             return;
         }
@@ -211,27 +212,50 @@ public partial class UserAdministrationWindow : Window
             if (_editingUser is null)
             {
                 using var response = await ApiClient.Client.PostAsJsonAsync("api/users", new { userName = NewUserBox.Text, password, displayName = NewNameBox.Text, isAdministrator });
-                if (!response.IsSuccessStatusCode) { EditorStatusText.Text = await ReadErrorAsync(response); return; }
+                if (!response.IsSuccessStatusCode)
+                {
+                    EditorStatusText.Text = await ReadErrorAsync(response);
+                    OperationFeedback.Show(this, "Usuario no guardado", EditorStatusText.Text, OperationResultKind.Error);
+                    return;
+                }
                 var created = await response.Content.ReadFromJsonAsync<UserRow>();
-                if (created is null) { EditorStatusText.Text = "El servidor no devolvió el usuario creado."; return; }
+                if (created is null)
+                {
+                    EditorStatusText.Text = "El servidor no devolvió el usuario creado.";
+                    OperationFeedback.Show(this, "Usuario no guardado", EditorStatusText.Text, OperationResultKind.Error);
+                    return;
+                }
                 userId = created.Id;
             }
             else
             {
                 using var response = await ApiClient.Client.PutAsJsonAsync($"api/users/{_editingUser.Id}", new { userName = NewUserBox.Text, displayName = NewNameBox.Text, isAdministrator, password = string.IsNullOrEmpty(password) ? null : password });
-                if (!response.IsSuccessStatusCode) { EditorStatusText.Text = await ReadErrorAsync(response); return; }
+                if (!response.IsSuccessStatusCode)
+                {
+                    EditorStatusText.Text = await ReadErrorAsync(response);
+                    OperationFeedback.Show(this, "Usuario no guardado", EditorStatusText.Text, OperationResultKind.Error);
+                    return;
+                }
                 userId = _editingUser.Id;
             }
 
             var permissions = _permissionBoxes.Where(item => item.Value.IsChecked == true).Select(item => item.Key).ToArray();
             using var permissionsResponse = await ApiClient.Client.PutAsJsonAsync($"api/users/{userId}/permissions", new { permissions });
-            if (!permissionsResponse.IsSuccessStatusCode) { EditorStatusText.Text = await ReadErrorAsync(permissionsResponse); return; }
+            if (!permissionsResponse.IsSuccessStatusCode)
+            {
+                EditorStatusText.Text = await ReadErrorAsync(permissionsResponse);
+                OperationFeedback.Show(this, "Permisos no guardados", EditorStatusText.Text, OperationResultKind.Error);
+                return;
+            }
 
-            await ShowListAsync(userId, _editingUser is null ? "Usuario creado correctamente." : "Usuario actualizado correctamente.");
+            var message = _editingUser is null ? "Usuario creado correctamente." : "Usuario actualizado correctamente.";
+            await ShowListAsync(userId, message);
+            OperationFeedback.Show(this, "Usuario y permisos", message, OperationResultKind.Success);
         }
         catch (Exception exception)
         {
             EditorStatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar el usuario");
+            OperationFeedback.Show(this, "Usuario no guardado", EditorStatusText.Text, OperationResultKind.Error);
         }
     }
 
@@ -245,13 +269,20 @@ public partial class UserAdministrationWindow : Window
         try
         {
             using var response = await ApiClient.Client.PutAsJsonAsync($"api/users/{user.Id}/status", new { isActive = !user.IsActive });
-            if (!response.IsSuccessStatusCode) { ListStatusText.Text = await ReadErrorAsync(response); return; }
+            if (!response.IsSuccessStatusCode)
+            {
+                ListStatusText.Text = await ReadErrorAsync(response);
+                OperationFeedback.Show(this, "Estado de usuario", ListStatusText.Text, OperationResultKind.Error);
+                return;
+            }
             await LoadUsersAsync(user.Id);
             ListStatusText.Text = user.IsActive ? "Usuario desactivado." : "Usuario activado.";
+            OperationFeedback.Show(this, "Estado de usuario", ListStatusText.Text, OperationResultKind.Success);
         }
         catch (Exception exception)
         {
             ListStatusText.Text = ConnectionHelp.FromException(exception, "No se pudo actualizar el estado");
+            OperationFeedback.Show(this, "Estado de usuario", ListStatusText.Text, OperationResultKind.Error);
         }
     }
 
@@ -274,11 +305,7 @@ public partial class UserAdministrationWindow : Window
         }
     }
 
-    private static async Task<string> ReadErrorAsync(HttpResponseMessage response)
-    {
-        var body = await response.Content.ReadAsStringAsync();
-        return string.IsNullOrWhiteSpace(body) ? "No se pudo completar la operación." : body;
-    }
+    private static Task<string> ReadErrorAsync(HttpResponseMessage response) => ConfigurationFeedback.ReadErrorAsync(response, "No se pudo completar la operación.");
 
     private static bool CanModify(UserRow user) => SessionContext.IsAdministrator || !user.IsAdministrator;
 

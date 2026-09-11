@@ -33,11 +33,13 @@ public partial class SaleFolioSettingsWindow : Window
         if (!long.TryParse(NextFolioBox.Text.Trim(), out var nextFolio) || nextFolio < 1)
         {
             StatusText.Text = "Escribe un número de folio válido.";
+            OperationFeedback.Show(this, "Folio de venta", StatusText.Text, OperationResultKind.Warning);
             return;
         }
         if (nextFolio < _currentNextFolio)
         {
             StatusText.Text = $"No puedes bajar el consecutivo actual ({_currentNextFolio:N0}).";
+            OperationFeedback.Show(this, "Folio de venta", StatusText.Text, OperationResultKind.Warning);
             return;
         }
         try
@@ -52,6 +54,7 @@ public partial class SaleFolioSettingsWindow : Window
                     System.Net.HttpStatusCode.Conflict => "El consecutivo cambió en otra operación. Actualiza la ventana e inténtalo de nuevo.",
                     _ => "No se pudo guardar el siguiente folio. Revisa la conexión e inténtalo de nuevo."
                 };
+                OperationFeedback.Show(this, "Folio de venta", StatusText.Text, OperationResultKind.Error);
                 return;
             }
             var settings = await response.Content.ReadFromJsonAsync<SaleFolioSettings>();
@@ -61,8 +64,13 @@ public partial class SaleFolioSettingsWindow : Window
             LastFolioText.Text = settings.LastIssuedFolio == 0 ? "Sin ventas" : settings.LastIssuedFolio.ToString("N0");
             NextFolioBox.Text = settings.NextFolio.ToString();
             StatusText.Text = "El siguiente folio fue actualizado correctamente.";
+            OperationFeedback.Show(this, "Folio de venta", StatusText.Text, OperationResultKind.Success);
         }
-        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar el consecutivo"); }
+        catch (Exception exception)
+        {
+            StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar el consecutivo");
+            OperationFeedback.Show(this, "Folio de venta", StatusText.Text, OperationResultKind.Error);
+        }
     }
 
     private sealed record SaleFolioSettings(long NextFolio, long LastIssuedFolio);

@@ -33,10 +33,21 @@ public partial class BackupWindow : Window
         try
         {
             using var response = await ApiClient.Client.PostAsync("api/maintenance/backups", null);
-            StatusText.Text = response.IsSuccessStatusCode ? "Respaldo creado y verificado correctamente." : await response.Content.ReadAsStringAsync();
-            if (response.IsSuccessStatusCode) await LoadAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo crear el respaldo.");
+                OperationFeedback.Show(this, "Respaldo no creado", StatusText.Text, OperationResultKind.Error);
+                return;
+            }
+            StatusText.Text = "Respaldo creado y verificado correctamente.";
+            await LoadAsync();
+            OperationFeedback.Show(this, "Respaldo creado", StatusText.Text, OperationResultKind.Success);
         }
-        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo crear el respaldo"); }
+        catch (Exception exception)
+        {
+            StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo crear el respaldo");
+            OperationFeedback.Show(this, "Respaldo no creado", StatusText.Text, OperationResultKind.Error);
+        }
     }
 
     private async void OnExportClick(object sender, RoutedEventArgs e)

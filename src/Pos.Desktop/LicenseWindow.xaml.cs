@@ -23,13 +23,14 @@ public partial class LicenseWindow : Window
         Closed += (_, _) => _countdownTimer.Stop();
     }
 
-    private async void OnRefreshClick(object sender, RoutedEventArgs e) => await LoadStatusAsync();
+    private async void OnRefreshClick(object sender, RoutedEventArgs e) => await LoadStatusAsync(showResult: true);
 
     private void OnCopyRequestClick(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(RequestCodeTextBox.Text)) return;
         Clipboard.SetDataObject(RequestCodeTextBox.Text, true);
         StatusMessageText.Text = "Código de solicitud copiado al portapapeles.";
+        OperationFeedback.Show(this, "Código de solicitud", StatusMessageText.Text, OperationResultKind.Information);
     }
 
     private async void OnImportClick(object sender, RoutedEventArgs e)
@@ -50,15 +51,17 @@ public partial class LicenseWindow : Window
             }
 
             await LoadStatusAsync();
+            OperationFeedback.Show(this, "Licencia activada", _currentStatus?.Message ?? "La licencia se cargó correctamente.", OperationResultKind.Success);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or HttpRequestException or InvalidOperationException)
         {
             SetError(ConnectionHelp.FromException(exception, "No se pudo cargar la licencia"));
+            OperationFeedback.Show(this, "Licencia no activada", StatusMessageText.Text, OperationResultKind.Error);
         }
         finally { SetBusy(false); }
     }
 
-    private async Task LoadStatusAsync()
+    private async Task LoadStatusAsync(bool showResult = false)
     {
         try
         {
@@ -67,10 +70,18 @@ public partial class LicenseWindow : Window
             if (result is null) throw new InvalidOperationException("JetVenta no devolvió el estado de la licencia.");
             RequestCodeTextBox.Text = result.RequestCode;
             ApplyStatus(result);
+            if (showResult)
+            {
+                var kind = result.IsActive && !string.Equals(result.State, "trial", StringComparison.OrdinalIgnoreCase)
+                    ? OperationResultKind.Success
+                    : OperationResultKind.Information;
+                OperationFeedback.Show(this, "Estado de licencia", result.Message, kind);
+            }
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidOperationException)
         {
             SetError(ConnectionHelp.ApiUnavailableRetry);
+            if (showResult) OperationFeedback.Show(this, "Estado de licencia", StatusMessageText.Text, OperationResultKind.Error);
         }
         finally { SetBusy(false); }
     }

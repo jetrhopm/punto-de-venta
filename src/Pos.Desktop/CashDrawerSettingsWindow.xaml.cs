@@ -61,25 +61,55 @@ public partial class CashDrawerSettingsWindow : Window
         try
         {
             using var response = await ApiClient.Client.PutAsJsonAsync("api/cash-drawer-settings", command);
-            if (!response.IsSuccessStatusCode) { StatusText.Text = await response.Content.ReadAsStringAsync(); return; }
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo guardar la configuración del cajón.");
+                StatusText.Text = message;
+                OperationFeedback.Show(this, "Cajón de dinero", message, OperationResultKind.Error);
+                return;
+            }
             StatusText.Text = command.Enabled ? $"Configuración guardada para {command.PrinterName}." : "Cajón desactivado.";
+            OperationFeedback.Show(this, "Cajón de dinero", StatusText.Text, OperationResultKind.Success);
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo guardar la configuración: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"No se pudo guardar la configuración: {exception.Message}";
+            OperationFeedback.Show(this, "Cajón de dinero", StatusText.Text, OperationResultKind.Error);
+        }
     }
 
     private void OnTestClick(object sender, RoutedEventArgs e)
     {
         if (!TryRead(out var command)) return;
-        if (!command.Enabled) { StatusText.Text = "Activa el cajón para ejecutar una prueba."; return; }
-        try { TicketWindowsPrinter.OpenCashDrawer(command.PrinterName, command.Model); StatusText.Text = $"Pulso de apertura enviado a {command.PrinterName}."; }
-        catch (Exception exception) { StatusText.Text = $"No se pudo abrir el cajón: {exception.Message}"; }
+        if (!command.Enabled)
+        {
+            StatusText.Text = "Activa el cajón para ejecutar una prueba.";
+            OperationFeedback.Show(this, "Cajón de dinero", StatusText.Text, OperationResultKind.Warning);
+            return;
+        }
+        try
+        {
+            TicketWindowsPrinter.OpenCashDrawer(command.PrinterName, command.Model);
+            StatusText.Text = $"Pulso de apertura enviado a {command.PrinterName}.";
+            OperationFeedback.Show(this, "Prueba de cajón", StatusText.Text, OperationResultKind.Success);
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"No se pudo abrir el cajón: {exception.Message}";
+            OperationFeedback.Show(this, "Prueba de cajón", StatusText.Text, OperationResultKind.Error);
+        }
     }
 
     private bool TryRead(out CashDrawerCommand command)
     {
         var model = (ModelBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "PrinterPulse";
         command = new CashDrawerCommand(EnabledCheck.IsChecked == true, PrinterBox.SelectedItem as string ?? string.Empty, model, PortBox.Text);
-        if (command.Enabled && string.IsNullOrWhiteSpace(command.PrinterName)) { StatusText.Text = "Selecciona la impresora de Windows conectada al cajón."; return false; }
+        if (command.Enabled && string.IsNullOrWhiteSpace(command.PrinterName))
+        {
+            StatusText.Text = "Selecciona la impresora de Windows conectada al cajón.";
+            OperationFeedback.Show(this, "Cajón de dinero", StatusText.Text, OperationResultKind.Warning);
+            return false;
+        }
         return true;
     }
 

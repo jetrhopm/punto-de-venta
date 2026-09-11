@@ -49,7 +49,13 @@ public partial class ProductImportWindow : Window
             AdjustColumnsButton.IsEnabled = true;
             ApplyMapping();
         }
-        catch (Exception exception) { _rows = []; SetImportActionsEnabled(false); StatusText.Text = $"No se pudo leer el archivo: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            _rows = [];
+            SetImportActionsEnabled(false);
+            StatusText.Text = $"No se pudo leer el archivo: {exception.Message}";
+            OperationFeedback.Show(this, "Archivo no cargado", StatusText.Text, OperationResultKind.Error);
+        }
     }
 
     private void OnAdjustColumnsClick(object sender, RoutedEventArgs e)
@@ -82,6 +88,7 @@ public partial class ProductImportWindow : Window
     {
         if (decimal.TryParse(WholesaleMinimumBox.Text, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out minimum) && minimum > 0) return true;
         StatusText.Text = "Escribe una cantidad mínima de mayoreo mayor que cero.";
+        OperationFeedback.Show(this, "Cantidad de mayoreo", StatusText.Text, OperationResultKind.Warning);
         return false;
     }
 
@@ -171,9 +178,16 @@ public partial class ProductImportWindow : Window
         if (selectedRows.Length == 0)
         {
             StatusText.Text = "Selecciona al menos un producto para importar.";
+            OperationFeedback.Show(this, "Importar productos", StatusText.Text, OperationResultKind.Warning);
             return;
         }
-        if (RefreshPreviewStatus(focusFirstInvalid: true) > 0) return;
+        if (RefreshPreviewStatus(focusFirstInvalid: true) > 0)
+        {
+            var message = "Corrige o desmarca los productos señalados antes de importar.";
+            StatusText.Text = message;
+            OperationFeedback.Show(this, "Importar productos", message, OperationResultKind.Warning);
+            return;
+        }
         if (!ConfirmImport(duplicateRule, selectedRows.Length)) return;
         SetImportActionsEnabled(false);
         ImportProgressBar.Visibility = Visibility.Visible;
@@ -183,10 +197,20 @@ public partial class ProductImportWindow : Window
         try
         {
             using var backup = await ApiClient.Client.PostAsync("api/maintenance/backups", null);
-            if (!backup.IsSuccessStatusCode) { StatusText.Text = "No se importó nada porque no se pudo crear el respaldo previo: " + await backup.Content.ReadAsStringAsync(); return; }
+            if (!backup.IsSuccessStatusCode)
+            {
+                StatusText.Text = "No se importó nada porque no se pudo crear el respaldo previo: " + await ConfigurationFeedback.ReadErrorAsync(backup, "No se pudo crear el respaldo previo.");
+                OperationFeedback.Show(this, "Importación cancelada", StatusText.Text, OperationResultKind.Error);
+                return;
+            }
             var operationId = Guid.NewGuid();
             using var response = await ApiClient.Client.PostAsJsonAsync("api/products/import", new { operationId, sourceFileName = Path.GetFileName(FileBox.Text), duplicateRule, rows = selectedRows.Select(item => new { item.RowNumber, item.Code, item.Description, item.Price, item.Cost, item.Stock, item.WholesalePrice, item.WholesaleMinimumQuantity, item.Category, item.MinimumStock, item.MaximumStock, item.UnitOfMeasure, item.SupplierName }).ToArray() });
-            if (!response.IsSuccessStatusCode) { StatusText.Text = "La importación se revirtió: " + await response.Content.ReadAsStringAsync(); return; }
+            if (!response.IsSuccessStatusCode)
+            {
+                StatusText.Text = "La importación se revirtió: " + await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo importar el archivo.");
+                OperationFeedback.Show(this, "Importación no completada", StatusText.Text, OperationResultKind.Error);
+                return;
+            }
             var result = await response.Content.ReadFromJsonAsync<ImportResult>();
             var omittedByUser = _rows.Count - selectedRows.Length;
             StatusText.Text = result is null
@@ -197,8 +221,13 @@ public partial class ProductImportWindow : Window
             _lastImportResult = result;
             SaveReportButton.IsEnabled = true;
             StatusText.Text += " Puedes guardar el reporte cuando lo necesites.";
+            OperationFeedback.Show(this, "Importación terminada", StatusText.Text, OperationResultKind.Success);
         }
-        catch (Exception exception) { StatusText.Text = $"La importación no se completó: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"La importación no se completó: {exception.Message}";
+            OperationFeedback.Show(this, "Importación no completada", StatusText.Text, OperationResultKind.Error);
+        }
         finally { ImportProgressBar.Visibility = Visibility.Collapsed; RefreshPreviewStatus(focusFirstInvalid: false); }
     }
 
@@ -223,11 +252,21 @@ public partial class ProductImportWindow : Window
     {
         var dialog = new SaveFileDialog { Title = "Guardar reporte de importacion", Filter = "CSV (*.csv)|*.csv", FileName = $"resultado-importacion-{DateTime.Now:yyyyMMdd-HHmmss}.csv", AddExtension = true };
         if (dialog.ShowDialog() != true) return;
-        using var writer = new StreamWriter(dialog.FileName, false, new System.Text.UTF8Encoding(true));
-        using var csv = new CsvWriter(writer, CultureInfo.InvariantCulture);
-        csv.WriteField("Fila"); csv.WriteField("Codigo"); csv.WriteField("Producto"); csv.WriteField("Estado"); csv.NextRecord();
-        foreach (var row in _rows) { csv.WriteField(row.RowNumber); csv.WriteField(SafeForSpreadsheet(row.Code)); csv.WriteField(SafeForSpreadsheet(row.Description)); csv.WriteField(row.Status); csv.NextRecord(); }
-        csv.WriteField("Resumen"); csv.WriteField(result is null ? "Importación terminada" : $"Creados {result.Created}; actualizados {result.Updated}; omitidos por duplicado {result.Skipped}; omitidos por el usuario {_rows.Count(item => !item.IsSelected)}"); csv.NextRecord();
+        try
+        {
+            using var writer = new StreamWriter(dialog.FileName, false, new System.Text.UTF8Encoding(true));
+            using var csv = new CsvWriter(writer, CultureInfo.InvariantCulture);
+            csv.WriteField("Fila"); csv.WriteField("Codigo"); csv.WriteField("Producto"); csv.WriteField("Estado"); csv.NextRecord();
+            foreach (var row in _rows) { csv.WriteField(row.RowNumber); csv.WriteField(SafeForSpreadsheet(row.Code)); csv.WriteField(SafeForSpreadsheet(row.Description)); csv.WriteField(row.Status); csv.NextRecord(); }
+            csv.WriteField("Resumen"); csv.WriteField(result is null ? "Importación terminada" : $"Creados {result.Created}; actualizados {result.Updated}; omitidos por duplicado {result.Skipped}; omitidos por el usuario {_rows.Count(item => !item.IsSelected)}"); csv.NextRecord();
+            StatusText.Text = "Reporte de importación guardado correctamente.";
+            OperationFeedback.Show(this, "Reporte guardado", StatusText.Text, OperationResultKind.Success);
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"No se pudo guardar el reporte: {exception.Message}";
+            OperationFeedback.Show(this, "Reporte no guardado", StatusText.Text, OperationResultKind.Error);
+        }
     }
 
     private void SchedulePreviewRefresh()

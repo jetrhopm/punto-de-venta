@@ -17,7 +17,7 @@ public partial class DiagnosticWindow : Window
         Loaded += async (_, _) => await RefreshAsync();
     }
 
-    private async void OnRefreshClick(object sender, RoutedEventArgs e) => await RefreshAsync();
+    private async void OnRefreshClick(object sender, RoutedEventArgs e) => await RefreshAsync(showResult: true);
 
     private async void OnRepairApiClick(object sender, RoutedEventArgs e)
     {
@@ -31,15 +31,17 @@ public partial class DiagnosticWindow : Window
                 ? "La API respondió correctamente. Actualizando diagnóstico..."
                 : "No se pudo levantar la API. Revisa los detalles y vuelve a intentarlo.";
             await RefreshAsync();
+            OperationFeedback.Show(this, repaired ? "API disponible" : "API no disponible", StatusText.Text, repaired ? OperationResultKind.Success : OperationResultKind.Error);
         }
         catch (Exception exception)
         {
             StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo levantar la API. Ve a Configuración > Diagnóstico y pulsa Levantar API");
+            OperationFeedback.Show(this, "API no disponible", StatusText.Text, OperationResultKind.Error);
         }
         finally { RepairApiButton.IsEnabled = true; }
     }
 
-    private async Task RefreshAsync()
+    private async Task RefreshAsync(bool showResult = false)
     {
         StatusText.Text = "Consultando servicios y datos de JetVenta...";
         try
@@ -61,6 +63,7 @@ public partial class DiagnosticWindow : Window
             StatusText.Text = _checks.Any(item => item.Status == "Problema")
                 ? "Se encontraron problemas. Atiende primero las filas marcadas como Problema."
                 : "Diagnóstico terminado. Revisa también los avisos antes de operar.";
+            if (showResult) OperationFeedback.Show(this, _checks.Any(item => item.Status == "Problema") ? "Diagnóstico con avisos" : "Diagnóstico actualizado", StatusText.Text, _checks.Any(item => item.Status == "Problema") ? OperationResultKind.Warning : OperationResultKind.Success);
         }
         catch (Exception exception)
         {
@@ -75,6 +78,7 @@ public partial class DiagnosticWindow : Window
             ClearTechnicalDocumentsButton.IsEnabled = false;
             _reportText = $"JETVENTA - DIAGNÓSTICO{Environment.NewLine}{exception.Message}";
             StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
+            if (showResult) OperationFeedback.Show(this, "Diagnóstico no disponible", StatusText.Text, OperationResultKind.Error);
         }
     }
 
@@ -96,6 +100,7 @@ public partial class DiagnosticWindow : Window
             if (!response.IsSuccessStatusCode)
             {
                 StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo limpiar el historial técnico de impresión.");
+                OperationFeedback.Show(this, "Historial técnico", StatusText.Text, OperationResultKind.Error);
                 return;
             }
             var result = await response.Content.ReadFromJsonAsync<ClearTechnicalDocumentsResult>();
@@ -105,10 +110,12 @@ public partial class DiagnosticWindow : Window
             cleaned = true;
             await RefreshAsync();
             StatusText.Text = message;
+            OperationFeedback.Show(this, "Historial técnico", message, result is null || result.DeletedCount == 0 ? OperationResultKind.Information : OperationResultKind.Success);
         }
         catch (Exception exception)
         {
             StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo limpiar el historial técnico de impresión");
+            OperationFeedback.Show(this, "Historial técnico", StatusText.Text, OperationResultKind.Error);
         }
         finally
         {
@@ -134,6 +141,7 @@ public partial class DiagnosticWindow : Window
             if (!response.IsSuccessStatusCode)
             {
                 StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo descartar la cola pendiente.");
+                OperationFeedback.Show(this, "Cola de impresión", StatusText.Text, OperationResultKind.Error);
                 return;
             }
             var result = await response.Content.ReadFromJsonAsync<ClearTechnicalDocumentsResult>();
@@ -143,10 +151,12 @@ public partial class DiagnosticWindow : Window
             discarded = true;
             await RefreshAsync();
             StatusText.Text = message;
+            OperationFeedback.Show(this, "Cola de impresión", message, result is null || result.DeletedCount == 0 ? OperationResultKind.Information : OperationResultKind.Success);
         }
         catch (Exception exception)
         {
             StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo descartar la cola pendiente");
+            OperationFeedback.Show(this, "Cola de impresión", StatusText.Text, OperationResultKind.Error);
         }
         finally
         {
@@ -214,8 +224,17 @@ public partial class DiagnosticWindow : Window
 
     private void OnCopyClick(object sender, RoutedEventArgs e)
     {
-        try { Clipboard.SetDataObject(_reportText, true); StatusText.Text = "Reporte copiado al portapapeles."; }
-        catch (Exception exception) { StatusText.Text = $"No se pudo copiar el reporte: {exception.Message}"; }
+        try
+        {
+            Clipboard.SetDataObject(_reportText, true);
+            StatusText.Text = "Reporte copiado al portapapeles.";
+            OperationFeedback.Show(this, "Reporte copiado", StatusText.Text, OperationResultKind.Information);
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"No se pudo copiar el reporte: {exception.Message}";
+            OperationFeedback.Show(this, "Reporte no copiado", StatusText.Text, OperationResultKind.Error);
+        }
     }
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
