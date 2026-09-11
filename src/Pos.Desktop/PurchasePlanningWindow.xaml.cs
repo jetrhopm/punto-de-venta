@@ -4,6 +4,8 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using Pos.Printing;
 
 namespace Pos.Desktop;
 
@@ -13,19 +15,33 @@ public partial class PurchasePlanningWindow : Window
     private readonly List<SuggestionRow> _suggestions = [];
     private readonly List<OrderLineRow> _orderLines = [];
     private bool _loadingFilters;
+    private CancellationTokenSource? _productSearchCancellation;
 
     public PurchasePlanningWindow()
     {
         InitializeComponent();
         Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", SessionContext.AccessToken);
         Loaded += OnLoaded;
+        Closed += OnClosed;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        BarcodeScannerService.BarcodeScanned += OnBarcodeScanned;
+        PrintOrderButton.IsEnabled = ApiClient.IsTicketPrintingAvailable;
+        PrintHintText.Text = ApiClient.IsTicketPrintingAvailable
+            ? $"Imprime con el perfil configurado de {ApiClient.PrinterTicketWidthMm} mm."
+            : "Configura y habilita una impresora en Configuración > Impresora para imprimir esta lista.";
         await LoadFiltersAsync();
         await LoadSuggestionsAsync();
         await LoadOrdersAsync();
+        ProductSearchTextBox.Focus();
+    }
+
+    private void OnClosed(object? sender, EventArgs e)
+    {
+        BarcodeScannerService.BarcodeScanned -= OnBarcodeScanned;
+        _productSearchCancellation?.Cancel();
     }
 
     private async Task LoadFiltersAsync()
@@ -77,11 +93,112 @@ public partial class PurchasePlanningWindow : Window
         if (selected.Count == 0) { MessageText.Text = "Selecciona al menos un producto de la lista de sugerencias."; return; }
         foreach (var suggestion in selected)
         {
-            var line = _orderLines.SingleOrDefault(item => item.ProductId == suggestion.ProductId);
-            if (line is null) _orderLines.Add(new OrderLineRow(suggestion));
-            else line.Quantity += suggestion.Quantity;
+            AddSuggestionToOrder(suggestion);
         }
         RefreshOrderLines(); MessageText.Text = $"Se agregaron {selected.Count} partida(s) a la orden. La orden aún no altera inventario.";
+    }
+
+    private void OnSuggestionDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (SuggestionsGrid.SelectedItem is not SuggestionRow suggestion) return;
+        AddSuggestionToOrder(suggestion);
+        RefreshOrderLines();
+        MessageText.Text = $"{suggestion.Description} se agregó a la orden. La orden aún no altera inventario.";
+    }
+
+    private void AddSuggestionToOrder(SuggestionRow suggestion)
+    {
+        var line = _orderLines.SingleOrDefault(item => item.ProductId == suggestion.ProductId);
+        if (line is null) _orderLines.Add(new OrderLineRow(suggestion));
+        else line.Quantity += suggestion.Quantity;
+    }
+
+    private async void OnProductSearchChanged(object sender, TextChangedEventArgs e)
+    {
+        _productSearchCancellation?.Cancel();
+        _productSearchCancellation = new CancellationTokenSource();
+        var cancellationToken = _productSearchCancellation.Token;
+        var query = ProductSearchTextBox.Text.Trim();
+        if (query.Length == 0)
+        {
+            ProductResultsList.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        try
+        {
+            await Task.Delay(180, cancellationToken);
+            var products = await Client.GetFromJsonAsync<List<ProductSearchDto>>($"/api/products/search?q={Uri.EscapeDataString(query)}", cancellationToken) ?? [];
+            ProductResultsList.ItemsSource = products.Select(item => new ProductSearchRow(item)).ToList();
+            ProductResultsList.Visibility = products.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        }
+        catch (OperationCanceledException) { }
+        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableRetry; }
+    }
+
+    private async void OnProductSearchKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Down or Key.Up)
+        {
+            if (ProductResultsList.Items.Count > 0)
+            {
+                ProductResultsList.SelectedIndex = e.Key == Key.Down
+                    ? Math.Min(ProductResultsList.SelectedIndex < 0 ? 0 : ProductResultsList.SelectedIndex + 1, ProductResultsList.Items.Count - 1)
+                    : Math.Max(ProductResultsList.SelectedIndex <= 0 ? 0 : ProductResultsList.SelectedIndex - 1, 0);
+                ProductResultsList.ScrollIntoView(ProductResultsList.SelectedItem);
+            }
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key != Key.Enter) return;
+        if (ProductResultsList.SelectedItem is ProductSearchRow selected) AddProductToOrder(selected, 1m);
+        else await AddExactProductAsync(ProductSearchTextBox.Text.Trim());
+        e.Handled = true;
+    }
+
+    private void OnProductSearchResultDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (ProductResultsList.SelectedItem is ProductSearchRow selected) AddProductToOrder(selected, 1m);
+    }
+
+    private void OnBarcodeScanned(object? sender, string code) => Dispatcher.BeginInvoke(async () =>
+    {
+        ProductSearchTextBox.Text = code;
+        await AddExactProductAsync(code);
+    });
+
+    private async Task AddExactProductAsync(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return;
+        try
+        {
+            var products = await Client.GetFromJsonAsync<List<ProductSearchDto>>($"/api/products/search?q={Uri.EscapeDataString(query)}") ?? [];
+            var selected = products.FirstOrDefault(item => string.Equals(item.Code, query, StringComparison.OrdinalIgnoreCase))
+                ?? (products.Count == 1 ? products[0] : null);
+            if (selected is null)
+            {
+                MessageText.Text = products.Count == 0
+                    ? "No se encontró el producto leído."
+                    : "Hay varias coincidencias. Elige con flechas y presiona Enter.";
+                return;
+            }
+            AddProductToOrder(new ProductSearchRow(selected), 1m);
+        }
+        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableRetry; }
+    }
+
+    private void AddProductToOrder(ProductSearchRow product, decimal quantity)
+    {
+        var suggested = _suggestions.SingleOrDefault(item => item.ProductId == product.Product.Id);
+        var quantityToAdd = suggested?.Quantity ?? quantity;
+        var existing = _orderLines.SingleOrDefault(item => item.ProductId == product.Product.Id);
+        if (existing is null) _orderLines.Add(new OrderLineRow(product, quantityToAdd));
+        else existing.Quantity += quantityToAdd;
+        ProductSearchTextBox.Clear();
+        ProductResultsList.Visibility = Visibility.Collapsed;
+        RefreshOrderLines();
+        MessageText.Text = $"{product.Product.Description} se agregó a la lista. No se modificó inventario.";
     }
 
     private void OnRemoveLineClick(object sender, RoutedEventArgs e)
@@ -105,6 +222,44 @@ public partial class PurchasePlanningWindow : Window
             new OperationResultWindow("Orden de compra guardada", "La orden quedó como pendiente. Registra la mercancía con “Recibir compra” cuando llegue a la tienda.", OperationResultKind.Success) { Owner = this }.ShowDialog();
         }
         catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableNotConfirmed; }
+    }
+
+    private async void OnPrintOrderClick(object sender, RoutedEventArgs e)
+    {
+        if (_orderLines.Count == 0) { MessageText.Text = "Agrega al menos un producto antes de imprimir la lista."; return; }
+        if (!ApiClient.IsTicketPrintingAvailable || string.IsNullOrWhiteSpace(ApiClient.PrinterName))
+        {
+            MessageText.Text = "Configura y habilita una impresora en Configuración > Impresora antes de imprimir la lista.";
+            return;
+        }
+
+        try
+        {
+            var settings = await GetWithRetryAsync<TicketSettingsDto>("/api/ticket-settings");
+            var supplier = OrderSupplierComboBox.SelectedItem as SupplierOption;
+            var profile = TicketWindowsPrinter.CurrentProfile;
+            var total = _orderLines.Sum(item => item.Quantity * item.UnitCost);
+            var ticket = new TicketPdfData(
+                settings?.Name ?? "JETVENTA",
+                settings?.LegalName ?? string.Empty,
+                settings?.TaxId ?? string.Empty,
+                settings?.Address ?? string.Empty,
+                settings?.Phone ?? string.Empty,
+                "LISTA DE COMPRA",
+                "Lista de reposición. No modifica inventario.",
+                profile.WidthMm,
+                Guid.NewGuid(),
+                Guid.Empty,
+                supplier?.Name ?? "Sin proveedor asignado",
+                SessionContext.DisplayName ?? "Usuario",
+                DateTimeOffset.Now,
+                _orderLines.Select(item => new TicketPdfLine($"{item.Code} | {item.Description}", item.Quantity, item.UnitCost, item.Quantity * item.UnitCost)).ToList(),
+                [],
+                total);
+            TicketWindowsPrinter.Print(ApiClient.PrinterName, ticket, profile, $"Lista de compra {DateTime.Now:yyyyMMddHHmmss}");
+            MessageText.Text = $"Lista enviada a {ApiClient.PrinterName} con formato de {profile.WidthMm} mm.";
+        }
+        catch (Exception exception) { MessageText.Text = $"No se pudo imprimir la lista: {exception.Message}"; }
     }
 
     private async void OnRefreshOrdersClick(object sender, RoutedEventArgs e) => await LoadOrdersAsync();
@@ -158,6 +313,8 @@ public partial class PurchasePlanningWindow : Window
     private sealed record DepartmentDto(Guid Id, string Name);
     private sealed record SuggestionDto(Guid ProductId, string Code, string Description, Guid? DepartmentId, string? Department, Guid? SupplierId, string? Supplier, decimal Stock, decimal MinimumStock, decimal SuggestedQuantity, decimal UnitCost, decimal EstimatedTotal, string UnitOfMeasure);
     private sealed record OrderDto(Guid Id, string Status, string? Supplier, string? Notes, decimal Total, int LineCount, DateTimeOffset CreatedAtUtc);
+    private sealed record ProductSearchDto(Guid Id, string Code, string Description, decimal Price, decimal Cost, decimal Stock, string UnitOfMeasure);
+    private sealed record TicketSettingsDto(string Name, string LegalName, string TaxId, string Address, string Phone, string TicketHeader, string TicketFooter, int TicketWidthMm);
     private sealed record SupplierOption(Guid? Id, string Name) { public static SupplierOption All { get; } = new(null, "Todos los proveedores"); public static SupplierOption None { get; } = new(null, "Sin proveedor asignado"); public string DisplayText => Name; }
     private sealed record DepartmentOption(Guid? Id, string Name) { public static DepartmentOption All { get; } = new(null, "Todos los departamentos"); public string DisplayText => Name; }
     private sealed class SuggestionRow(SuggestionDto source)
@@ -165,10 +322,31 @@ public partial class PurchasePlanningWindow : Window
         public bool IsSelected { get; set; }
         public Guid ProductId => source.ProductId; public string Code => source.Code; public string Description => source.Description; public string Department => string.IsNullOrWhiteSpace(source.Department) ? "Sin departamento" : source.Department; public string Supplier => string.IsNullOrWhiteSpace(source.Supplier) ? "Sin proveedor" : source.Supplier; public decimal Quantity => source.SuggestedQuantity; public decimal UnitCost => source.UnitCost; public string StockText => $"{source.Stock:0.###} {source.UnitOfMeasure}"; public string MinimumText => source.MinimumStock.ToString("0.###", CultureInfo.CurrentCulture); public string QuantityText => source.SuggestedQuantity.ToString("0.###", CultureInfo.CurrentCulture);
     }
-    private sealed class OrderLineRow(SuggestionRow source)
+    private sealed class OrderLineRow
     {
-        public Guid ProductId { get; } = source.ProductId; public decimal Quantity { get; set; } = source.Quantity; public decimal UnitCost { get; } = source.UnitCost; public string DisplayText => $"{source.Code} | {source.Description} | {Quantity:0.###} x ${UnitCost:0.00} = ${Quantity * UnitCost:0.00}";
+        public OrderLineRow(SuggestionRow source)
+            : this(source.ProductId, source.Code, source.Description, source.Quantity, source.UnitCost) { }
+
+        public OrderLineRow(ProductSearchRow source, decimal quantity)
+            : this(source.Product.Id, source.Product.Code, source.Product.Description, quantity, source.Product.Cost) { }
+
+        private OrderLineRow(Guid productId, string code, string description, decimal quantity, decimal unitCost)
+        {
+            ProductId = productId;
+            Code = code;
+            Description = description;
+            Quantity = quantity;
+            UnitCost = unitCost;
+        }
+
+        public Guid ProductId { get; }
+        public string Code { get; }
+        public string Description { get; }
+        public decimal Quantity { get; set; }
+        public decimal UnitCost { get; }
+        public string DisplayText => $"{Code} | {Description} | {Quantity:0.###} x ${UnitCost:0.00} = ${Quantity * UnitCost:0.00}";
     }
+    private sealed record ProductSearchRow(ProductSearchDto Product) { public string DisplayText => $"{Product.Code} | {Product.Description} | Costo ${Product.Cost:0.00} | Existencia {Product.Stock:0.###} {Product.UnitOfMeasure}"; }
     private sealed class OrderRow(OrderDto source)
     {
         public Guid Id => source.Id; public string Supplier => string.IsNullOrWhiteSpace(source.Supplier) ? "Sin proveedor" : source.Supplier; public string Status => source.Status; public string StatusText => source.Status == "Open" ? "Pendiente" : "Cerrada"; public string? Notes => source.Notes; public int LineCount => source.LineCount; public string TotalText => $"${source.Total:0.00}"; public string CreatedText => source.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm");

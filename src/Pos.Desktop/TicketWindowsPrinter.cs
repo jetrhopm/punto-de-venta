@@ -101,13 +101,22 @@ public static class TicketWindowsPrinter
         AddOptionalCentered(root, ticket.Header, baseSize);
         root.Children.Add(Rule());
         var isShiftCut = ticket.Header.StartsWith("CORTE DE CAJA", StringComparison.OrdinalIgnoreCase);
-        root.Children.Add(Text(isShiftCut ? "COMPROBANTE DE CORTE" : "COMPROBANTE DE VENTA", baseSize + 1d, FontWeights.SemiBold, TextAlignment.Center, new Thickness(0, 1, 0, 4)));
+        var isPurchaseList = ticket.Header.StartsWith("LISTA DE COMPRA", StringComparison.OrdinalIgnoreCase);
+        root.Children.Add(Text(isShiftCut ? "COMPROBANTE DE CORTE" : isPurchaseList ? "LISTA DE COMPRA" : "COMPROBANTE DE VENTA", baseSize + 1d, FontWeights.SemiBold, TextAlignment.Center, new Thickness(0, 1, 0, 4)));
 
         root.Children.Add(Metadata("Fecha", ticket.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss"), baseSize));
-        root.Children.Add(Metadata("Caja", ValueOrDefault(ticket.RegisterName, "Caja principal"), baseSize));
-        root.Children.Add(Metadata("Cajero", ValueOrDefault(ticket.CashierName, "Administrador"), baseSize));
-        root.Children.Add(Metadata("Turno", FormatShiftNumber(ticket.ShiftNumber), baseSize));
-        root.Children.Add(Metadata(isShiftCut ? "Cierre" : "Venta", isShiftCut ? "Turno cerrado" : FormatFolio(ticket.Folio, ticket.SaleId), baseSize));
+        if (isPurchaseList)
+        {
+            root.Children.Add(Metadata("Proveedor", ValueOrDefault(ticket.RegisterName, "Sin proveedor"), baseSize));
+            root.Children.Add(Metadata("Preparó", ValueOrDefault(ticket.CashierName, "Usuario"), baseSize));
+        }
+        else
+        {
+            root.Children.Add(Metadata("Caja", ValueOrDefault(ticket.RegisterName, "Caja principal"), baseSize));
+            root.Children.Add(Metadata("Cajero", ValueOrDefault(ticket.CashierName, "Administrador"), baseSize));
+            root.Children.Add(Metadata("Turno", FormatShiftNumber(ticket.ShiftNumber), baseSize));
+            root.Children.Add(Metadata(isShiftCut ? "Cierre" : "Venta", isShiftCut ? "Turno cerrado" : FormatFolio(ticket.Folio, ticket.SaleId), baseSize));
+        }
         root.Children.Add(Rule());
 
         root.Children.Add(ProductHeader(baseSize));
@@ -126,7 +135,7 @@ public static class TicketWindowsPrinter
             root.Children.Add(AmountLine(ticket, "Descuentos", discounts, baseSize, FontWeights.Normal, true));
         if (subtotal != ticket.Total)
             root.Children.Add(AmountLine(ticket, "Redondeo", ticket.Total - subtotal, baseSize, FontWeights.Normal));
-        root.Children.Add(AmountLine(ticket, "TOTAL", ticket.Total, baseSize + 4d, totalWeight));
+        root.Children.Add(AmountLine(ticket, isPurchaseList ? "TOTAL ESTIMADO" : "TOTAL", ticket.Total, baseSize + 4d, totalWeight));
         foreach (var payment in ticket.Payments.Where(payment => payment.Amount > 0m))
             root.Children.Add(AmountLine(ticket, PaymentLabel(payment.Method), payment.Amount, baseSize, FontWeights.Normal));
 
