@@ -3,7 +3,7 @@
 ## Incremento 1 terminado
 
 - El cliente WPF permite configurar IP o nombre del servidor y puerto.
-- La direccion se guarda por usuario en `%LocalAppData%\PuntoDeVenta\client-settings.json`.
+- Desde `3.3.0`, la direccion, impresora, lector y emparejamiento se guardan por computadora en `%ProgramData%\PuntoDeVenta\client\machine-settings.json`.
 - El login puede probar la conexion al endpoint publico `/health` antes de autenticar.
 - Todas las ventanas WPF usan el cliente HTTP centralizado; no hay URLs locales duplicadas.
 - La API expone `/api/lan/info` con version de protocolo y nombre del servidor.
@@ -15,7 +15,7 @@
 - El codigo expira en diez minutos, se almacena solamente como hash y solo puede utilizarse una vez.
 - La caja adicional permite capturar el codigo, nombre del equipo y nombre de la caja.
 - El servidor crea de forma transaccional el identificador de caja y el registro del equipo.
-- La identidad persistente de la caja se guarda localmente protegida con DPAPI del usuario de Windows.
+- La identidad persistente de la caja se guarda localmente protegida con DPAPI de la computadora; cualquier usuario de Windows que inicie JetVenta en ese equipo usa la misma caja y periféricos.
 - La API valida que el usuario que genera codigos sea administrador y evita nombres de caja duplicados.
 - La migracion `AgregaEmparejamientoLan` agrega las tablas `device` y `pairing_code` sin alterar datos existentes.
 
@@ -31,6 +31,7 @@
 
 ## Pendiente del siguiente incremento
 
+- Enlazar sesiones, turnos, tickets y efectivo a la caja emparejada.
 - Validacion de version cliente/API durante el emparejamiento.
 - SignalR para avisos de cambios, sin usarlo como garantia de consistencia.
 - Pruebas con dos cajas y fallas de red.

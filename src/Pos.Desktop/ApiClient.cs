@@ -9,7 +9,10 @@ namespace Pos.Desktop;
 public static class ApiClient
 {
     private static HttpClient ClientInstance = CreateClient("http://127.0.0.1:5000");
-    private static readonly string SettingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PuntoDeVenta", "client-settings.json");
+    // Peripherals and the paired register belong to the Windows computer, not to
+    // the Windows profile that happens to open JetVenta.
+    private static readonly string SettingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "client", "machine-settings.json");
+    private static readonly string LegacySettingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PuntoDeVenta", "client-settings.json");
 
     public static HttpClient Client => ClientInstance;
     public static string BaseUrl { get; private set; } = "http://127.0.0.1:5000";
@@ -36,11 +39,7 @@ public static class ApiClient
         var uri = new UriBuilder(value) { Port = port }.Uri;
         BaseUrl = uri.ToString().TrimEnd('/');
         ReplaceClient(BaseUrl);
-        if (persist)
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-            SaveSettings();
-        }
+        if (persist) SaveSettings();
     }
 
     public static void ApplySession(string? accessToken) => ClientInstance.DefaultRequestHeaders.Authorization = string.IsNullOrWhiteSpace(accessToken) ? null : new AuthenticationHeaderValue("Bearer", accessToken);
@@ -69,8 +68,7 @@ public static class ApiClient
     public static void SaveDeviceIdentity(Guid deviceId, Guid storeId, Guid registerId, string deviceToken)
     {
         DeviceId = deviceId; StoreId = storeId; RegisterId = registerId;
-        Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-        var protectedToken = Convert.ToBase64String(ProtectedData.Protect(System.Text.Encoding.UTF8.GetBytes(deviceToken), null, DataProtectionScope.CurrentUser));
+        var protectedToken = ProtectForMachine(deviceToken);
         SaveSettings(protectedToken);
     }
 
@@ -97,41 +95,87 @@ public static class ApiClient
 
     private static void SaveSettings(string? protectedToken = null)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
+        EnsureSettingsDirectory();
         var currentToken = protectedToken;
         if (currentToken is null && File.Exists(SettingsPath))
         {
             try { currentToken = JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(SettingsPath))?.DeviceTokenProtected; }
             catch (JsonException) { }
         }
-        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm, BarcodeScanner, PrintingEnabled)));
+        WriteSettings(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm, BarcodeScanner, PrintingEnabled, 2));
     }
 
     private static void Load()
     {
         try
         {
-            if (File.Exists(SettingsPath))
+            var settings = ReadSettings(SettingsPath) ?? MigrateLegacySettings();
+            if (settings is not null && Uri.TryCreate(settings.BaseUrl, UriKind.Absolute, out _))
             {
-                var settings = JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(SettingsPath));
-                if (settings is not null && Uri.TryCreate(settings.BaseUrl, UriKind.Absolute, out var uri))
-                {
-                    BaseUrl = settings.BaseUrl.TrimEnd('/');
-                    DeviceId = settings.DeviceId; StoreId = settings.StoreId; RegisterId = settings.RegisterId;
-                    PrinterName = settings.PrinterName;
-                    PrintingEnabled = settings.PrintingEnabled ?? !string.IsNullOrWhiteSpace(settings.PrinterName);
-                    PrinterFontFamily = string.IsNullOrWhiteSpace(settings.PrinterFontFamily) ? "Consolas" : settings.PrinterFontFamily;
-                    PrinterFontSize = settings.PrinterFontSize is >= 6d and <= 24d ? settings.PrinterFontSize : 9d;
-                    UseNormalTotals = settings.UseNormalTotals;
-                    PrinterTicketWidthMm = settings.PrinterTicketWidthMm == 58 ? 58 : 80;
-                    BarcodeScanner = (settings.BarcodeScanner ?? BarcodeScannerProfile.Default).Normalize();
-                    ReplaceClient(BaseUrl);
-                    return;
-                }
+                BaseUrl = settings.BaseUrl.TrimEnd('/');
+                DeviceId = settings.DeviceId; StoreId = settings.StoreId; RegisterId = settings.RegisterId;
+                PrinterName = settings.PrinterName;
+                PrintingEnabled = settings.PrintingEnabled ?? !string.IsNullOrWhiteSpace(settings.PrinterName);
+                PrinterFontFamily = string.IsNullOrWhiteSpace(settings.PrinterFontFamily) ? "Consolas" : settings.PrinterFontFamily;
+                PrinterFontSize = settings.PrinterFontSize is >= 6d and <= 24d ? settings.PrinterFontSize : 9d;
+                UseNormalTotals = settings.UseNormalTotals;
+                PrinterTicketWidthMm = settings.PrinterTicketWidthMm == 58 ? 58 : 80;
+                BarcodeScanner = (settings.BarcodeScanner ?? BarcodeScannerProfile.Default).Normalize();
+                ReplaceClient(BaseUrl);
+                return;
             }
         }
-        catch (IOException) { }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException) { }
         ReplaceClient(BaseUrl);
+    }
+
+    private static ClientSettings? ReadSettings(string path)
+    {
+        if (!File.Exists(path)) return null;
+        try { return JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(path)); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException) { return null; }
+    }
+
+    private static ClientSettings? MigrateLegacySettings()
+    {
+        var legacy = ReadSettings(LegacySettingsPath);
+        if (legacy is null) return null;
+
+        var migrated = legacy with { SettingsVersion = 2 };
+        if (!string.IsNullOrWhiteSpace(legacy.DeviceTokenProtected))
+        {
+            try
+            {
+                var token = System.Text.Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(legacy.DeviceTokenProtected), null, DataProtectionScope.CurrentUser));
+                migrated = migrated with { DeviceTokenProtected = ProtectForMachine(token) };
+            }
+            catch (Exception exception) when (exception is CryptographicException or FormatException)
+            {
+                // A different Windows profile created the legacy file. Keep its
+                // peripheral settings, but force a future pairing instead of
+                // persisting an unusable device identity.
+                migrated = migrated with { DeviceId = null, StoreId = null, RegisterId = null, DeviceTokenProtected = null };
+            }
+        }
+
+        try
+        {
+            EnsureSettingsDirectory();
+            WriteSettings(migrated);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+        return migrated;
+    }
+
+    private static string ProtectForMachine(string token) => Convert.ToBase64String(ProtectedData.Protect(System.Text.Encoding.UTF8.GetBytes(token), null, DataProtectionScope.LocalMachine));
+
+    private static void EnsureSettingsDirectory() => Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
+
+    private static void WriteSettings(ClientSettings settings)
+    {
+        var temporaryPath = $"{SettingsPath}.{Guid.NewGuid():N}.tmp";
+        File.WriteAllText(temporaryPath, JsonSerializer.Serialize(settings));
+        File.Move(temporaryPath, SettingsPath, true);
     }
 
     private static HttpClient CreateClient(string baseUrl) => new()
@@ -162,7 +206,8 @@ public static class ApiClient
         bool UseNormalTotals = false,
         int PrinterTicketWidthMm = 80,
         BarcodeScannerProfile? BarcodeScanner = null,
-        bool? PrintingEnabled = null);
+        bool? PrintingEnabled = null,
+        int SettingsVersion = 1);
 }
 
 public enum BarcodeScannerMode { Keyboard, Serial, Disabled }
