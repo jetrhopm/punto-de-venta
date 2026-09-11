@@ -18,6 +18,7 @@ public partial class PurchasePlanningWindow : Window
     private bool _loadingFilters;
     private decimal? _quantityBeforeEditing;
     private CancellationTokenSource? _barcodeReadCancellation;
+    private CancellationTokenSource? _suggestionFilterCancellation;
 
     public PurchasePlanningWindow()
     {
@@ -44,6 +45,7 @@ public partial class PurchasePlanningWindow : Window
     {
         BarcodeScannerService.BarcodeScanned -= OnBarcodeScanned;
         _barcodeReadCancellation?.Cancel();
+        _suggestionFilterCancellation?.Cancel();
     }
 
     private async Task LoadFiltersAsync()
@@ -83,10 +85,37 @@ public partial class PurchasePlanningWindow : Window
             var path = "/api/purchase-planning/suggestions" + (filters.Count == 0 ? string.Empty : "?" + string.Join("&", filters));
             var suggestions = await GetWithRetryAsync<List<SuggestionDto>>(path) ?? [];
             _suggestions.Clear(); _suggestions.AddRange(suggestions.Select(item => new SuggestionRow(item)));
-            SuggestionsGrid.ItemsSource = null; SuggestionsGrid.ItemsSource = _suggestions;
-            SuggestionSummaryText.Text = _suggestions.Count == 0 ? "No hay productos con existencia igual o menor al mínimo para este filtro." : $"{_suggestions.Count} producto(s) requieren revisión. Los artículos sin proveedor permanecen disponibles.";
+            ApplySuggestionFilter();
         }
         catch (HttpRequestException) { MessageText.Text = "No se pudieron consultar las sugerencias. La API no respondió después de varios intentos; revisa Configuración > Diagnóstico."; }
+    }
+
+    private async void OnSuggestionFilterTextChanged(object sender, TextChangedEventArgs e)
+    {
+        _suggestionFilterCancellation?.Cancel();
+        _suggestionFilterCancellation = new CancellationTokenSource();
+        var cancellationToken = _suggestionFilterCancellation.Token;
+        try
+        {
+            await Task.Delay(180, cancellationToken);
+            ApplySuggestionFilter();
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private void ApplySuggestionFilter()
+    {
+        var filter = SuggestionFilterTextBox?.Text.Trim() ?? string.Empty;
+        var visible = string.IsNullOrWhiteSpace(filter)
+            ? _suggestions
+            : _suggestions.Where(item => item.Matches(filter)).ToList();
+        SuggestionsGrid.ItemsSource = null;
+        SuggestionsGrid.ItemsSource = visible;
+        SuggestionSummaryText.Text = _suggestions.Count == 0
+            ? "No hay productos con existencia igual o menor al mínimo para este filtro."
+            : string.IsNullOrWhiteSpace(filter)
+                ? $"{_suggestions.Count} producto(s) requieren revisión. Los artículos sin proveedor permanecen disponibles."
+                : $"Mostrando {visible.Count} de {_suggestions.Count} producto(s) que requieren revisión.";
     }
 
     private void OnAddSelectedClick(object sender, RoutedEventArgs e)
@@ -328,6 +357,8 @@ public partial class PurchasePlanningWindow : Window
     {
         public bool IsSelected { get; set; }
         public Guid ProductId => source.ProductId; public string Code => source.Code; public string Description => source.Description; public string Department => string.IsNullOrWhiteSpace(source.Department) ? "Sin departamento" : source.Department; public string Supplier => string.IsNullOrWhiteSpace(source.Supplier) ? "Sin proveedor" : source.Supplier; public decimal Quantity => source.SuggestedQuantity; public decimal UnitCost => source.UnitCost; public string StockText => $"{source.Stock:0.###} {source.UnitOfMeasure}"; public string MinimumText => source.MinimumStock.ToString("0.###", CultureInfo.CurrentCulture); public string MaximumText => source.MaximumStock > 0m ? source.MaximumStock.ToString("0.###", CultureInfo.CurrentCulture) : "No definido"; public string QuantityText => source.SuggestedQuantity.ToString("0.###", CultureInfo.CurrentCulture);
+        public bool Matches(string filter) => Contains(Code, filter) || Contains(Description, filter) || Contains(Department, filter) || Contains(Supplier, filter);
+        private static bool Contains(string value, string filter) => CultureInfo.CurrentCulture.CompareInfo.IndexOf(value, filter, CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace) >= 0;
     }
     private sealed class OrderLineRow : INotifyPropertyChanged
     {
