@@ -17,6 +17,7 @@ public partial class PurchasePlanningWindow : Window
     private readonly List<OrderLineRow> _orderLines = [];
     private bool _loadingFilters;
     private decimal? _quantityBeforeEditing;
+    private CancellationTokenSource? _barcodeReadCancellation;
 
     public PurchasePlanningWindow()
     {
@@ -42,6 +43,7 @@ public partial class PurchasePlanningWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         BarcodeScannerService.BarcodeScanned -= OnBarcodeScanned;
+        _barcodeReadCancellation?.Cancel();
     }
 
     private async Task LoadFiltersAsync()
@@ -113,21 +115,39 @@ public partial class PurchasePlanningWindow : Window
         else line.Quantity += suggestion.Quantity;
     }
 
+    private async void OnProductSearchTextChanged(object sender, TextChangedEventArgs e)
+    {
+        _barcodeReadCancellation?.Cancel();
+        var code = ProductSearchTextBox.Text.Trim();
+        if (code.Length == 0) return;
+
+        _barcodeReadCancellation = new CancellationTokenSource();
+        var cancellationToken = _barcodeReadCancellation.Token;
+        try
+        {
+            await Task.Delay(260, cancellationToken);
+            if (!string.Equals(code, ProductSearchTextBox.Text.Trim(), StringComparison.Ordinal)) return;
+            await AddExactProductAsync(code, false);
+        }
+        catch (OperationCanceledException) { }
+    }
+
     private async void OnProductSearchPreviewKeyDown(object sender, KeyEventArgs e)
     {
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (key is not Key.Enter and not Key.Return) return;
         e.Handled = true;
-        await AddExactProductAsync(ProductSearchTextBox.Text.Trim());
+        _barcodeReadCancellation?.Cancel();
+        await AddExactProductAsync(ProductSearchTextBox.Text.Trim(), true);
     }
 
     private void OnBarcodeScanned(object? sender, string code) => Dispatcher.BeginInvoke(async () =>
     {
         ProductSearchTextBox.Text = code;
-        await AddExactProductAsync(code);
+        await AddExactProductAsync(code, true);
     });
 
-    private async Task AddExactProductAsync(string query)
+    private async Task AddExactProductAsync(string query, bool showNotFound)
     {
         if (string.IsNullOrWhiteSpace(query)) return;
         try
@@ -137,9 +157,10 @@ public partial class PurchasePlanningWindow : Window
                 ?? (products.Count == 1 ? products[0] : null);
             if (selected is null)
             {
-                MessageText.Text = products.Count == 0
-                    ? "No se encontró el producto leído."
-                    : "Hay varias coincidencias. Elige con flechas y presiona Enter.";
+                if (showNotFound)
+                    MessageText.Text = products.Count == 0
+                        ? "No se encontró el producto leído."
+                        : "Hay varias coincidencias. Revisa el código leído.";
                 return;
             }
             AddProductToOrder(new ProductSearchRow(selected), 1m);
