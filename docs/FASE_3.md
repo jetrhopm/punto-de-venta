@@ -25,7 +25,7 @@
 - Pruebas unitarias: 6 correctas.
 - Pruebas de integracion PostgreSQL: 2 correctas.
 - Health comprobado: `/health` responde `status=ok`.
-- Compatibilidad LAN comprobada: `/api/lan/info` responde version de protocolo `1`.
+- Compatibilidad LAN comprobada: `/api/lan/info` responde versión de protocolo `2`.
 - La migracion de emparejamiento fue aplicada y las pruebas de integracion siguen correctas.
 - La solucion compila con 0 advertencias y 0 errores despues de agregar la UI de emparejamiento.
 
@@ -87,3 +87,22 @@
   emparejamiento por IP y consume códigos de emparejamiento atómicamente.
 - HTTP sigue destinado exclusivamente a una LAN privada; no se publica el
   puerto de JetVenta a Internet.
+
+## Incremento 8 terminado: instalador por modalidad
+
+- Una instalación nueva permite elegir **Caja principal / servidor** o
+  **Caja adicional** antes de instalar archivos.
+- La caja principal conserva el flujo completo: cliente, PostgreSQL, API,
+  servicios de Windows y regla de Firewall de red privada.
+- La caja adicional instala únicamente el cliente de escritorio y Microsoft
+  Visual C++; no copia API, PostgreSQL ni scripts de servidor, y no crea ni
+  detiene servicios o reglas de Firewall.
+- El instalador de caja adicional solicita dirección, puerto, código temporal
+  y nombre de caja. Antes de terminar valida `/health`, protocolo LAN `2` y
+  ejecuta el emparejamiento seguro contra el servidor.
+- La identidad resultante se guarda por computadora con DPAPI en el perfil de
+  máquina usado por JetVenta. Las actualizaciones conservan la modalidad y el
+  emparejamiento existentes.
+- Si falla el emparejamiento después de copiar los archivos, se conserva la
+  modalidad como pendiente y la siguiente ejecución solicita otro código sin
+  convertir la computadora en servidor.

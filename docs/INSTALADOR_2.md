@@ -2,24 +2,42 @@
 
 Revisión técnica: 13 de agosto de 2026.
 
-El producto se distribuye en un solo `Setup.exe` autocontenido para Windows x64. El paquete incluye el cliente WPF, la API ASP.NET Core, PostgreSQL portable y Microsoft Visual C++ Redistributable. El usuario no instala .NET, PostgreSQL ni otras dependencias manualmente.
+El producto se distribuye en un solo `Setup.exe` autocontenido para Windows x64. El mismo ejecutable instala una **caja principal / servidor** o una **caja adicional**, según la modalidad elegida en una instalación nueva.
+
+## Modalidades
+
+### Caja principal / servidor
+
+Instala JetVenta, API ASP.NET Core, PostgreSQL portable, servicios de Windows,
+regla de Firewall privada para TCP 5000 y Microsoft Visual C++ Redistributable.
+Es la única computadora que conserva la base de datos y atiende las cajas de la
+red local.
+
+### Caja adicional
+
+Instala JetVenta y las dependencias de Windows necesarias. No instala ni copia
+PostgreSQL, API, scripts de servidor, servicios de Windows o regla de Firewall.
+Durante la instalación se solicita la dirección y puerto de la caja principal,
+un código temporal de seis dígitos generado por un administrador y el nombre de
+la caja. El instalador comprueba `/health`, compatibilidad de protocolo LAN y
+empareja el equipo antes de habilitar **Abrir JetVenta**.
+
+La modalidad se guarda en
+`C:\ProgramData\PuntoDeVenta\config\installation-mode.json`. Las
+actualizaciones la conservan automáticamente. Las instalaciones anteriores a
+3.3.6 sin ese archivo se consideran caja principal para preservar su
+comportamiento.
 
 ## Orden de instalación
 
-1. Solicitar elevación administrativa.
-2. Aceptar términos y elegir accesos directos.
-3. Extraer el paquete interno en una carpeta temporal.
-4. Detectar Microsoft Visual C++ x64 e instalarlo solo cuando falte.
-5. Detectar una instalación anterior y detener sus servicios.
-6. Copiar o actualizar archivos en `C:\Program Files\JetVenta`.
-7. Copiar el propio `Setup.exe` para reparación y desinstalación.
-8. Crear o conservar el clúster PostgreSQL en `C:\ProgramData\PuntoDeVenta\postgresql\data`.
-9. Crear o conservar la base `punto_venta`, el usuario técnico y la conexión protegida con DPAPI.
-10. Crear o actualizar los servicios `PuntoDeVentaPostgreSQL` y `PuntoDeVentaApi`.
-11. Pasar al servicio API la ruta absoluta de `connection.bin` y el puerto, sin depender de variables creadas durante la misma instalación.
-12. Esperar una respuesta correcta de `http://127.0.0.1:5000/health`.
-13. Registrar el producto en Aplicaciones instaladas y crear los accesos elegidos.
-14. Mostrar `Abrir JetVenta` solamente después de completar toda la instalación.
+1. Solicitar elevación administrativa y aceptar términos.
+2. En una instalación nueva, elegir modalidad y accesos directos.
+3. Instalar Visual C++ x64 solo cuando falte.
+4. Copiar o actualizar los archivos permitidos por la modalidad en `C:\Program Files\JetVenta`.
+5. En caja principal, crear o conservar clúster, base, API, servicios, Firewall y comprobar `http://127.0.0.1:5000/health`.
+6. En caja adicional, comprobar la caja principal y ejecutar el emparejamiento LAN antes de guardar la identidad DPAPI del equipo.
+7. Registrar el producto, tipo de archivo `.jv` y accesos elegidos.
+8. Mostrar `Abrir JetVenta` solamente después de completar la modalidad seleccionada.
 
 La aplicación, no el instalador, presenta el asistente inicial. El asistente crea transaccionalmente la tienda, caja y administrador. Después permite decidir si el inventario se importará, se capturará manualmente o se omitirá.
 
@@ -32,6 +50,12 @@ Ejecutar una versión nueva de `Setup.exe` sobre la instalación existente. No e
 - `connection.bin` y `postgres-admin.bin`.
 - Tienda, usuarios, productos, ventas y migraciones aplicadas.
 - Regla de firewall válida y servicios existentes, actualizando su configuración cuando corresponda.
+- Modalidad de instalación y, en caja adicional, identidad emparejada por computadora.
+
+Una actualización de caja adicional no instala ni reinicia servicios del
+servidor. Si un primer emparejamiento no llegó a completarse, el instalador
+conserva la modalidad pendiente y solicita un código temporal nuevo al volver a
+ejecutarse.
 
 Si existe una conexión protegida válida, la reparación recupera su contraseña y la vuelve a aplicar al rol `pos_app`. Esto corrige instalaciones incompletas sin rotar la credencial, recrear la base ni perder datos.
 
@@ -84,3 +108,8 @@ Antes de declarar el instalador listo para producción deben registrarse resulta
 - Asistente inicial, login y creación de tienda.
 - Desinstalación conservando `ProgramData` y reinstalación reconociendo la tienda.
 - Puerto 5000 ocupado, disco insuficiente y servicio detenido abruptamente.
+- Caja adicional limpia: confirmar que no aparecen servicios `PuntoDeVentaApi`
+  ni `PuntoDeVentaPostgreSQL`, no se copia `postgresql` ni `api`, y el cliente
+  inicia con el servidor emparejado.
+- Actualización de una caja adicional: confirmar que conserva modalidad,
+  servidor y token de dispositivo sin volver a pedir código temporal.

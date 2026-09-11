@@ -3,9 +3,12 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO.Compression;
+using System.Net.Http.Json;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
@@ -24,6 +27,8 @@ public sealed class InstallerForm : Form
     private readonly bool _uninstall;
     private readonly bool _existingInstallation;
     private readonly string? _installedVersion;
+    private readonly InstallationProfile _installationProfile;
+    private InstallationMode _installationMode;
     private readonly CheckBox _terms = CreateCheckBox("Acepto los términos y condiciones de JetVenta");
     private readonly CheckBox _desktopShortcut = CreateCheckBox("Crear acceso directo en el escritorio", true);
     private readonly CheckBox _startShortcut = CreateCheckBox("Crear acceso directo en el menú Inicio", true);
@@ -37,6 +42,14 @@ public sealed class InstallerForm : Form
     private readonly Label _activityTitle = CreateLabel(string.Empty, Point.Empty, Size.Empty, 19, FontStyle.Bold, Color.White);
     private readonly Label _activityDescription = CreateLabel(string.Empty, Point.Empty, Size.Empty, 10, FontStyle.Regular, Color.FromArgb(161, 193, 219));
     private readonly Label _progressValue = CreateLabel("0%", Point.Empty, Size.Empty, 10, FontStyle.Bold, Color.FromArgb(77, 209, 235));
+    private readonly RadioButton _serverMode = CreateModeRadio("Caja principal / servidor");
+    private readonly RadioButton _additionalMode = CreateModeRadio("Caja adicional");
+    private readonly Label _modeStatus = CreateLabel(string.Empty, Point.Empty, Size.Empty, 9, FontStyle.Regular, Color.FromArgb(137, 169, 195));
+    private readonly TextBox _serverAddress = CreateInput("192.168.1.10");
+    private readonly TextBox _serverPort = CreateInput("5000");
+    private readonly TextBox _pairingCode = CreateInput("Código de 6 dígitos");
+    private readonly TextBox _registerName = CreateInput("Nombre de esta caja");
+    private readonly List<Control> _additionalControls = [];
     private bool _busy;
     private bool _completed;
 
@@ -45,8 +58,10 @@ public sealed class InstallerForm : Form
         _uninstall = uninstall;
         _existingInstallation = !uninstall && HasExistingInstallation();
         _installedVersion = GetInstalledVersion();
+        _installationProfile = _existingInstallation ? InstallationProfileStore.ReadOrDefault() : new InstallationProfile(1, InstallationMode.Server);
+        _installationMode = _installationProfile.Mode;
         Text = uninstall ? "Desinstalar JetVenta" : "Instalación de JetVenta";
-        ClientSize = new Size(920, 670);
+        ClientSize = new Size(1020, 760);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -58,8 +73,8 @@ public sealed class InstallerForm : Form
         if (_uninstall) BuildUninstallLayout(); else BuildInstallLayout();
         _summaryControls.AddRange(Controls.Cast<Control>().Skip(summaryStart));
         _action.Text = uninstall ? "Desinstalar" : _existingInstallation ? "Actualizar" : "Instalar";
-        _action.SetBounds(704, 608, 174, 38);
-        _cancel.SetBounds(598, 608, 96, 38);
+        _action.SetBounds(804, 698, 174, 38);
+        _cancel.SetBounds(698, 698, 96, 38);
         _action.Click += OnActionClick;
         _cancel.Click += OnCancelClick;
         _activityTitle.Visible = false;
@@ -83,40 +98,76 @@ public sealed class InstallerForm : Form
         Controls.Add(CreateLabel("INSTALACIÓN DE JETVENTA", new Point(307, 39), new Size(550, 34), 25, FontStyle.Bold, Color.White));
         Controls.Add(CreateLabel("Instalador autocontenido para Windows 10 y Windows 11 de 64 bits", new Point(309, 78), new Size(550, 24), 11, FontStyle.Regular, Color.FromArgb(158, 192, 220)));
         Controls.Add(CreateLabel("Todo lo necesario para operar se instala y configura en este equipo.", new Point(309, 104), new Size(550, 24), 10, FontStyle.Regular, Color.FromArgb(117, 155, 186)));
-        Controls.Add(new Panel { BackColor = Color.FromArgb(34, 71, 101), Location = new Point(30, 156), Size = new Size(860, 1) });
+        Controls.Add(new Panel { BackColor = Color.FromArgb(34, 71, 101), Location = new Point(30, 156), Size = new Size(960, 1) });
     }
 
     private void BuildInstallLayout()
     {
-        Controls.Add(CreateSectionTitle("Componentes incluidos", new Point(30, 180)));
-        AddComponentRow("Base de datos local", "PostgreSQL protegido para la tienda", ComponentIconKind.Database, 30, 215);
-        AddComponentRow("Servicio de JetVenta", "API local y procesos de operación", ComponentIconKind.Services, 30, 255);
-        AddComponentRow("Cliente de escritorio", "Ventas, inventario, usuarios y reportes", ComponentIconKind.Desktop, 30, 295);
-        AddComponentRow("Compatibilidad de Windows", "Microsoft Visual C++ Redistributable", ComponentIconKind.System, 30, 335);
+        Controls.Add(CreateSectionTitle("Tipo de instalación", new Point(30, 180)));
+        _serverMode.SetBounds(30, 213, 390, 28);
+        _additionalMode.SetBounds(30, 266, 390, 28);
+        var serverHint = CreateLabel("Instala JetVenta, PostgreSQL, API, servicios y acceso de red privada.", new Point(57, 238), new Size(400, 24), 9, FontStyle.Regular, Color.FromArgb(142, 177, 205));
+        var additionalHint = CreateLabel("Instala JetVenta y Windows necesarios; se conecta a una caja principal existente.", new Point(57, 291), new Size(400, 28), 9, FontStyle.Regular, Color.FromArgb(142, 177, 205));
+        _modeStatus.SetBounds(30, 321, 420, 38);
+        _serverMode.CheckedChanged += (_, _) => { if (_serverMode.Checked) SetInstallationMode(InstallationMode.Server); };
+        _additionalMode.CheckedChanged += (_, _) => { if (_additionalMode.Checked) SetInstallationMode(InstallationMode.AdditionalRegister); };
+        Controls.AddRange([_serverMode, _additionalMode, serverHint, additionalHint, _modeStatus]);
 
-        Controls.Add(CreateSectionTitle("Acuerdo de licencia", new Point(475, 180)));
-        _terms.SetBounds(475, 214, 325, 42);
-        var viewTerms = new LinkLabel { Text = "Ver términos y condiciones", Location = new Point(806, 225), Size = new Size(84, 30), LinkColor = Color.FromArgb(74, 205, 237), ActiveLinkColor = Color.White, VisitedLinkColor = Color.FromArgb(74, 205, 237), Font = new Font("Segoe UI", 9f, FontStyle.Underline), TextAlign = ContentAlignment.MiddleLeft };
+        Controls.Add(CreateSectionTitle("Componentes incluidos", new Point(30, 374)));
+        AddComponentRow("Cliente de escritorio", "Ventas, inventario, usuarios y reportes", ComponentIconKind.Desktop, 30, 408);
+        AddComponentRow("Compatibilidad de Windows", "Microsoft Visual C++ Redistributable", ComponentIconKind.System, 30, 448);
+        AddComponentRow("Base y servicio locales", "Sólo se agregan en caja principal / servidor", ComponentIconKind.Database, 30, 488);
+
+        Controls.Add(CreateSectionTitle("Acuerdo de licencia", new Point(500, 180)));
+        _terms.SetBounds(500, 214, 310, 42);
+        var viewTerms = new LinkLabel { Text = "Ver términos y condiciones", Location = new Point(816, 225), Size = new Size(174, 30), LinkColor = Color.FromArgb(74, 205, 237), ActiveLinkColor = Color.White, VisitedLinkColor = Color.FromArgb(74, 205, 237), Font = new Font("Segoe UI", 9f, FontStyle.Underline), TextAlign = ContentAlignment.MiddleLeft };
         viewTerms.Click += (_, _) => ShowTerms();
         Controls.AddRange([_terms, viewTerms]);
 
-        Controls.Add(CreateSectionTitle("Opciones de acceso", new Point(30, 385)));
-        _desktopShortcut.SetBounds(30, 419, 355, 24);
-        _startShortcut.SetBounds(30, 448, 355, 24);
+        AddAdditionalControl(CreateSectionTitle("Conexión de caja adicional", new Point(500, 277)));
+        AddAdditionalControl(CreateLabel("Dirección del servidor", new Point(500, 310), new Size(205, 18), 9, FontStyle.Bold, Color.FromArgb(218, 232, 244)));
+        _serverAddress.SetBounds(500, 332, 300, 31);
+        _serverPort.SetBounds(810, 332, 80, 31);
+        AddAdditionalControl(_serverAddress); AddAdditionalControl(_serverPort);
+        AddAdditionalControl(CreateLabel("Código temporal generado por el administrador", new Point(500, 373), new Size(390, 18), 9, FontStyle.Bold, Color.FromArgb(218, 232, 244)));
+        _pairingCode.SetBounds(500, 395, 185, 31);
+        _pairingCode.MaxLength = 6;
+        _pairingCode.CharacterCasing = CharacterCasing.Upper;
+        AddAdditionalControl(_pairingCode);
+        AddAdditionalControl(CreateLabel("Nombre de esta caja", new Point(700, 373), new Size(190, 18), 9, FontStyle.Bold, Color.FromArgb(218, 232, 244)));
+        _registerName.SetBounds(700, 395, 190, 31);
+        _registerName.MaxLength = 80;
+        AddAdditionalControl(_registerName);
+        AddAdditionalControl(CreateLabel("Se comprobará la conexión y se emparejará este equipo antes de terminar la instalación.", new Point(500, 433), new Size(420, 34), 9, FontStyle.Regular, Color.FromArgb(137, 169, 195)));
+
+        Controls.Add(CreateSectionTitle("Opciones de acceso", new Point(30, 540)));
+        _desktopShortcut.SetBounds(30, 572, 355, 24);
+        _startShortcut.SetBounds(30, 600, 355, 24);
         _startWithWindows.Checked = IsAutomaticStartEnabled();
-        _startWithWindows.SetBounds(30, 477, 355, 24);
+        _startWithWindows.SetBounds(30, 628, 355, 24);
         Controls.AddRange([_desktopShortcut, _startShortcut, _startWithWindows]);
 
-        Controls.Add(CreateSectionTitle("Ubicación de instalación", new Point(475, 277)));
-        Controls.Add(new TextBox { Text = _installRoot, ReadOnly = true, TabStop = false, Location = new Point(475, 310), Size = new Size(415, 31), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.FromArgb(25, 43, 63), ForeColor = Color.FromArgb(219, 234, 247), Font = new Font("Segoe UI", 10f), Padding = new Padding(9, 4, 9, 4) });
-        Controls.Add(CreateLabel("La ruta es fija para proteger actualizaciones, servicios y respaldos.", new Point(475, 346), new Size(415, 30), 9, FontStyle.Regular, Color.FromArgb(137, 169, 195)));
+        Controls.Add(CreateSectionTitle("Ubicación de instalación", new Point(500, 500)));
+        Controls.Add(new TextBox { Text = _installRoot, ReadOnly = true, TabStop = false, Location = new Point(500, 532), Size = new Size(490, 31), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.FromArgb(25, 43, 63), ForeColor = Color.FromArgb(219, 234, 247), Font = new Font("Segoe UI", 10f), Padding = new Padding(9, 4, 9, 4) });
+        Controls.Add(CreateLabel("La ruta es fija para proteger las actualizaciones y la identidad de esta caja.", new Point(500, 568), new Size(490, 24), 9, FontStyle.Regular, Color.FromArgb(137, 169, 195)));
 
-        Controls.Add(CreateSectionTitle("Información de la instalación", new Point(475, 390)));
-        Controls.Add(CreateLabel("Se revisarán los componentes existentes y solo se instalarán o actualizarán los que hagan falta. Al finalizar, JetVenta abrirá la configuración inicial si la tienda aún no existe.", new Point(475, 424), new Size(415, 70), 10, FontStyle.Regular, Color.FromArgb(206, 221, 234)));
+        _status.SetBounds(30, 660, 960, 22);
+        _progress.SetBounds(30, 684, 960, 10);
 
-        _status.SetBounds(30, 512, 860, 22);
-        _progress.SetBounds(30, 539, 860, 18);
-        _details.SetBounds(30, 565, 860, 35);
+        _serverMode.Checked = _installationMode == InstallationMode.Server;
+        _additionalMode.Checked = _installationMode == InstallationMode.AdditionalRegister;
+        _registerName.Text = Environment.MachineName;
+        if (_installationProfile.Mode == InstallationMode.AdditionalRegister && Uri.TryCreate(_installationProfile.ServerBaseUrl, UriKind.Absolute, out var savedServer))
+        {
+            _serverAddress.Text = savedServer.Host;
+            _serverPort.Text = savedServer.Port.ToString();
+        }
+        if (_existingInstallation)
+        {
+            _serverMode.Enabled = false;
+            _additionalMode.Enabled = false;
+        }
+        UpdateModePresentation();
     }
 
     private void BuildUninstallLayout()
@@ -163,6 +214,53 @@ public sealed class InstallerForm : Form
         Font = new Font("Segoe UI", 10f), FlatAppearance = { BorderColor = Color.FromArgb(66, 101, 130), BorderSize = 1 }
     };
 
+    private static RadioButton CreateModeRadio(string text) => new()
+    {
+        Text = text,
+        AutoSize = false,
+        ForeColor = Color.FromArgb(238, 247, 253),
+        BackColor = Color.Transparent,
+        Font = new Font("Segoe UI", 11f, FontStyle.Bold),
+        UseVisualStyleBackColor = false
+    };
+
+    private static TextBox CreateInput(string placeholder) => new()
+    {
+        PlaceholderText = placeholder,
+        BorderStyle = BorderStyle.FixedSingle,
+        BackColor = Color.FromArgb(25, 43, 63),
+        ForeColor = Color.FromArgb(219, 234, 247),
+        Font = new Font("Segoe UI", 10f),
+        Padding = new Padding(8, 4, 8, 4)
+    };
+
+    private void AddAdditionalControl(Control control)
+    {
+        _additionalControls.Add(control);
+        Controls.Add(control);
+    }
+
+    private void SetInstallationMode(InstallationMode mode)
+    {
+        if (_existingInstallation) return;
+        _installationMode = mode;
+        UpdateModePresentation();
+    }
+
+    private void UpdateModePresentation()
+    {
+        var additional = _installationMode == InstallationMode.AdditionalRegister;
+        foreach (var control in _additionalControls) control.Visible = additional && (!_existingInstallation || _installationProfile.PairedAtUtc is null);
+        _modeStatus.ForeColor = Color.FromArgb(137, 169, 195);
+        _modeStatus.Text = _existingInstallation
+            ? additional && _installationProfile.PairedAtUtc is null
+                ? "Instalación adicional pendiente de emparejar: captura un código temporal nuevo para terminarla."
+                : $"Actualización: se conservará la modalidad {(additional ? "caja adicional" : "caja principal / servidor")}."
+            : additional
+                ? "Esta computadora no instalará PostgreSQL, API, servicios ni regla de red."
+                : "Esta computadora alojará la tienda y atenderá a las cajas adicionales de la red privada.";
+    }
+
     private static Image? LoadBanner()
     {
         using var stream = typeof(InstallerForm).Assembly.GetManifestResourceStream("JetVenta.Assets.jetventa-banner.png");
@@ -183,6 +281,21 @@ public sealed class InstallerForm : Form
         {
             SetProgress(_progress.Value, "Debes aceptar los términos y condiciones para continuar.");
             return;
+        }
+
+        if (!_uninstall && _installationMode == InstallationMode.AdditionalRegister && (!_existingInstallation || _installationProfile.PairedAtUtc is null))
+        {
+            try
+            {
+                var connection = await ValidateAdditionalConnectionAsync();
+                InstallationProfileStore.Save(new InstallationProfile(1, InstallationMode.AdditionalRegister, connection.BaseUrl));
+            }
+            catch (Exception exception)
+            {
+                _modeStatus.ForeColor = Color.FromArgb(244, 142, 142);
+                _modeStatus.Text = exception.Message;
+                return;
+            }
         }
 
         _busy = true;
@@ -230,19 +343,21 @@ public sealed class InstallerForm : Form
                 : "Instalando JetVenta";
         _activityDescription.Text = _uninstall
             ? "Estamos retirando el programa. La tienda, los datos y los respaldos se conservarán."
-            : "Estamos preparando los componentes y servicios necesarios para operar la tienda.";
-        _activityTitle.SetBounds(30, 190, 860, 34);
-        _activityDescription.SetBounds(30, 229, 860, 25);
-        _status.SetBounds(30, 274, 760, 27);
+            : _installationMode == InstallationMode.AdditionalRegister
+                ? "Estamos preparando la caja y validando su conexión segura con el servidor."
+                : "Estamos preparando los componentes y servicios necesarios para operar la tienda.";
+        _activityTitle.SetBounds(30, 190, 960, 34);
+        _activityDescription.SetBounds(30, 229, 960, 25);
+        _status.SetBounds(30, 274, 860, 27);
         _status.Font = new Font("Segoe UI", 12f, FontStyle.Bold);
         _status.ForeColor = Color.FromArgb(233, 244, 252);
-        _progressValue.SetBounds(800, 274, 90, 27);
+        _progressValue.SetBounds(900, 274, 90, 27);
         _progressValue.TextAlign = ContentAlignment.MiddleRight;
-        _progress.SetBounds(30, 313, 860, 20);
-        _details.SetBounds(30, 361, 860, 190);
+        _progress.SetBounds(30, 313, 960, 20);
+        _details.SetBounds(30, 361, 960, 250);
         _details.Font = new Font("Consolas", 10f);
-        _cancel.SetBounds(598, 592, 96, 38);
-        _action.SetBounds(704, 592, 174, 38);
+        _cancel.SetBounds(698, 682, 96, 38);
+        _action.SetBounds(804, 682, 174, 38);
         _activityTitle.Visible = true;
         _activityDescription.Visible = true;
         _progressValue.Visible = true;
@@ -286,7 +401,14 @@ public sealed class InstallerForm : Form
                 SetProgress(52, "Microsoft Visual C++ ya está instalado; se conserva.");
             }
 
-            await StopServicesForUpdateAsync();
+            if (_installationMode == InstallationMode.Server)
+            {
+                await StopServicesForUpdateAsync();
+            }
+            else
+            {
+                SetProgress(56, "Caja adicional: no se instalan ni detienen servicios locales.");
+            }
             if (_existingInstallation)
             {
                 await UpdatePayloadAsync();
@@ -314,20 +436,44 @@ public sealed class InstallerForm : Form
             }
         }
 
-        SetProgress(84, "Verificando PostgreSQL, base de datos y API...");
-        await RunPowerShellAsync(Path.Combine(_installRoot, "install-production.ps1"), string.Empty);
+        if (_installationMode == InstallationMode.Server)
+        {
+            SetProgress(84, "Verificando PostgreSQL, base de datos y API...");
+            await RunPowerShellAsync(Path.Combine(_installRoot, "install-production.ps1"), string.Empty);
+            InstallationProfileStore.Save(new InstallationProfile(1, InstallationMode.Server));
+        }
+        else if (!_existingInstallation || _installationProfile.PairedAtUtc is null)
+        {
+            SetProgress(84, "Emparejando esta caja con el servidor configurado...");
+            var connection = await ValidateAdditionalConnectionAsync();
+            await PairAdditionalRegisterAsync(connection);
+            InstallationProfileStore.Save(new InstallationProfile(1, InstallationMode.AdditionalRegister, connection.BaseUrl, DateTimeOffset.UtcNow));
+        }
+        else
+        {
+            SetProgress(84, "Actualizando archivos de la caja adicional; se conserva su emparejamiento.");
+        }
         RegisterInstallation();
         RegisterLicenseFileType();
         CreateShortcuts();
         ConfigureAutomaticStart(_startWithWindows.Checked);
-        SetProgress(100, "Instalación terminada. Ya puedes abrir la configuración inicial.");
+        SetProgress(100, _installationMode == InstallationMode.AdditionalRegister
+            ? "Caja adicional instalada y emparejada. Ya puedes abrir JetVenta."
+            : "Instalación terminada. Ya puedes abrir la configuración inicial.");
     }
 
     private async Task UninstallAsync()
     {
         EnsureDesktopClosedForUpdate();
-        var script = Path.Combine(_installRoot, "install-production.ps1");
-        if (File.Exists(script)) await RunPowerShellAsync(script, "-Uninstall");
+        if (_installationProfile.Mode == InstallationMode.Server)
+        {
+            var script = Path.Combine(_installRoot, "install-production.ps1");
+            if (File.Exists(script)) await RunPowerShellAsync(script, "-Uninstall");
+        }
+        else
+        {
+            Log("Caja adicional: no se modifican servicios, PostgreSQL ni reglas de red del servidor.");
+        }
         Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PuntoDeVenta", false);
         UnregisterLicenseFileType();
         DeleteShortcuts();
@@ -423,7 +569,9 @@ public sealed class InstallerForm : Form
 
     private async Task CopyPayloadAsync(string source)
     {
-        var files = Directory.GetFiles(source, "*", SearchOption.AllDirectories);
+        var files = Directory.GetFiles(source, "*", SearchOption.AllDirectories)
+            .Where(file => ShouldInstallPayloadEntry(Path.GetRelativePath(source, file)))
+            .ToArray();
         for (var index = 0; index < files.Length; index++)
         {
             var relative = Path.GetRelativePath(source, files[index]);
@@ -445,6 +593,11 @@ public sealed class InstallerForm : Form
         {
             var entry = entries[index];
             var relative = entry.FullName.Replace('/', Path.DirectorySeparatorChar);
+            if (!ShouldInstallPayloadEntry(relative))
+            {
+                Log($"Caja adicional: se omite componente de servidor: {relative}");
+                continue;
+            }
             var target = Path.GetFullPath(Path.Combine(_installRoot, relative));
             var installRoot = Path.GetFullPath(_installRoot) + Path.DirectorySeparatorChar;
             if (!target.StartsWith(installRoot, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("El paquete interno contiene una ruta inválida.");
@@ -467,6 +620,132 @@ public sealed class InstallerForm : Form
             ? "Actualización verificada: todos los archivos instalados ya estaban actualizados."
             : $"Actualización aplicada: se reemplazaron o agregaron {changed} archivo(s); los demás se conservaron.");
     }
+
+    private bool ShouldInstallPayloadEntry(string relativePath)
+    {
+        if (_installationMode == InstallationMode.Server) return true;
+        var normalized = relativePath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+        return !normalized.StartsWith($"api{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) &&
+               !normalized.StartsWith($"postgresql{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(normalized, "install-production.ps1", StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(normalized, "restore-production-backup.ps1", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<AdditionalServerConnection> ValidateAdditionalConnectionAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_serverAddress.Text)) throw new InvalidOperationException("Indica la dirección de la caja principal.");
+        if (!int.TryParse(_serverPort.Text, out var port) || port is < 1 or > 65535) throw new InvalidOperationException("El puerto del servidor debe estar entre 1 y 65535.");
+        if (_pairingCode.Text.Trim().Length != 6 || _pairingCode.Text.Any(character => !char.IsDigit(character))) throw new InvalidOperationException("Captura el código temporal de seis dígitos generado por el administrador.");
+        if (string.IsNullOrWhiteSpace(_registerName.Text)) throw new InvalidOperationException("Indica el nombre de esta caja.");
+
+        var server = BuildServerUri(_serverAddress.Text, port);
+        if (IsLoopback(server)) throw new InvalidOperationException("Una caja adicional debe indicar la dirección de otra computadora de la red, no localhost.");
+        using var client = CreatePairingClient(server);
+        try
+        {
+            using var health = await client.GetAsync("health");
+            if (!health.IsSuccessStatusCode) throw new InvalidOperationException($"La caja principal respondió {(int)health.StatusCode} al comprobar su estado.");
+            using var infoResponse = await client.GetAsync("api/lan/info");
+            if (!infoResponse.IsSuccessStatusCode) throw new InvalidOperationException($"La caja principal respondió {(int)infoResponse.StatusCode} al comprobar la comunicación LAN.");
+            var info = await infoResponse.Content.ReadFromJsonAsync<InstallerLanInfo>();
+            if (info is null) throw new InvalidOperationException("La caja principal no devolvió la información de comunicación LAN.");
+            if (info.ProtocolVersion != 2) throw new InvalidOperationException($"La caja principal usa protocolo {info.ProtocolVersion}. Actualiza JetVenta en el servidor antes de instalar esta caja.");
+            return new AdditionalServerConnection(server.ToString().TrimEnd('/'), _pairingCode.Text.Trim(), _registerName.Text.Trim());
+        }
+        catch (HttpRequestException exception)
+        {
+            throw new InvalidOperationException("No se pudo contactar la caja principal. Revisa que ambas computadoras estén en la red privada y que la dirección y el puerto sean correctos.", exception);
+        }
+        catch (TaskCanceledException exception)
+        {
+            throw new InvalidOperationException("La caja principal tardó demasiado en responder. Revisa la red y vuelve a intentarlo.", exception);
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidOperationException("La caja principal devolvió una respuesta inválida. Actualiza JetVenta en el servidor e inténtalo de nuevo.", exception);
+        }
+    }
+
+    private async Task PairAdditionalRegisterAsync(AdditionalServerConnection connection)
+    {
+        using var client = CreatePairingClient(new Uri(connection.BaseUrl));
+        using var response = await client.PostAsJsonAsync("api/lan/pair", new
+        {
+            code = connection.PairingCode,
+            deviceName = Environment.MachineName,
+            registerName = connection.RegisterName
+        });
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(await ReadServerErrorAsync(response, "No se pudo emparejar la caja. Revisa el código temporal y el nombre de caja."));
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<InstallerPairingResult>();
+        if (result is null || string.IsNullOrWhiteSpace(result.DeviceToken)) throw new InvalidOperationException("La caja principal no devolvió la identidad segura de esta caja.");
+        SavePairedMachineSettings(connection.BaseUrl, result);
+        Log($"Caja adicional emparejada correctamente como {result.RegisterName}.");
+    }
+
+    private static Uri BuildServerUri(string address, int port)
+    {
+        var value = address.Trim();
+        if (!value.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !value.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) value = $"http://{value}";
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(uri.Host)) throw new InvalidOperationException("La dirección del servidor no es válida.");
+        return new UriBuilder(uri) { Port = port }.Uri;
+    }
+
+    private static bool IsLoopback(Uri server) =>
+        string.Equals(server.Host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+        System.Net.IPAddress.TryParse(server.Host, out var address) && System.Net.IPAddress.IsLoopback(address);
+
+    private static HttpClient CreatePairingClient(Uri server)
+    {
+        var client = new HttpClient { BaseAddress = new Uri(server.ToString().TrimEnd('/') + "/"), Timeout = TimeSpan.FromSeconds(8) };
+        client.DefaultRequestHeaders.TryAddWithoutValidation("X-JetVenta-Lan-Protocol", "2");
+        return client;
+    }
+
+    private static async Task<string> ReadServerErrorAsync(HttpResponseMessage response, string fallback)
+    {
+        try
+        {
+            var body = await response.Content.ReadFromJsonAsync<InstallerError>();
+            return string.IsNullOrWhiteSpace(body?.Message) ? fallback : body.Message;
+        }
+        catch (JsonException) { return fallback; }
+    }
+
+    private static void SavePairedMachineSettings(string baseUrl, InstallerPairingResult result)
+    {
+        var settingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "client", "machine-settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+        var protectedToken = Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(result.DeviceToken), null, DataProtectionScope.LocalMachine));
+        var settings = new InstallerMachineSettings(baseUrl, result.DeviceId, result.StoreId, result.RegisterId, protectedToken);
+        var temporary = $"{settingsPath}.{Guid.NewGuid():N}.tmp";
+        File.WriteAllText(temporary, JsonSerializer.Serialize(settings));
+        File.Move(temporary, settingsPath, true);
+    }
+
+    private sealed record AdditionalServerConnection(string BaseUrl, string PairingCode, string RegisterName);
+    private sealed record InstallerLanInfo(int ProtocolVersion, string ApiVersion, string Machine);
+    private sealed record InstallerPairingResult(Guid DeviceId, Guid StoreId, Guid RegisterId, string DeviceToken, string RegisterName);
+    private sealed record InstallerError(string? Message);
+    private sealed record InstallerMachineSettings(
+        string BaseUrl,
+        Guid DeviceId,
+        Guid StoreId,
+        Guid RegisterId,
+        string DeviceTokenProtected,
+        string? PrinterName = null,
+        string? PrinterFontFamily = null,
+        double PrinterFontSize = 9d,
+        bool UseNormalTotals = false,
+        int PrinterTicketWidthMm = 80,
+        object? BarcodeScanner = null,
+        bool? PrintingEnabled = null,
+        int SettingsVersion = 4,
+        object? CashDrawer = null,
+        object? Scale = null);
 
     private void RemoveLegacyDesktopFiles()
     {

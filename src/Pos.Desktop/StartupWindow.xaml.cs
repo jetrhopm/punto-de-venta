@@ -66,10 +66,19 @@ public partial class StartupWindow : Window
 
             if (!available)
             {
-                SetStatus(IsLocalApi() ? "JetVenta esta intentando iniciar sus servicios locales..." : "JetVenta esta intentando conectar con el servidor configurado...", 25, "Preparando", "Recuperando", "Pendiente");
-                await TryStartLocalServicesAsync(forceRepair);
-                available = await WaitForApiAsync();
-                recoveredServices = available;
+                if (IsLocalApi())
+                {
+                    SetStatus("JetVenta esta intentando iniciar sus servicios locales...", 25, "Preparando", "Recuperando", "Pendiente");
+                    await TryStartLocalServicesAsync(forceRepair);
+                    available = await WaitForApiAsync();
+                    recoveredServices = available;
+                }
+                else
+                {
+                    SetStatus("No se pudo conectar con la caja principal configurada. Revisa la red o la dirección del servidor.", 100, "Sin conexión", "Revisar", "Pendiente");
+                    ErrorPanel.Visibility = Visibility.Visible;
+                    return;
+                }
             }
 
             if (!available)
@@ -83,11 +92,14 @@ public partial class StartupWindow : Window
             var setup = await ReadSetupStatusAsync();
             if (setup is null)
             {
-                SetStatus("La base de datos no responde. JetVenta intentara recuperar sus servicios...", 78, "Revisando", "Recuperando", "Pendiente");
-                await TryStartLocalServicesAsync(forceRepair);
-                available = await WaitForApiAsync();
-                recoveredServices = recoveredServices || available;
-                setup = available ? await ReadSetupStatusAsync() : null;
+                if (IsLocalApi())
+                {
+                    SetStatus("La base de datos no responde. JetVenta intentara recuperar sus servicios...", 78, "Revisando", "Recuperando", "Pendiente");
+                    await TryStartLocalServicesAsync(forceRepair);
+                    available = await WaitForApiAsync();
+                    recoveredServices = recoveredServices || available;
+                    setup = available ? await ReadSetupStatusAsync() : null;
+                }
                 if (setup is null)
                 {
                     SetStatus(IsLocalApi() ? "Los servicios locales no respondieron. Pulsa Reparar servicios aquí o ve a Configuración > Diagnóstico y pulsa Levantar API." : "El servidor configurado no respondió. Ve a Configuración > Diagnóstico o configura otra conexión.", 100, "Sin respuesta", "Revisar", "Pendiente");
