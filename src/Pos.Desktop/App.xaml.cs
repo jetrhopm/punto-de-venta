@@ -14,19 +14,57 @@ namespace Pos.Desktop;
 /// </summary>
 public partial class App : System.Windows.Application
 {
+    private Mutex? _singleInstanceMutex;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        if (!TryAcquireSingleInstance())
+        {
+            MessageBox.Show(
+                "JetVenta ya está abierto en esta computadora. Usa la ventana que ya está en ejecución.",
+                "JetVenta ya está abierto",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            Shutdown();
+            return;
+        }
+
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
-        Exit += (_, _) => BarcodeScannerService.Stop();
+        Exit += OnExit;
         EventManager.RegisterClassHandler(typeof(Window), Keyboard.PreviewKeyDownEvent, new KeyEventHandler(OnWindowPreviewKeyDown));
         EventManager.RegisterClassHandler(typeof(Window), FrameworkElement.LoadedEvent, new RoutedEventHandler(OnWindowLoaded));
 
         var startup = new StartupWindow();
         MainWindow = startup;
         startup.Show();
+    }
+
+    private bool TryAcquireSingleInstance()
+    {
+        _singleInstanceMutex = new Mutex(initiallyOwned: true, @"Global\JetVenta.Desktop.SingleInstance", out var createdNew);
+        if (createdNew) return true;
+
+        _singleInstanceMutex.Dispose();
+        _singleInstanceMutex = null;
+        return false;
+    }
+
+    private void OnExit(object? sender, ExitEventArgs e)
+    {
+        BarcodeScannerService.Stop();
+
+        if (_singleInstanceMutex is null) return;
+        try { _singleInstanceMutex.ReleaseMutex(); }
+        catch (ApplicationException) { }
+        finally
+        {
+            _singleInstanceMutex.Dispose();
+            _singleInstanceMutex = null;
+        }
     }
 
     private static readonly HashSet<Window> WatchedDialogs = [];
