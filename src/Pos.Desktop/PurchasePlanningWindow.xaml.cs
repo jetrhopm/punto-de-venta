@@ -287,7 +287,7 @@ public partial class PurchasePlanningWindow : Window
         if (_orderLines.Count == 0) { MessageText.Text = "Agrega al menos un producto antes de imprimir la lista."; return; }
         if (!ApiClient.IsTicketPrintingAvailable || string.IsNullOrWhiteSpace(ApiClient.PrinterName))
         {
-            MessageText.Text = "Configura y habilita una impresora en Configuración > Impresora antes de imprimir la lista.";
+            ShowResult("Impresora no configurada", "Para imprimir la lista, ve a Configuración > Impresora, habilita el uso de impresora y selecciona una impresora de 58 u 80 mm.", OperationResultKind.Warning);
             return;
         }
 
@@ -326,17 +326,17 @@ public partial class PurchasePlanningWindow : Window
 
     private async void OnPrintSavedOrderClick(object sender, RoutedEventArgs e)
     {
-        if (OrdersGrid.SelectedItem is not OrderRow order) { MessageText.Text = "Selecciona una orden guardada para imprimirla."; return; }
+        if (OrdersGrid.SelectedItem is not OrderRow order) { ShowResult("Selecciona una orden", "Selecciona una orden guardada antes de imprimirla.", OperationResultKind.Information); return; }
         if (!ApiClient.IsTicketPrintingAvailable || string.IsNullOrWhiteSpace(ApiClient.PrinterName))
         {
-            MessageText.Text = "Configura y habilita una impresora en Configuración > Impresora antes de imprimir la orden.";
+            ShowResult("Impresora no configurada", "Para imprimir la orden, ve a Configuración > Impresora, habilita el uso de impresora y selecciona una impresora de 58 u 80 mm.", OperationResultKind.Warning);
             return;
         }
 
         try
         {
             var savedOrder = await GetWithRetryAsync<PurchaseOrderPrintDto>($"/api/purchase-orders/{order.Id}/print");
-            if (savedOrder is null || savedOrder.Lines.Count == 0) { MessageText.Text = "La orden seleccionada no contiene partidas para imprimir."; return; }
+            if (savedOrder is null || savedOrder.Lines.Count == 0) { ShowResult("Orden sin partidas", "La orden seleccionada no contiene artículos para imprimir.", OperationResultKind.Warning); return; }
             var settings = await GetWithRetryAsync<TicketSettingsDto>("/api/ticket-settings");
             var profile = TicketWindowsPrinter.CurrentProfile;
             var footer = string.IsNullOrWhiteSpace(savedOrder.Notes)
@@ -352,7 +352,7 @@ public partial class PurchasePlanningWindow : Window
             TicketWindowsPrinter.Print(ApiClient.PrinterName, ticket, profile, $"Lista de compra {savedOrder.Id:N}");
             MessageText.Text = $"Orden enviada a {ApiClient.PrinterName} con formato de {profile.WidthMm} mm.";
         }
-        catch (Exception exception) { MessageText.Text = $"No se pudo imprimir la orden: {exception.Message}"; }
+        catch (Exception exception) { ShowResult("Orden no impresa", $"No se pudo imprimir la orden. {exception.Message}", OperationResultKind.Error); }
     }
 
     private async Task LoadOrdersAsync()
@@ -367,16 +367,24 @@ public partial class PurchasePlanningWindow : Window
 
     private async void OnCloseOrderClick(object sender, RoutedEventArgs e)
     {
-        if (OrdersGrid.SelectedItem is not OrderRow order) { MessageText.Text = "Selecciona una orden guardada para cerrarla."; return; }
-        if (order.Status == "Closed") { MessageText.Text = "La orden seleccionada ya está cerrada."; return; }
+        if (OrdersGrid.SelectedItem is not OrderRow order) { ShowResult("Selecciona una orden", "Selecciona una orden guardada antes de cerrarla.", OperationResultKind.Information); return; }
+        if (order.Status == "Closed") { ShowResult("Orden ya cerrada", "La orden seleccionada ya estaba cerrada. Esta acción no modifica inventario.", OperationResultKind.Information); return; }
         try
         {
             using var response = await Client.PostAsync($"/api/purchase-orders/{order.Id}/close", null);
-            if (!response.IsSuccessStatusCode) { MessageText.Text = "No se pudo cerrar la orden."; return; }
-            MessageText.Text = "Orden cerrada. Esta acción no modifica existencias."; await LoadOrdersAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                ShowResult("Orden no cerrada", await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo cerrar la orden."), OperationResultKind.Error);
+                return;
+            }
+            MessageText.Text = "Orden cerrada. Esta acción no modifica existencias.";
+            await LoadOrdersAsync();
+            ShowResult("Orden cerrada", "La orden quedó cerrada. No se modificaron existencias, costos, precios ni ventas.", OperationResultKind.Success);
         }
-        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableRetry; }
+        catch (HttpRequestException) { ShowResult("Orden no cerrada", ConnectionHelp.ApiUnavailableRetry, OperationResultKind.Error); }
     }
+
+    private void ShowResult(string title, string message, OperationResultKind kind) => new OperationResultWindow(title, message, kind) { Owner = this }.ShowDialog();
 
     private void RefreshOrderLines()
     {
