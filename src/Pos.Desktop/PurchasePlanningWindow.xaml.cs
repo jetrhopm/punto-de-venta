@@ -33,8 +33,8 @@ public partial class PurchasePlanningWindow : Window
         _loadingFilters = true;
         try
         {
-            var suppliers = await Client.GetFromJsonAsync<List<SupplierDto>>("/api/suppliers") ?? [];
-            var departments = await Client.GetFromJsonAsync<List<DepartmentDto>>("/api/departments") ?? [];
+            var suppliers = await GetWithRetryAsync<List<SupplierDto>>("/api/suppliers") ?? [];
+            var departments = await GetWithRetryAsync<List<DepartmentDto>>("/api/departments") ?? [];
             SupplierFilterComboBox.ItemsSource = new[] { SupplierOption.All }.Concat(suppliers.Select(item => new SupplierOption(item.Id, item.Name))).ToList();
             OrderSupplierComboBox.ItemsSource = new[] { SupplierOption.None }.Concat(suppliers.Select(item => new SupplierOption(item.Id, item.Name))).ToList();
             DepartmentFilterComboBox.ItemsSource = new[] { DepartmentOption.All }.Concat(departments.Select(item => new DepartmentOption(item.Id, item.Name))).ToList();
@@ -42,7 +42,7 @@ public partial class PurchasePlanningWindow : Window
             OrderSupplierComboBox.SelectedIndex = 0;
             DepartmentFilterComboBox.SelectedIndex = 0;
         }
-        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailable; }
+        catch (HttpRequestException) { MessageText.Text = "JetVenta aún está preparando la conexión. Pulsa Actualizar en unos segundos."; }
         finally { _loadingFilters = false; }
     }
 
@@ -60,12 +60,12 @@ public partial class PurchasePlanningWindow : Window
             var supplier = SupplierFilterComboBox.SelectedItem as SupplierOption;
             var department = DepartmentFilterComboBox.SelectedItem as DepartmentOption;
             var path = $"/api/purchase-planning/suggestions?supplierId={supplier?.Id}&departmentId={department?.Id}";
-            var suggestions = await Client.GetFromJsonAsync<List<SuggestionDto>>(path) ?? [];
+            var suggestions = await GetWithRetryAsync<List<SuggestionDto>>(path) ?? [];
             _suggestions.Clear(); _suggestions.AddRange(suggestions.Select(item => new SuggestionRow(item)));
             SuggestionsGrid.ItemsSource = null; SuggestionsGrid.ItemsSource = _suggestions;
             SuggestionSummaryText.Text = _suggestions.Count == 0 ? "No hay productos con existencia igual o menor al mínimo para este filtro." : $"{_suggestions.Count} producto(s) requieren revisión. Los artículos sin proveedor permanecen disponibles.";
         }
-        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableRetry; }
+        catch (HttpRequestException) { MessageText.Text = "No se pudieron consultar las sugerencias. La API no respondió después de varios intentos; revisa Configuración > Diagnóstico."; }
     }
 
     private void OnAddSelectedClick(object sender, RoutedEventArgs e)
@@ -110,10 +110,10 @@ public partial class PurchasePlanningWindow : Window
     {
         try
         {
-            var orders = await Client.GetFromJsonAsync<List<OrderDto>>("/api/purchase-orders") ?? [];
+            var orders = await GetWithRetryAsync<List<OrderDto>>("/api/purchase-orders") ?? [];
             OrdersGrid.ItemsSource = orders.Select(item => new OrderRow(item)).ToList();
         }
-        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableRetry; }
+        catch (HttpRequestException) { MessageText.Text = "No se pudieron consultar las órdenes. La API no respondió después de varios intentos; revisa Configuración > Diagnóstico."; }
     }
 
     private async void OnCloseOrderClick(object sender, RoutedEventArgs e)
@@ -134,6 +134,21 @@ public partial class PurchasePlanningWindow : Window
         OrderLinesList.ItemsSource = null; OrderLinesList.ItemsSource = _orderLines;
         var total = _orderLines.Sum(item => item.Quantity * item.UnitCost);
         OrderTotalText.Text = _orderLines.Count == 0 ? "Sin productos seleccionados" : $"{_orderLines.Count} partida(s) | Total estimado: ${total:0.00}";
+    }
+
+    private static async Task<T?> GetWithRetryAsync<T>(string path)
+    {
+        HttpRequestException? lastException = null;
+        for (var attempt = 1; attempt <= 4; attempt++)
+        {
+            try { return await Client.GetFromJsonAsync<T>(path); }
+            catch (HttpRequestException exception) when (attempt < 4)
+            {
+                lastException = exception;
+                await Task.Delay(TimeSpan.FromMilliseconds(450 * attempt));
+            }
+        }
+        throw lastException ?? new HttpRequestException("No se pudo conectar con la API.");
     }
 
     private sealed record SupplierDto(Guid Id, string Name);
