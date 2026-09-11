@@ -92,7 +92,8 @@ public partial class App : System.Windows.Application
 
         if (e.Key != Key.Enter || Keyboard.Modifiers != ModifierKeys.None) return;
         if (Keyboard.FocusedElement is TextBox { AcceptsReturn: true } ||
-            Keyboard.FocusedElement is ComboBox { IsDropDownOpen: true }) return;
+            Keyboard.FocusedElement is ComboBox { IsDropDownOpen: true } ||
+            Keyboard.FocusedElement is FrameworkElement { Tag: "CaptureEnter" }) return;
         if (Keyboard.FocusedElement is Button) return;
 
         var primaryButton = FindPrimaryButton(window);
