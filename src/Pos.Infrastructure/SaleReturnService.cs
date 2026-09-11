@@ -18,7 +18,7 @@ public sealed class SaleReturnService(PosDbContext database, KitService kits)
         var authorization = await AuthorizedAsync(token, cancellationToken);
         if (authorization is null) return null;
         var user = authorization.User;
-        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         var existing = await database.Returns.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new ReturnSaleResult(existing.Id, existing.SaleId, existing.Amount, true);
         var sale = await database.Sales.SingleOrDefaultAsync(item => item.Id == command.SaleId && item.Status == "Completed" &&
@@ -36,11 +36,23 @@ public sealed class SaleReturnService(PosDbContext database, KitService kits)
             lines.Add(new ReturnLineRecord { Id = Guid.NewGuid(), ProductId = commandLine.ProductId, Quantity = commandLine.Quantity, UnitPrice = soldLine.UnitPrice, Amount = lineAmount });
         }
         var record = new ReturnRecord { Id = Guid.NewGuid(), SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Amount = decimal.Round(amount, 2), Reason = command.Reason.Trim(), CreatedAtUtc = DateTimeOffset.UtcNow };
+        var replenishments = new List<InventoryReplenishment>();
         foreach (var line in lines)
         {
             line.ReturnId = record.Id;
             var parts = await kits.ExpandAsync(line.ProductId, line.Quantity, cancellationToken) ?? throw new KeyNotFoundException("Producto de devolucion no encontrado.");
-            foreach (var part in parts) { var product = await database.Products.SingleAsync(item => item.Id == part.ProductId, cancellationToken); if (product.IsTemporary) continue; var before = product.Stock; product.Stock = decimal.Round(before + part.Quantity, 3, MidpointRounding.AwayFromZero); database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = part.ProductId, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = part.Quantity, StockBefore = before, StockAfter = product.Stock, Reason = line.ProductId == part.ProductId ? "SaleReturn" : "KitReturn", CreatedAtUtc = record.CreatedAtUtc }); }
+            replenishments.AddRange(parts.Select(part => new InventoryReplenishment(line.ProductId, part.ProductId, part.Quantity)));
+        }
+        var replenishmentProductIds = replenishments.Select(item => item.ProductId).Distinct().ToArray();
+        await InventoryConcurrency.LockProductsAsync(database, replenishmentProductIds, cancellationToken);
+        var products = await database.Products.Where(item => replenishmentProductIds.Contains(item.Id)).ToDictionaryAsync(item => item.Id, cancellationToken);
+        foreach (var replenishment in replenishments)
+        {
+            var product = products[replenishment.ProductId];
+            if (product.IsTemporary) continue;
+            var before = product.Stock;
+            product.Stock = decimal.Round(before + replenishment.Quantity, 3, MidpointRounding.AwayFromZero);
+            database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = replenishment.Quantity, StockBefore = before, StockAfter = product.Stock, Reason = replenishment.SoldProductId == replenishment.ProductId ? "SaleReturn" : "KitReturn", CreatedAtUtc = record.CreatedAtUtc });
         }
         var payments = await database.Payments.Where(item => item.SaleId == sale.Id).ToListAsync(cancellationToken);
         var cashPaid = payments.Where(item => item.Method == "Cash").Sum(item => item.Amount);
@@ -84,4 +96,5 @@ public sealed class SaleReturnService(PosDbContext database, KitService kits)
     }
 
     private sealed record RegisterAuthorization(UserRecord User, Guid RegisterId);
+    private sealed record InventoryReplenishment(Guid SoldProductId, Guid ProductId, decimal Quantity);
 }

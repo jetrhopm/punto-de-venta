@@ -56,3 +56,15 @@
   la transacción serializable existente para descontarlas.
 - La prueba de integración de dos cajas verifica el aislamiento de borrador,
   efectivo y último ticket.
+
+## Incremento 5 terminado: inventario concurrente
+
+- Los movimientos de inventario compartido se serializan por producto dentro
+  de la transacción PostgreSQL, en orden estable para evitar interbloqueos.
+- Ventas, kits, ajustes, compras, importaciones, cancelaciones y devoluciones
+  usan el mismo control antes de cambiar existencias.
+- La venta sigue permitida cuando la existencia registrada es insuficiente;
+  JetVenta informa que debe revisarse el inventario y conserva el kardex
+  acumulado correctamente.
+- El consecutivo de venta se protege por tienda para impedir folios repetidos
+  cuando dos cajas cobran al mismo tiempo.

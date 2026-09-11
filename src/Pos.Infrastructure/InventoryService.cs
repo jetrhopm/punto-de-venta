@@ -120,9 +120,10 @@ public sealed class InventoryService(PosDbContext database)
         if (reason.Length > 80) throw new ArgumentException("El motivo del ajuste no puede superar 80 caracteres.");
         var userId = await GetAuthorizedUserAsync(token, "AdjustInventory", cancellationToken);
         if (userId is null) return null;
-        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         var existing = await database.InventoryMovements.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new InventoryAdjustmentResult(existing.Id, existing.ProductId, existing.Quantity, existing.StockBefore, existing.StockAfter, existing.Reason);
+        await InventoryConcurrency.LockProductsAsync(database, [command.ProductId], cancellationToken);
         var product = await database.Products.SingleOrDefaultAsync(item => item.Id == command.ProductId && item.IsActive && !item.IsTemporary, cancellationToken) ?? throw new KeyNotFoundException("Producto no encontrado o inactivo.");
         var before = product.Stock;
         var after = decimal.Round(before + command.Quantity, 3, MidpointRounding.AwayFromZero);

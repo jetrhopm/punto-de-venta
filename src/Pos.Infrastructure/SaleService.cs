@@ -9,7 +9,7 @@ namespace Pos.Infrastructure;
 // the user's permanent permission or the temporary authorization grant.
 public sealed record SaleLineCommand(Guid ProductId, decimal Quantity, bool UseWholesale = false);
 public sealed record CompleteSaleCommand(Guid OperationId, IReadOnlyList<SaleLineCommand> Lines, decimal CashReceived, Guid? CustomerId = null, string PaymentMethod = "Cash", decimal CardAmount = 0m, decimal TransferAmount = 0m, Guid? DraftId = null, bool PrintRequested = true, Guid? ManualWholesaleAuthorizationGrantId = null);
-public sealed record CompleteSaleResult(Guid SaleId, Guid OperationId, decimal Total, decimal CashReceived, decimal Change, bool Existing);
+public sealed record CompleteSaleResult(Guid SaleId, Guid OperationId, decimal Total, decimal CashReceived, decimal Change, bool Existing, bool InventoryAttentionRequired = false);
 
 public sealed class SaleService(PosDbContext database, PromotionService promotions, KitService kits)
 {
@@ -25,7 +25,7 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         var manualWholesaleGrant = await GetManualWholesaleAuthorizationAsync(user, command, cancellationToken);
         if (command.PaymentMethod == "Credit" && !store.CreditSalesEnabled) throw new InvalidOperationException("Las ventas a crédito están deshabilitadas en Opciones habilitadas.");
         if (command.PaymentMethod == "Credit" && !user.IsAdministrator && !await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "SellOnCredit", cancellationToken)) throw new UnauthorizedAccessException("El usuario no tiene permiso para cobrar a credito.");
-        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         var existing = await database.Sales.AsNoTracking().SingleOrDefaultAsync(sale => sale.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new CompleteSaleResult(existing.Id, existing.OperationId, existing.Total, 0m, 0m, true);
         var shift = await database.Shifts.SingleOrDefaultAsync(item => item.UserId == user.Id && item.RegisterId == registerId && item.Status == "Open", cancellationToken) ?? throw new InvalidOperationException("El usuario no tiene un turno abierto en esta caja.");
@@ -43,6 +43,7 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         var expanded = new Dictionary<Guid, decimal>();
         foreach (var line in command.Lines) { var parts = await kits.ExpandAsync(line.ProductId, line.Quantity, cancellationToken) ?? throw new KeyNotFoundException("Producto no encontrado."); foreach (var part in parts) expanded[part.ProductId] = expanded.GetValueOrDefault(part.ProductId) + part.Quantity; }
         var productIds = expanded.Keys.Concat(command.Lines.Select(item => item.ProductId)).Distinct().ToArray();
+        await InventoryConcurrency.LockProductsAsync(database, productIds, cancellationToken);
         var products = await database.Products.Where(product => productIds.Contains(product.Id) && product.IsActive).ToDictionaryAsync(product => product.Id, cancellationToken);
         if (products.Count != productIds.Length) throw new ArgumentException("Una o mas partidas no existen o estan inactivas.");
         var stockBeforeByProduct = products.ToDictionary(item => item.Key, item => item.Value.Stock);
@@ -123,8 +124,10 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
             if (cashAmount < 0m || decimal.Round(cashAmount + cardAmount + transferAmount, 2) != totalSale) throw new InvalidOperationException("Los importes de pago no cubren exactamente el total.");
             if (command.CashReceived < cashAmount) throw new InvalidOperationException("El efectivo recibido es insuficiente.");
         }
-        // El consecutivo se reserva dentro de la misma transacción serializable de la venta.
+        // El consecutivo se reserva dentro de la misma transacción protegida por tienda.
         // Una venta que se revierte conserva su folio y los folios omitidos no se reutilizan.
+        await InventoryConcurrency.LockStoreAsync(database, store.Id, cancellationToken);
+        await database.Entry(store).ReloadAsync(cancellationToken);
         var folio = store.NextSaleFolio;
         store.NextSaleFolio++;
         var sale = new SaleRecord { Id = Guid.NewGuid(), OperationId = command.OperationId, ShiftId = shift.Id, CustomerId = command.CustomerId, Folio = folio, Total = totalSale, CreatedAtUtc = DateTimeOffset.UtcNow };
@@ -164,7 +167,8 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         }
         if (manualWholesaleGrant is not null) database.Permissions.Remove(manualWholesaleGrant);
         await database.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
-        return new CompleteSaleResult(sale.Id, sale.OperationId, totalSale, command.CashReceived, change, false);
+        var inventoryAttentionRequired = store.InventoryEnabled && stockAfterByProduct.Values.Any(stock => stock < 0m);
+        return new CompleteSaleResult(sale.Id, sale.OperationId, totalSale, command.CashReceived, change, false, inventoryAttentionRequired);
     }
 
     private static void ValidatePaymentMethodEnabled(StoreRecord store, CompleteSaleCommand command, decimal total)

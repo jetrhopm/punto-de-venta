@@ -19,11 +19,13 @@ public sealed class ProductImportService(PosDbContext database)
         Validate(command);
         var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
 
-        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         var existing = await database.ImportBatches.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new(existing.Id, existing.CreatedCount, existing.UpdatedCount, existing.SkippedCount, true);
         await DepartmentDefaults.EnsureAsync(database, cancellationToken);
         var normalizedCodes = command.Rows.Select(item => ProductCatalogService.NormalizeCode(item.Code)).ToArray();
+        var existingProductIds = await database.Products.Where(item => normalizedCodes.Contains(item.NormalizedCode)).Select(item => item.Id).ToListAsync(cancellationToken);
+        await InventoryConcurrency.LockProductsAsync(database, existingProductIds, cancellationToken);
         var products = await database.Products.Where(item => normalizedCodes.Contains(item.NormalizedCode)).ToDictionaryAsync(item => item.NormalizedCode, cancellationToken);
         var suppliers = (await database.Suppliers.ToListAsync(cancellationToken)).GroupBy(item => NormalizeName(item.Name), StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         var departments = (await database.Departments.ToListAsync(cancellationToken)).GroupBy(item => NormalizeDepartmentName(item.Name), StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);

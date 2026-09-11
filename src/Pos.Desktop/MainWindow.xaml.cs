@@ -1237,7 +1237,7 @@ public partial class MainWindow : Window
     private sealed record SaleDraftResponse(Guid Id, Guid OperationId, int TicketNumber, DateTimeOffset UpdatedAtUtc, IReadOnlyList<SaleDraftLineResponse> Lines);
     private sealed record SaleDraftLineResponse(Guid ProductId, string Code, string Description, decimal UnitPrice, decimal Stock, decimal Quantity);
     private sealed record PromotionPriceQuote(Guid ProductId, decimal BaseUnitPrice, decimal UnitPrice, decimal Quantity, decimal Total, decimal DiscountTotal, bool PromotionApplied);
-    private sealed record SaleResponse(Guid SaleId, decimal Total, decimal Change, bool Existing);
+    private sealed record SaleResponse(Guid SaleId, decimal Total, decimal Change, bool Existing, bool InventoryAttentionRequired = false);
     private sealed record LicenseStatusResponse(bool IsActive, string State, string Message);
     private sealed record StoreOptionsResponse(bool InventoryEnabled, string InventoryCostMethod, bool CreditSalesEnabled, bool CommonProductsEnabled, bool AutoPriceWithProfit, decimal DefaultProfitPercent, bool RoundSaleAmounts, string RoundingMode, string OccasionalNotice, int OccasionalNoticeEverySales);
     private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
@@ -1489,6 +1489,7 @@ public partial class MainWindow : Window
             if (_tickets.Count == 0) await CreateNewTicketAsync();
             else { TicketTabs.SelectedIndex = 0; ActivateTicket(_tickets[0]); }
             StatusText.Text = result is null ? "Venta confirmada." : result.Existing ? "La venta ya estaba confirmada; no se registró un cobro duplicado." : cashWindow.CreditRequested ? "Venta a crédito confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
+            if (result is { Existing: false, InventoryAttentionRequired: true }) StatusText.Text += " Inventario por revisar: una o más existencias quedaron por debajo de cero.";
             if (result is not null && !result.Existing) await NotifyCashLimitAsync();
             if (result is not null && !result.Existing && !cashWindow.CreditRequested && cashWindow.PaymentMethod is "Cash" or "Mixed")
                 await TryOpenCashDrawerAsync();
