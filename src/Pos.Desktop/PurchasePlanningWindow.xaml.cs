@@ -59,7 +59,10 @@ public partial class PurchasePlanningWindow : Window
         {
             var supplier = SupplierFilterComboBox.SelectedItem as SupplierOption;
             var department = DepartmentFilterComboBox.SelectedItem as DepartmentOption;
-            var path = $"/api/purchase-planning/suggestions?supplierId={supplier?.Id}&departmentId={department?.Id}";
+            var filters = new List<string>();
+            if (supplier?.Id is Guid supplierId) filters.Add($"supplierId={supplierId}");
+            if (department?.Id is Guid departmentId) filters.Add($"departmentId={departmentId}");
+            var path = "/api/purchase-planning/suggestions" + (filters.Count == 0 ? string.Empty : "?" + string.Join("&", filters));
             var suggestions = await GetWithRetryAsync<List<SuggestionDto>>(path) ?? [];
             _suggestions.Clear(); _suggestions.AddRange(suggestions.Select(item => new SuggestionRow(item)));
             SuggestionsGrid.ItemsSource = null; SuggestionsGrid.ItemsSource = _suggestions;
