@@ -11,6 +11,7 @@ public sealed record PurchaseLineCommand(Guid ProductId, decimal Quantity, decim
 public sealed record ReceivePurchaseCommand(Guid OperationId, Guid? SupplierId, IReadOnlyList<PurchaseLineCommand> Lines);
 public sealed record ReceivePurchaseResult(Guid PurchaseId, Guid OperationId, decimal Total, bool Existing);
 public sealed record PurchaseSuggestion(Guid ProductId, string Code, string Description, Guid? DepartmentId, string? Department, Guid? SupplierId, string? Supplier, decimal Stock, decimal MinimumStock, decimal MaximumStock, decimal SuggestedQuantity, decimal UnitCost, decimal EstimatedTotal, string UnitOfMeasure);
+public sealed record PurchasePlanningProduct(Guid ProductId, string Code, string Description, Guid? DepartmentId, string? Department, Guid? SupplierId, string? Supplier, decimal Stock, decimal MinimumStock, decimal MaximumStock, decimal SuggestedQuantity, decimal UnitCost, decimal EstimatedTotal, decimal QuantitySold, string UnitOfMeasure);
 public sealed record PurchaseOrderLineCommand(Guid ProductId, decimal Quantity, decimal UnitCost);
 public sealed record PurchaseOrderCommand(Guid OperationId, Guid? SupplierId, string? Notes, IReadOnlyList<PurchaseOrderLineCommand> Lines);
 public sealed record PurchaseOrderResult(Guid Id, Guid OperationId, Guid? SupplierId, string? Supplier, string Status, string? Notes, decimal Total, int LineCount, DateTimeOffset CreatedAtUtc, DateTimeOffset? ClosedAtUtc);
@@ -98,6 +99,70 @@ public sealed class SupplierPurchaseService(PosDbContext database)
             var total = decimal.Round(suggestedQuantity * item.Cost, 2, MidpointRounding.AwayFromZero);
             return new PurchaseSuggestion(item.Id, item.Code, item.Description, item.DepartmentId, item.Department, item.PrimarySupplierId, item.Supplier, item.Stock, item.MinimumStock, item.MaximumStock, suggestedQuantity, item.Cost, total, item.UnitOfMeasure);
         }).ToList();
+    }
+
+    public async Task<IReadOnlyList<PurchasePlanningProduct>?> PlanningProductsAsync(string token, string? mode, Guid? supplierId, Guid? departmentId, int salesDays, CancellationToken cancellationToken)
+    {
+        if (await UserAsync(token, cancellationToken) is null) return null;
+        if (supplierId is Guid supplied && supplied != Guid.Empty && !await database.Suppliers.AnyAsync(item => item.Id == supplied, cancellationToken)) throw new KeyNotFoundException("Proveedor no encontrado.");
+        if (departmentId is Guid department && department != Guid.Empty && !await database.Departments.AnyAsync(item => item.Id == department, cancellationToken)) throw new KeyNotFoundException("Departamento no encontrado.");
+
+        var normalizedMode = (mode ?? "All").Trim().ToUpperInvariant();
+        var validModes = new[] { "ALL", "RECOMMENDED", "CRITICAL", "LOWSTOCK", "BESTSELLERS", "LOWSALES" };
+        if (!validModes.Contains(normalizedMode)) throw new ArgumentException("El filtro de compras no es válido.");
+        var days = salesDays is 7 or 30 or 90 or 365 ? salesDays : 30;
+        var salesFromUtc = DateTimeOffset.UtcNow.AddDays(-days);
+
+        var soldByProduct = await (from line in database.SaleLines.AsNoTracking()
+                                   join sale in database.Sales.AsNoTracking() on line.SaleId equals sale.Id
+                                   where sale.Status == "Completed" && sale.CreatedAtUtc >= salesFromUtc
+                                   group line by line.ProductId into grouped
+                                   select new { ProductId = grouped.Key, Quantity = grouped.Sum(item => item.Quantity) })
+            .ToDictionaryAsync(item => item.ProductId, item => item.Quantity, cancellationToken);
+
+        var products = await database.Products.AsNoTracking()
+            .Where(item => item.IsActive && !item.IsTemporary)
+            .Where(item => !supplierId.HasValue || item.PrimarySupplierId == supplierId)
+            .Where(item => !departmentId.HasValue || item.DepartmentId == departmentId)
+            .Select(item => new
+            {
+                item.Id,
+                item.Code,
+                item.Description,
+                item.DepartmentId,
+                Department = item.Department == null ? null : item.Department.Name,
+                item.PrimarySupplierId,
+                Supplier = item.PrimarySupplierId == null ? null : database.Suppliers.Where(supplier => supplier.Id == item.PrimarySupplierId).Select(supplier => supplier.Name).FirstOrDefault(),
+                item.Stock,
+                item.MinimumStock,
+                item.MaximumStock,
+                item.Cost,
+                item.UnitOfMeasure
+            })
+            .ToListAsync(cancellationToken);
+
+        var result = products.Select(item =>
+        {
+            var needsRestock = item.MinimumStock > 0m && item.Stock <= item.MinimumStock;
+            var target = item.MaximumStock > item.Stock ? item.MaximumStock : item.MinimumStock;
+            var suggestedQuantity = needsRestock
+                ? decimal.Round(Math.Max(target - item.Stock, 1m), 3, MidpointRounding.AwayFromZero)
+                : 1m;
+            var quantitySold = soldByProduct.GetValueOrDefault(item.Id);
+            return new PurchasePlanningProduct(item.Id, item.Code, item.Description, item.DepartmentId, item.Department, item.PrimarySupplierId, item.Supplier, item.Stock, item.MinimumStock, item.MaximumStock, suggestedQuantity, item.Cost, decimal.Round(suggestedQuantity * item.Cost, 2, MidpointRounding.AwayFromZero), quantitySold, item.UnitOfMeasure);
+        });
+
+        result = normalizedMode switch
+        {
+            "CRITICAL" => result.Where(item => item.Stock <= 0m).OrderBy(item => item.Stock).ThenBy(item => item.Description),
+            "LOWSTOCK" => result.Where(item => item.Stock > 0m && item.MinimumStock > 0m && item.Stock <= item.MinimumStock).OrderBy(item => item.Stock - item.MinimumStock).ThenBy(item => item.Description),
+            "RECOMMENDED" => result.Where(item => item.MinimumStock > 0m && item.Stock <= item.MinimumStock).OrderBy(item => item.Stock - item.MinimumStock).ThenByDescending(item => item.QuantitySold),
+            "BESTSELLERS" => result.Where(item => item.QuantitySold > 0m).OrderByDescending(item => item.QuantitySold).ThenBy(item => item.Description),
+            "LOWSALES" => result.OrderBy(item => item.QuantitySold).ThenBy(item => item.Description),
+            _ => result.OrderBy(item => item.Description)
+        };
+
+        return result.ToList();
     }
 
     public async Task<IReadOnlyList<PurchaseOrderResult>?> ListOrdersAsync(string token, string? status, Guid? supplierId, CancellationToken cancellationToken)

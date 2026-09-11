@@ -16,6 +16,7 @@ public partial class PurchasePlanningWindow : Window
     private readonly List<SuggestionRow> _suggestions = [];
     private readonly List<OrderLineRow> _orderLines = [];
     private bool _loadingFilters;
+    private string _suggestionSummary = "Cargando artículos activos...";
     private decimal? _quantityBeforeEditing;
     private CancellationTokenSource? _barcodeReadCancellation;
     private CancellationTokenSource? _suggestionFilterCancellation;
@@ -55,9 +56,13 @@ public partial class PurchasePlanningWindow : Window
         {
             var suppliers = await GetWithRetryAsync<List<SupplierDto>>("/api/suppliers") ?? [];
             var departments = await GetWithRetryAsync<List<DepartmentDto>>("/api/departments") ?? [];
+            PlanningModeComboBox.ItemsSource = PlanningModeOption.All;
+            SalesPeriodComboBox.ItemsSource = SalesPeriodOption.All;
             SupplierFilterComboBox.ItemsSource = new[] { SupplierOption.All }.Concat(suppliers.Select(item => new SupplierOption(item.Id, item.Name))).ToList();
             OrderSupplierComboBox.ItemsSource = new[] { SupplierOption.None }.Concat(suppliers.Select(item => new SupplierOption(item.Id, item.Name))).ToList();
             DepartmentFilterComboBox.ItemsSource = new[] { DepartmentOption.All }.Concat(departments.Select(item => new DepartmentOption(item.Id, item.Name))).ToList();
+            PlanningModeComboBox.SelectedIndex = 0;
+            SalesPeriodComboBox.SelectedIndex = 1;
             SupplierFilterComboBox.SelectedIndex = 0;
             OrderSupplierComboBox.SelectedIndex = 0;
             DepartmentFilterComboBox.SelectedIndex = 0;
@@ -79,12 +84,15 @@ public partial class PurchasePlanningWindow : Window
         {
             var supplier = SupplierFilterComboBox.SelectedItem as SupplierOption;
             var department = DepartmentFilterComboBox.SelectedItem as DepartmentOption;
-            var filters = new List<string>();
+            var mode = (PlanningModeComboBox.SelectedItem as PlanningModeOption)?.Code ?? "All";
+            var salesDays = (SalesPeriodComboBox.SelectedItem as SalesPeriodOption)?.Days ?? 30;
+            var filters = new List<string> { $"mode={Uri.EscapeDataString(mode)}", $"salesDays={salesDays}" };
             if (supplier?.Id is Guid supplierId) filters.Add($"supplierId={supplierId}");
             if (department?.Id is Guid departmentId) filters.Add($"departmentId={departmentId}");
             var path = "/api/purchase-planning/suggestions" + (filters.Count == 0 ? string.Empty : "?" + string.Join("&", filters));
             var suggestions = await GetWithRetryAsync<List<SuggestionDto>>(path) ?? [];
             _suggestions.Clear(); _suggestions.AddRange(suggestions.Select(item => new SuggestionRow(item)));
+            _suggestionSummary = BuildSuggestionSummary(mode, salesDays, _suggestions.Count);
             ApplySuggestionFilter();
         }
         catch (HttpRequestException) { MessageText.Text = "No se pudieron consultar las sugerencias. La API no respondió después de varios intentos; revisa Configuración > Diagnóstico."; }
@@ -112,11 +120,21 @@ public partial class PurchasePlanningWindow : Window
         SuggestionsGrid.ItemsSource = null;
         SuggestionsGrid.ItemsSource = visible;
         SuggestionSummaryText.Text = _suggestions.Count == 0
-            ? "No hay productos con existencia igual o menor al mínimo para este filtro."
+            ? "No hay artículos que coincidan con esta vista y sus filtros."
             : string.IsNullOrWhiteSpace(filter)
-                ? $"{_suggestions.Count} producto(s) requieren revisión. Los artículos sin proveedor permanecen disponibles."
-                : $"Mostrando {visible.Count} de {_suggestions.Count} producto(s) que requieren revisión.";
+                ? _suggestionSummary
+                : $"Mostrando {visible.Count} de {_suggestions.Count} artículo(s) de esta vista.";
     }
+
+    private static string BuildSuggestionSummary(string mode, int salesDays, int count) => mode.ToUpperInvariant() switch
+    {
+        "CRITICAL" => $"{count} artículo(s) sin existencia. Atiéndelos primero si siguen disponibles para venta.",
+        "LOWSTOCK" => $"{count} artículo(s) con inventario bajo respecto a su mínimo.",
+        "RECOMMENDED" => $"{count} artículo(s) recomendados para reposición. Los artículos sin proveedor permanecen disponibles.",
+        "BESTSELLERS" => $"{count} artículo(s) ordenados por unidades vendidas en los últimos {salesDays} días.",
+        "LOWSALES" => $"{count} artículo(s) ordenados desde menor venta, incluyendo los que no tuvieron venta en los últimos {salesDays} días.",
+        _ => $"{count} artículo(s) activos disponibles. Usa las vistas de control para priorizar la reposición."
+    };
 
     private void OnAddSelectedClick(object sender, RoutedEventArgs e)
     {
@@ -347,16 +365,24 @@ public partial class PurchasePlanningWindow : Window
 
     private sealed record SupplierDto(Guid Id, string Name);
     private sealed record DepartmentDto(Guid Id, string Name);
-    private sealed record SuggestionDto(Guid ProductId, string Code, string Description, Guid? DepartmentId, string? Department, Guid? SupplierId, string? Supplier, decimal Stock, decimal MinimumStock, decimal MaximumStock, decimal SuggestedQuantity, decimal UnitCost, decimal EstimatedTotal, string UnitOfMeasure);
+    private sealed record SuggestionDto(Guid ProductId, string Code, string Description, Guid? DepartmentId, string? Department, Guid? SupplierId, string? Supplier, decimal Stock, decimal MinimumStock, decimal MaximumStock, decimal SuggestedQuantity, decimal UnitCost, decimal EstimatedTotal, decimal QuantitySold, string UnitOfMeasure);
     private sealed record OrderDto(Guid Id, string Status, string? Supplier, string? Notes, decimal Total, int LineCount, DateTimeOffset CreatedAtUtc);
     private sealed record ProductSearchDto(Guid Id, string Code, string Description, decimal Price, decimal Cost, decimal Stock, decimal MinimumStock, decimal MaximumStock, string UnitOfMeasure);
     private sealed record TicketSettingsDto(string Name, string LegalName, string TaxId, string Address, string Phone, string TicketHeader, string TicketFooter, int TicketWidthMm);
     private sealed record SupplierOption(Guid? Id, string Name) { public static SupplierOption All { get; } = new(null, "Todos los proveedores"); public static SupplierOption None { get; } = new(null, "Sin proveedor asignado"); public string DisplayText => Name; }
     private sealed record DepartmentOption(Guid? Id, string Name) { public static DepartmentOption All { get; } = new(null, "Todos los departamentos"); public string DisplayText => Name; }
+    private sealed record PlanningModeOption(string Code, string DisplayText)
+    {
+        public static IReadOnlyList<PlanningModeOption> All { get; } = [new("All", "Todos los artículos"), new("Recommended", "Compras recomendadas"), new("Critical", "Críticos sin existencia"), new("LowStock", "Inventario bajo"), new("BestSellers", "Más vendidos"), new("LowSales", "Bajas ventas")];
+    }
+    private sealed record SalesPeriodOption(int Days, string DisplayText)
+    {
+        public static IReadOnlyList<SalesPeriodOption> All { get; } = [new(7, "Últimos 7 días"), new(30, "Últimos 30 días"), new(90, "Últimos 90 días"), new(365, "Último año")];
+    }
     private sealed class SuggestionRow(SuggestionDto source)
     {
         public bool IsSelected { get; set; }
-        public Guid ProductId => source.ProductId; public string Code => source.Code; public string Description => source.Description; public string Department => string.IsNullOrWhiteSpace(source.Department) ? "Sin departamento" : source.Department; public string Supplier => string.IsNullOrWhiteSpace(source.Supplier) ? "Sin proveedor" : source.Supplier; public decimal Quantity => source.SuggestedQuantity; public decimal UnitCost => source.UnitCost; public string StockText => $"{source.Stock:0.###} {source.UnitOfMeasure}"; public string MinimumText => source.MinimumStock.ToString("0.###", CultureInfo.CurrentCulture); public string MaximumText => source.MaximumStock > 0m ? source.MaximumStock.ToString("0.###", CultureInfo.CurrentCulture) : "No definido"; public string QuantityText => source.SuggestedQuantity.ToString("0.###", CultureInfo.CurrentCulture);
+        public Guid ProductId => source.ProductId; public string Code => source.Code; public string Description => source.Description; public string Department => string.IsNullOrWhiteSpace(source.Department) ? "Sin departamento" : source.Department; public string Supplier => string.IsNullOrWhiteSpace(source.Supplier) ? "Sin proveedor" : source.Supplier; public decimal Quantity => source.SuggestedQuantity; public decimal UnitCost => source.UnitCost; public string StockText => $"{source.Stock:0.###} {source.UnitOfMeasure}"; public string MinimumText => source.MinimumStock.ToString("0.###", CultureInfo.CurrentCulture); public string MaximumText => source.MaximumStock > 0m ? source.MaximumStock.ToString("0.###", CultureInfo.CurrentCulture) : "No definido"; public string SalesText => source.QuantitySold.ToString("0.###", CultureInfo.CurrentCulture); public string QuantityText => source.SuggestedQuantity.ToString("0.###", CultureInfo.CurrentCulture);
         public bool Matches(string filter) => Contains(Code, filter) || Contains(Description, filter) || Contains(Department, filter) || Contains(Supplier, filter);
         private static bool Contains(string value, string filter) => CultureInfo.CurrentCulture.CompareInfo.IndexOf(value, filter, CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace) >= 0;
     }

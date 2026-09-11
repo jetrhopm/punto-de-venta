@@ -560,10 +560,11 @@ app.MapDelete("/api/products/{id:guid}", async (Guid id, HttpRequest request, Pr
     }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
-app.MapGet("/api/purchase-planning/suggestions", async (Guid? supplierId, Guid? departmentId, HttpRequest request, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
+app.MapGet("/api/purchase-planning/suggestions", async (string? mode, int? salesDays, Guid? supplierId, Guid? departmentId, HttpRequest request, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
 {
-    try { var result = await purchases.SuggestionsAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), supplierId, departmentId, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    try { var result = await purchases.PlanningProductsAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), mode, supplierId, departmentId, salesDays ?? 30, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["mode"] = [exception.Message] }); }
 });
 app.MapGet("/api/purchase-orders", async (string? status, Guid? supplierId, HttpRequest request, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
 {
