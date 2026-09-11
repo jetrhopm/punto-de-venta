@@ -29,7 +29,7 @@ public partial class PrinterSettingsWindow : Window
         UpdatePreview();
     }
 
-    private void LoadPrinters()
+    private void LoadPrinters(bool showResult = false)
     {
         try
         {
@@ -37,12 +37,19 @@ public partial class PrinterSettingsWindow : Window
             PrinterBox.ItemsSource = names;
             PrinterBox.SelectedItem = names.FirstOrDefault(item => string.Equals(item, ApiClient.PrinterName, StringComparison.OrdinalIgnoreCase));
             if (PrinterBox.SelectedItem is null && names.Length > 0) PrinterBox.SelectedIndex = 0;
-            StatusText.Text = names.Length == 0 ? "Windows no reportó impresoras disponibles." : $"Windows reportó {names.Length} impresora(s) disponible(s).";
+            var status = names.Length == 0 ? "Windows no reportó impresoras disponibles." : $"Windows reportó {names.Length} impresora(s) disponible(s).";
+            StatusText.Text = status;
+            if (showResult) ShowResult(names.Length == 0 ? "No se detectaron impresoras" : "Impresoras detectadas", status, names.Length == 0 ? OperationResultKind.Warning : OperationResultKind.Success);
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudieron consultar las impresoras de Windows: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            var message = $"No se pudieron consultar las impresoras de Windows. {exception.Message}";
+            StatusText.Text = message;
+            if (showResult) ShowResult("No se pudieron detectar impresoras", message, OperationResultKind.Error);
+        }
     }
 
-    private void OnRefreshClick(object sender, RoutedEventArgs e) => LoadPrinters();
+    private void OnRefreshClick(object sender, RoutedEventArgs e) => LoadPrinters(showResult: true);
 
     private void OnPreviewChanged(object sender, RoutedEventArgs e)
     {
@@ -65,21 +72,39 @@ public partial class PrinterSettingsWindow : Window
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
         if (!TryReadProfile(out var printer, out var profile)) return;
-        ApiClient.SetPrinterProfile(printer, profile.FontFamily, profile.FontSize, profile.UseNormalTotals, profile.WidthMm, PrintingEnabledCheck.IsChecked == true);
+        var printingEnabled = PrintingEnabledCheck.IsChecked == true;
+        ApiClient.SetPrinterProfile(printer, profile.FontFamily, profile.FontSize, profile.UseNormalTotals, profile.WidthMm, printingEnabled);
         ProfileSummaryText.Text = $"{profile.WidthMm} mm · {profile.FontFamily} {profile.FontSize:0.#} pt";
-        StatusText.Text = $"Configuración guardada para esta caja: {printer}.";
+        var status = printingEnabled
+            ? $"Configuración guardada para esta caja: {printer}."
+            : "La impresión de tickets quedó desactivada para esta caja.";
+        StatusText.Text = status;
+        ConfigurationFeedback.ShowSavedAndClose(this, "Impresora", status);
     }
 
     private void OnTestClick(object sender, RoutedEventArgs e)
     {
-        if (PrintingEnabledCheck.IsChecked != true) { StatusText.Text = "Activa el uso de impresora antes de enviar una prueba."; return; }
+        if (PrintingEnabledCheck.IsChecked != true)
+        {
+            const string message = "Activa el uso de impresora antes de enviar una prueba.";
+            StatusText.Text = message;
+            ShowResult("Impresora desactivada", message, OperationResultKind.Warning);
+            return;
+        }
         if (!TryReadProfile(out var printer, out var profile)) return;
         try
         {
             TicketWindowsPrinter.Print(printer, TicketWindowsPrinter.CreateSample(profile.WidthMm), profile, "Prueba de ticket JetVenta");
-            StatusText.Text = $"Ticket de prueba enviado a {printer}.";
+            var status = $"Ticket de prueba enviado a {printer}.";
+            StatusText.Text = status;
+            ShowResult("Prueba enviada", status, OperationResultKind.Success);
         }
-        catch (Exception exception) { StatusText.Text = $"No se pudo imprimir la prueba: {exception.Message}"; }
+        catch (Exception exception)
+        {
+            var message = $"No se pudo imprimir la prueba. {exception.Message}";
+            StatusText.Text = message;
+            ShowResult("Prueba no impresa", message, OperationResultKind.Error);
+        }
     }
 
     private void UpdatePreview()
@@ -98,10 +123,18 @@ public partial class PrinterSettingsWindow : Window
         {
             return true;
         }
-        if (string.IsNullOrWhiteSpace(printer)) { StatusText.Text = "Selecciona una impresora instalada en Windows."; return false; }
+        if (string.IsNullOrWhiteSpace(printer))
+        {
+            const string message = "Selecciona una impresora instalada en Windows.";
+            StatusText.Text = message;
+            ShowResult("Selecciona una impresora", message, OperationResultKind.Warning);
+            return false;
+        }
         if (!double.TryParse(FontSizeBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var size) || size is < 6d or > 24d)
         {
-            StatusText.Text = "El tamaño de fuente debe estar entre 6 y 24 puntos.";
+            const string message = "El tamaño de fuente debe estar entre 6 y 24 puntos.";
+            StatusText.Text = message;
+            ShowResult("Tamaño de fuente inválido", message, OperationResultKind.Warning);
             return false;
         }
         profile = profile with { FontSize = size };
@@ -114,4 +147,6 @@ public partial class PrinterSettingsWindow : Window
         var size = double.TryParse(FontSizeBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var parsed) && parsed is >= 6d and <= 24d ? parsed : 9d;
         return new TicketPrintProfile(family, size, NormalTotalsCheck.IsChecked == true, Width58Button.IsChecked == true ? 58 : 80);
     }
+
+    private void ShowResult(string title, string message, OperationResultKind kind) => new OperationResultWindow(title, message, kind) { Owner = this }.ShowDialog();
 }
