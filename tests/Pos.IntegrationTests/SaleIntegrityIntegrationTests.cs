@@ -68,6 +68,40 @@ public sealed class SaleIntegrityIntegrationTests
     }
 
     [Fact]
+    public async Task RejectsCreditSaleWhenCustomerCreditIsFrozen()
+    {
+        var context = await SaleContext.CreateAsync();
+        var customer = new CustomerRecord
+        {
+            Id = Guid.NewGuid(),
+            Name = "Cliente con crédito bloqueado " + Guid.NewGuid().ToString("N"),
+            CreditLimit = 500m,
+            CreditEnabled = true,
+            CreditFrozen = true,
+            IsActive = true,
+            CreatedAtUtc = DateTimeOffset.UtcNow
+        };
+        try
+        {
+            context.Database.Customers.Add(customer);
+            await context.Database.SaveChangesAsync();
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => context.Sales.CompleteAsync(
+                context.Token,
+                new CompleteSaleCommand(Guid.NewGuid(), [new SaleLineCommand(context.Product.Id, 1m)], 0m, CustomerId: customer.Id, PaymentMethod: "Credit"),
+                CancellationToken.None));
+
+            Assert.Contains("bloqueado", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            context.Database.Customers.Remove(customer);
+            await context.Database.SaveChangesAsync();
+            await context.DisposeAsync();
+        }
+    }
+
+    [Fact]
     public async Task CancellingMixedSaleRestoresInventoryAndOnlyCashPayment()
     {
         var context = await SaleContext.CreateAsync();

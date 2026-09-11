@@ -12,7 +12,7 @@ public partial class CustomerDetailsWindow : Window
         EmailText.Text = string.IsNullOrWhiteSpace(customer.Email) ? "Sin correo" : customer.Email;
         TaxIdText.Text = string.IsNullOrWhiteSpace(customer.TaxId) ? "No registrado" : customer.TaxId;
         StateText.Text = customer.IsActive ? "Activo" : "Inactivo";
-        CreditText.Text = customer.CreditEnabled ? "Habilitado" : "No habilitado";
+        CreditText.Text = !customer.CreditEnabled ? "No habilitado" : customer.CreditFrozen ? "Bloqueado para nuevas ventas" : "Habilitado";
         LimitText.Text = customer.CreditLimit.ToString("C2");
         BalanceText.Text = customer.Balance.ToString("C2");
         DeactivateButton.IsEnabled = customer.IsActive && customer.Balance <= 0m;

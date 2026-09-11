@@ -27,9 +27,15 @@ public partial class CreditAccountWindow : Window
         CreditEnabledBox.IsChecked = _customer.CreditEnabled;
         CreditEnabledBox.IsEnabled = _customer.Balance <= 0m;
         CreditEnabledBox.ToolTip = CreditEnabledBox.IsEnabled ? "Permitir o bloquear nuevas ventas a crédito" : "No se puede deshabilitar el crédito mientras exista saldo pendiente.";
+        CreditFrozenBox.IsChecked = _customer.CreditFrozen;
+        CreditFrozenBox.IsEnabled = _customer.CreditEnabled;
+        CreditFrozenBox.ToolTip = _customer.CreditEnabled ? "Impide nuevas compras a crédito sin afectar los abonos." : "Primero habilita el crédito para poder bloquearlo.";
+        CreditFrozenHelpText.Text = _customer.CreditFrozen
+            ? "Crédito bloqueado: el cliente puede abonar, pero no comprar a crédito."
+            : "El cliente puede comprar a crédito hasta el límite autorizado.";
         CreditLimitBox.Text = _customer.CreditLimit.ToString("0.00", CultureInfo.InvariantCulture);
-        PaymentButton.IsEnabled = _customer.CreditEnabled && _customer.Balance > 0m;
-        PaymentButton.ToolTip = PaymentButton.IsEnabled ? "Registrar el efectivo recibido del cliente" : "Se requiere crédito activo y saldo pendiente para registrar un abono.";
+        PaymentButton.IsEnabled = _customer.Balance > 0m;
+        PaymentButton.ToolTip = PaymentButton.IsEnabled ? "Registrar el efectivo recibido del cliente, incluso si su crédito está bloqueado." : "El cliente no tiene saldo pendiente para registrar un abono.";
     }
 
     private async Task LoadStatementAsync()
@@ -65,7 +71,8 @@ public partial class CreditAccountWindow : Window
                 email = _customer.Email,
                 taxId = _customer.TaxId,
                 creditLimit = limit,
-                creditEnabled = CreditEnabledBox.IsChecked == true
+                creditEnabled = CreditEnabledBox.IsChecked == true,
+                creditFrozen = CreditFrozenBox.IsChecked == true
             });
             if (!response.IsSuccessStatusCode)
             {

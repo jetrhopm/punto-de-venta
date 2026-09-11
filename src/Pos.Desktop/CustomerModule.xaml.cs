@@ -34,7 +34,7 @@ public partial class CustomerModule : UserControl
         HeaderIcon.Kind = PackIconMaterialKind.AccountCashOutline;
         HeaderIcon.Foreground = System.Windows.Media.Brushes.White;
         HeaderIconBackground.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(35, 138, 104));
-        ListTitleText.Text = "Cuentas con crédito activo";
+        ListTitleText.Text = "Cuentas con crédito";
         CreditSummaryPanel.Visibility = Visibility.Visible;
         CustomerActionsPanel.Visibility = Visibility.Collapsed;
         CreditActionsPanel.Visibility = Visibility.Visible;
@@ -64,7 +64,7 @@ public partial class CustomerModule : UserControl
             CustomersList.SelectedItem = _selected;
             SetActionAvailability();
             if (_creditMode) CreditSummaryText.Text = customers.Sum(customer => customer.Balance).ToString("C2");
-            if (customers.Count == 0) StatusText.Text = _creditMode ? "No hay clientes con crédito activo." : "No hay clientes activos que coincidan con la búsqueda.";
+            if (customers.Count == 0) StatusText.Text = _creditMode ? "No hay clientes con crédito configurado." : "No hay clientes activos que coincidan con la búsqueda.";
         }
         catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; }
     }
@@ -164,8 +164,8 @@ public partial class CustomerModule : UserControl
         {
             var result = dialog.Result;
             using var response = customer is null
-                ? await Client.PostAsJsonAsync("/api/customers", new { name = result.Name, phone = result.Phone, email = result.Email, taxId = result.TaxId, creditLimit = 0m, creditEnabled = false })
-                : await Client.PutAsJsonAsync($"/api/customers/{customer.Id}", new { name = result.Name, phone = result.Phone, email = result.Email, taxId = result.TaxId, creditLimit = customer.CreditLimit, creditEnabled = customer.CreditEnabled });
+                ? await Client.PostAsJsonAsync("/api/customers", new { name = result.Name, phone = result.Phone, email = result.Email, taxId = result.TaxId, creditLimit = 0m, creditEnabled = false, creditFrozen = false })
+                : await Client.PutAsJsonAsync($"/api/customers/{customer.Id}", new { name = result.Name, phone = result.Phone, email = result.Email, taxId = result.TaxId, creditLimit = customer.CreditLimit, creditEnabled = customer.CreditEnabled, creditFrozen = customer.CreditFrozen });
             if (!response.IsSuccessStatusCode)
             {
                 StatusText.Text = await ReadErrorAsync(response);

@@ -34,7 +34,14 @@ public partial class CustomerWindow : Window
     private void OnCustomerSelected(object sender, MouseButtonEventArgs e)
     {
         if (CustomersList.SelectedItem is not CustomerRow row) return;
-        _selected = row; SelectedCustomerId = row.Customer.Id; SelectedCustomerName = row.Customer.Name;
+        _selected = row;
+        if (_selectOnly && row.Customer.CreditFrozen)
+        {
+            MessageText.Text = "El crédito de este cliente está bloqueado. Puede registrar abonos, pero no nuevas ventas a crédito.";
+            OperationFeedback.Show(this, "Crédito bloqueado", MessageText.Text, OperationResultKind.Warning);
+            return;
+        }
+        SelectedCustomerId = row.Customer.Id; SelectedCustomerName = row.Customer.Name;
         if (_selectOnly) { DialogResult = true; return; }
         NameTextBox.Text = row.Customer.Name; LimitTextBox.Text = row.Customer.CreditLimit.ToString("0.00", CultureInfo.InvariantCulture); SelectedSummaryText.Text = $"Cliente seleccionado: {row.Customer.Name}. Saldo actual: ${row.Customer.Balance:0.00}."; MessageText.Text = string.Empty;
     }
@@ -56,7 +63,7 @@ public partial class CustomerWindow : Window
         if (string.IsNullOrWhiteSpace(NameTextBox.Text) || !TryParse(LimitTextBox.Text, out var limit) || limit < 0m) { MessageText.Text = "Escribe un nombre y un límite de crédito válido."; return; }
         try
         {
-            using var update = await Client.PutAsJsonAsync($"/api/customers/{_selected.Customer.Id}", new { name = NameTextBox.Text.Trim(), phone = _selected.Customer.Phone, email = _selected.Customer.Email, taxId = _selected.Customer.TaxId, creditLimit = limit, creditEnabled = _selected.Customer.CreditEnabled });
+            using var update = await Client.PutAsJsonAsync($"/api/customers/{_selected.Customer.Id}", new { name = NameTextBox.Text.Trim(), phone = _selected.Customer.Phone, email = _selected.Customer.Email, taxId = _selected.Customer.TaxId, creditLimit = limit, creditEnabled = _selected.Customer.CreditEnabled, creditFrozen = _selected.Customer.CreditFrozen });
             MessageText.Text = update.IsSuccessStatusCode ? "Cliente actualizado correctamente." : await update.Content.ReadAsStringAsync();
             if (update.IsSuccessStatusCode) await LoadCustomersAsync();
         }
@@ -75,6 +82,6 @@ public partial class CustomerWindow : Window
         catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailable; }
     }
     private static bool TryParse(string value, out decimal result) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.CurrentCulture, out result) || decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
-    private sealed record CustomerResult(Guid Id, string Name, string? Phone, string? Email, string? TaxId, decimal CreditLimit, bool CreditEnabled, bool IsActive, decimal Balance);
+    private sealed record CustomerResult(Guid Id, string Name, string? Phone, string? Email, string? TaxId, decimal CreditLimit, bool CreditEnabled, bool CreditFrozen, bool IsActive, decimal Balance);
     private sealed record CustomerRow(CustomerResult Customer) { public string DisplayText => $"{Customer.Name} | Limite ${Customer.CreditLimit:0.00} | Saldo ${Customer.Balance:0.00}"; }
 }

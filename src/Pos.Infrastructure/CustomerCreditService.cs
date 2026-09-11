@@ -5,9 +5,9 @@ using System.Text;
 
 namespace Pos.Infrastructure;
 
-public sealed record CustomerCommand(string Name, string? Phone, string? Email, string? TaxId, decimal CreditLimit, bool CreditEnabled);
+public sealed record CustomerCommand(string Name, string? Phone, string? Email, string? TaxId, decimal CreditLimit, bool CreditEnabled, bool CreditFrozen = false);
 public sealed record CustomerStatusCommand(bool IsActive);
-public sealed record CustomerResult(Guid Id, string Name, string? Phone, string? Email, string? TaxId, decimal CreditLimit, bool CreditEnabled, bool IsActive, decimal Balance);
+public sealed record CustomerResult(Guid Id, string Name, string? Phone, string? Email, string? TaxId, decimal CreditLimit, bool CreditEnabled, bool CreditFrozen, bool IsActive, decimal Balance);
 public sealed record CreditPaymentCommand(Guid OperationId, Guid CustomerId, decimal Amount, string Reason);
 public sealed record CreditPaymentResult(Guid TransactionId, Guid CustomerId, decimal Amount, decimal BalanceBefore, decimal BalanceAfter);
 public sealed record CreditStatementItem(Guid Id, string Type, decimal Amount, decimal BalanceBefore, decimal BalanceAfter, string Reason, DateTimeOffset CreatedAtUtc);
@@ -32,7 +32,7 @@ public sealed class CustomerCreditService(PosDbContext database)
     {
         if (await GetUserAsync(token, "ManageCustomersAndCredit", cancellationToken) is null) return null;
         Validate(command);
-        var customer = new CustomerRecord { Id = Guid.NewGuid(), Name = command.Name.Trim(), Phone = Clean(command.Phone), Email = Clean(command.Email), TaxId = Clean(command.TaxId), CreditLimit = decimal.Round(command.CreditLimit, 2), CreditEnabled = command.CreditEnabled, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var customer = new CustomerRecord { Id = Guid.NewGuid(), Name = command.Name.Trim(), Phone = Clean(command.Phone), Email = Clean(command.Email), TaxId = Clean(command.TaxId), CreditLimit = decimal.Round(command.CreditLimit, 2), CreditEnabled = command.CreditEnabled, CreditFrozen = command.CreditEnabled && command.CreditFrozen, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
         database.Customers.Add(customer); await database.SaveChangesAsync(cancellationToken);
         return ToResult(customer, 0m);
     }
@@ -45,7 +45,7 @@ public sealed class CustomerCreditService(PosDbContext database)
         var balance = await BalanceAsync(customerId, cancellationToken);
         if (command.CreditLimit < balance) throw new InvalidOperationException("El limite no puede ser menor que el saldo actual.");
         if (!command.CreditEnabled && balance > 0m) throw new InvalidOperationException("No se puede deshabilitar el crédito mientras exista saldo pendiente.");
-        customer.Name = command.Name.Trim(); customer.Phone = Clean(command.Phone); customer.Email = Clean(command.Email); customer.TaxId = Clean(command.TaxId); customer.CreditLimit = decimal.Round(command.CreditLimit, 2); customer.CreditEnabled = command.CreditEnabled;
+        customer.Name = command.Name.Trim(); customer.Phone = Clean(command.Phone); customer.Email = Clean(command.Email); customer.TaxId = Clean(command.TaxId); customer.CreditLimit = decimal.Round(command.CreditLimit, 2); customer.CreditEnabled = command.CreditEnabled; customer.CreditFrozen = command.CreditEnabled && command.CreditFrozen;
         await database.SaveChangesAsync(cancellationToken); return ToResult(customer, balance);
     }
 
@@ -94,7 +94,7 @@ public sealed class CustomerCreditService(PosDbContext database)
         var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
         return user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == permission, cancellationToken) ? user : null;
     }
-    private static CustomerResult ToResult(CustomerRecord item, decimal balance) => new(item.Id, item.Name, item.Phone, item.Email, item.TaxId, item.CreditLimit, item.CreditEnabled, item.IsActive, balance);
+    private static CustomerResult ToResult(CustomerRecord item, decimal balance) => new(item.Id, item.Name, item.Phone, item.Email, item.TaxId, item.CreditLimit, item.CreditEnabled, item.CreditFrozen, item.IsActive, balance);
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     private static void Validate(CustomerCommand command)
     {

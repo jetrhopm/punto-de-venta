@@ -47,6 +47,12 @@ public sealed class CustomerCreditIntegrationTests
             Assert.Equal(2, (await service.ListAsync(token, suffix, false, CancellationToken.None))!.Count);
             Assert.Equal(credit!.Id, Assert.Single((await service.ListAsync(token, suffix, true, CancellationToken.None))!).Id);
 
+            var frozen = await service.UpdateAsync(token, credit.Id, new CustomerCommand(credit.Name, credit.Phone, credit.Email, credit.TaxId, credit.CreditLimit, true, true), CancellationToken.None);
+            Assert.NotNull(frozen);
+            Assert.True(frozen!.CreditEnabled);
+            Assert.True(frozen.CreditFrozen);
+            Assert.True((await service.ListAsync(token, suffix, true, CancellationToken.None))!.Single().CreditFrozen);
+
             database.CreditTransactions.Add(new CreditTransactionRecord
             {
                 Id = Guid.NewGuid(),

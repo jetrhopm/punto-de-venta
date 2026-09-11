@@ -8,12 +8,13 @@ public sealed record CustomerView(
     string? TaxId,
     decimal CreditLimit,
     bool CreditEnabled,
+    bool CreditFrozen,
     bool IsActive,
     decimal Balance)
 {
     public decimal AvailableCredit => Math.Max(0m, CreditLimit - Balance);
     public string ContactSummary => string.Join("  |  ", new[] { Phone, Email }.Where(value => !string.IsNullOrWhiteSpace(value)));
-    public string CreditStatus => !IsActive ? "Inactivo" : CreditEnabled ? "Crédito activo" : "Sin crédito";
+    public string CreditStatus => !IsActive ? "Inactivo" : !CreditEnabled ? "Sin crédito" : CreditFrozen ? "Crédito bloqueado" : "Crédito activo";
     public string BalanceDisplay => $"${Balance:N2}";
 }
 

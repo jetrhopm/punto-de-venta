@@ -26,6 +26,8 @@
                 <StackPanel>
                     <TextBlock Text="Configuración de crédito" FontWeight="SemiBold" FontSize="16"/>
                     <CheckBox x:Name="CreditEnabledBox" Content="Permitir ventas a crédito" Margin="0,12,0,0"/>
+                    <CheckBox x:Name="CreditFrozenBox" Content="Bloquear nuevas ventas a crédito" Margin="0,8,0,0" ToolTip="Conserva el saldo y permite abonos, pero impide nuevas compras a crédito."/>
+                    <TextBlock x:Name="CreditFrozenHelpText" Margin="23,3,0,0" TextWrapping="Wrap" Foreground="{StaticResource TextMutedBrush}" Text="Al bloquear el crédito, el cliente podrá seguir abonando su deuda."/>
                     <TextBlock Text="Límite autorizado" FontWeight="SemiBold" Margin="0,12,0,0"/>
                     <Grid Margin="0,5,0,0"><TextBlock Text="$" VerticalAlignment="Center" Margin="11,0,0,0" Foreground="{StaticResource TextMutedBrush}" IsHitTestVisible="False"/><TextBox x:Name="CreditLimitBox" Height="36" Padding="27,5,8,5" ToolTip="Monto máximo de crédito que puede usar el cliente"/></Grid>
                     <Button Style="{StaticResource PrimaryButtonStyle}" Click="OnSaveCreditClick" Margin="0,12,0,0" Height="36"><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><icons:PackIconMaterial Kind="ContentSaveOutline" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Guardar crédito"/></StackPanel></Button>

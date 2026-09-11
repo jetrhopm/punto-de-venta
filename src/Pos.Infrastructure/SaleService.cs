@@ -111,6 +111,7 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         {
             if (command.CustomerId is null) throw new InvalidOperationException("Una venta a credito requiere cliente.");
             customer = await database.Customers.SingleOrDefaultAsync(item => item.Id == command.CustomerId && item.IsActive && item.CreditEnabled, cancellationToken) ?? throw new InvalidOperationException("El cliente no existe o no tiene credito habilitado.");
+            if (customer.CreditFrozen) throw new InvalidOperationException("El crédito de este cliente está bloqueado. Puede registrar abonos, pero no nuevas ventas a crédito.");
             currentCredit = await database.CreditTransactions.Where(item => item.CustomerId == customer.Id).SumAsync(item => item.Amount, cancellationToken);
             if (currentCredit + totalSale > customer.CreditLimit) throw new InvalidOperationException("La venta excede el limite de credito del cliente.");
         }
