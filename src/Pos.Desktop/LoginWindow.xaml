@@ -22,7 +22,7 @@
                 </Grid.RowDefinitions>
 
                 <StackPanel VerticalAlignment="Center">
-                    <Image Source="/Pos.Desktop;component/Assets/logo.png"
+                    <Image Source="/JetVenta;component/Assets/logo.png"
                            Width="224" Height="224"
                            Stretch="Uniform"
                            HorizontalAlignment="Center"

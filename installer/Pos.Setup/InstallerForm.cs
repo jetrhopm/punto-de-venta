@@ -14,6 +14,8 @@ namespace Pos.Setup;
 public sealed class InstallerForm : Form
 {
     private const string ProductTitle = "JetVenta";
+    private const string DesktopExecutableName = "JetVenta.exe";
+    private const string LegacyDesktopExecutableName = "Pos.Desktop.exe";
     private const string LicenseFileExtensionKey = @"SOFTWARE\Classes\.jv";
     private const string LicenseFileTypeKey = @"SOFTWARE\Classes\JetVenta.LicenseFile";
     private const string LicenseFileTypeName = "JetVenta.LicenseFile";
@@ -288,6 +290,7 @@ public sealed class InstallerForm : Form
             if (_existingInstallation)
             {
                 await UpdatePayloadAsync();
+                RemoveLegacyDesktopFiles();
             }
             else
             {
@@ -345,7 +348,9 @@ public sealed class InstallerForm : Form
 
     private static void EnsureDesktopClosedForUpdate()
     {
-        var running = Process.GetProcessesByName("Pos.Desktop");
+        var running = Process.GetProcessesByName("JetVenta")
+            .Concat(Process.GetProcessesByName("Pos.Desktop"))
+            .ToArray();
         try
         {
             if (running.Length > 0)
@@ -461,6 +466,24 @@ public sealed class InstallerForm : Form
         Log(changed == 0
             ? "Actualización verificada: todos los archivos instalados ya estaban actualizados."
             : $"Actualización aplicada: se reemplazaron o agregaron {changed} archivo(s); los demás se conservaron.");
+    }
+
+    private void RemoveLegacyDesktopFiles()
+    {
+        foreach (var fileName in new[]
+                 {
+                     LegacyDesktopExecutableName,
+                     "Pos.Desktop.dll",
+                     "Pos.Desktop.deps.json",
+                     "Pos.Desktop.runtimeconfig.json",
+                     "Pos.Desktop.pdb"
+                 })
+        {
+            var path = Path.Combine(_installRoot, "client", fileName);
+            if (!File.Exists(path)) continue;
+            File.Delete(path);
+            Log($"Se retiró el archivo anterior del cliente: {fileName}");
+        }
     }
 
     private static async Task<bool> PayloadEntryMatchesAsync(ZipArchiveEntry entry, string target)
@@ -650,7 +673,7 @@ public sealed class InstallerForm : Form
 
     private void CreateShortcuts()
     {
-        var target = Path.Combine(_installRoot, "client", "Pos.Desktop.exe");
+        var target = DesktopExecutablePath;
         var shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!);
         if (shell is null) return;
         var shellType = shell.GetType();
@@ -679,7 +702,7 @@ public sealed class InstallerForm : Form
         using var key = Registry.CurrentUser.CreateSubKey(runKeyPath);
         if (enabled)
         {
-            var target = Path.Combine(_installRoot, "client", "Pos.Desktop.exe");
+            var target = DesktopExecutablePath;
             key?.SetValue(valueName, Program.QuoteArgument(target), RegistryValueKind.String);
             Log("Inicio automático de JetVenta activado para este usuario de Windows.");
         }
@@ -698,7 +721,7 @@ public sealed class InstallerForm : Form
 
     private void StartDesktop()
     {
-        var desktop = Path.Combine(_installRoot, "client", "Pos.Desktop.exe");
+        var desktop = DesktopExecutablePath;
         if (!File.Exists(desktop)) throw new FileNotFoundException("No se encontró la aplicación instalada.", desktop);
         Process.Start(new ProcessStartInfo(desktop) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(desktop)! });
     }
@@ -719,7 +742,12 @@ public sealed class InstallerForm : Form
         });
     }
 
-    private bool HasExistingInstallation() => File.Exists(Path.Combine(_installRoot, "client", "Pos.Desktop.exe")) || File.Exists(Path.Combine(_dataRoot, "postgresql", "data", "PG_VERSION"));
+    private string DesktopExecutablePath => Path.Combine(_installRoot, "client", DesktopExecutableName);
+
+    private bool HasExistingInstallation() =>
+        File.Exists(DesktopExecutablePath) ||
+        File.Exists(Path.Combine(_installRoot, "client", LegacyDesktopExecutableName)) ||
+        File.Exists(Path.Combine(_dataRoot, "postgresql", "data", "PG_VERSION"));
 
     private static string? GetInstalledVersion()
     {
