@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.ComponentModel;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -15,7 +16,7 @@ public partial class PurchasePlanningWindow : Window
     private readonly List<SuggestionRow> _suggestions = [];
     private readonly List<OrderLineRow> _orderLines = [];
     private bool _loadingFilters;
-    private CancellationTokenSource? _productSearchCancellation;
+    private decimal? _quantityBeforeEditing;
 
     public PurchasePlanningWindow()
     {
@@ -41,7 +42,6 @@ public partial class PurchasePlanningWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         BarcodeScannerService.BarcodeScanned -= OnBarcodeScanned;
-        _productSearchCancellation?.Cancel();
     }
 
     private async Task LoadFiltersAsync()
@@ -113,53 +113,11 @@ public partial class PurchasePlanningWindow : Window
         else line.Quantity += suggestion.Quantity;
     }
 
-    private async void OnProductSearchChanged(object sender, TextChangedEventArgs e)
-    {
-        _productSearchCancellation?.Cancel();
-        _productSearchCancellation = new CancellationTokenSource();
-        var cancellationToken = _productSearchCancellation.Token;
-        var query = ProductSearchTextBox.Text.Trim();
-        if (query.Length == 0)
-        {
-            ProductResultsList.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        try
-        {
-            await Task.Delay(180, cancellationToken);
-            var products = await Client.GetFromJsonAsync<List<ProductSearchDto>>($"/api/products/search?q={Uri.EscapeDataString(query)}", cancellationToken) ?? [];
-            ProductResultsList.ItemsSource = products.Select(item => new ProductSearchRow(item)).ToList();
-            ProductResultsList.Visibility = products.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-        }
-        catch (OperationCanceledException) { }
-        catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableRetry; }
-    }
-
     private async void OnProductSearchKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key is Key.Down or Key.Up)
-        {
-            if (ProductResultsList.Items.Count > 0)
-            {
-                ProductResultsList.SelectedIndex = e.Key == Key.Down
-                    ? Math.Min(ProductResultsList.SelectedIndex < 0 ? 0 : ProductResultsList.SelectedIndex + 1, ProductResultsList.Items.Count - 1)
-                    : Math.Max(ProductResultsList.SelectedIndex <= 0 ? 0 : ProductResultsList.SelectedIndex - 1, 0);
-                ProductResultsList.ScrollIntoView(ProductResultsList.SelectedItem);
-            }
-            e.Handled = true;
-            return;
-        }
-
         if (e.Key != Key.Enter) return;
-        if (ProductResultsList.SelectedItem is ProductSearchRow selected) AddProductToOrder(selected, 1m);
-        else await AddExactProductAsync(ProductSearchTextBox.Text.Trim());
+        await AddExactProductAsync(ProductSearchTextBox.Text.Trim());
         e.Handled = true;
-    }
-
-    private void OnProductSearchResultDoubleClick(object sender, MouseButtonEventArgs e)
-    {
-        if (ProductResultsList.SelectedItem is ProductSearchRow selected) AddProductToOrder(selected, 1m);
     }
 
     private void OnBarcodeScanned(object? sender, string code) => Dispatcher.BeginInvoke(async () =>
@@ -191,20 +149,47 @@ public partial class PurchasePlanningWindow : Window
     private void AddProductToOrder(ProductSearchRow product, decimal quantity)
     {
         var suggested = _suggestions.SingleOrDefault(item => item.ProductId == product.Product.Id);
-        var quantityToAdd = suggested?.Quantity ?? quantity;
         var existing = _orderLines.SingleOrDefault(item => item.ProductId == product.Product.Id);
+        var quantityToAdd = existing is null
+            ? suggested?.Quantity ?? CalculatePurchaseQuantity(product.Product.Stock, product.Product.MinimumStock, product.Product.MaximumStock, quantity)
+            : quantity;
         if (existing is null) _orderLines.Add(new OrderLineRow(product, quantityToAdd));
         else existing.Quantity += quantityToAdd;
         ProductSearchTextBox.Clear();
-        ProductResultsList.Visibility = Visibility.Collapsed;
         RefreshOrderLines();
         MessageText.Text = $"{product.Product.Description} se agregó a la lista. No se modificó inventario.";
     }
 
+    private static decimal CalculatePurchaseQuantity(decimal stock, decimal minimumStock, decimal maximumStock, decimal defaultQuantity)
+    {
+        if (maximumStock > stock) return decimal.Round(maximumStock - stock, 3, MidpointRounding.AwayFromZero);
+        if (minimumStock > stock) return decimal.Round(minimumStock - stock, 3, MidpointRounding.AwayFromZero);
+        return defaultQuantity;
+    }
+
     private void OnRemoveLineClick(object sender, RoutedEventArgs e)
     {
-        if (OrderLinesList.SelectedItem is not OrderLineRow line) return;
+        if (OrderLinesGrid.SelectedItem is not OrderLineRow line) return;
         _orderLines.Remove(line); RefreshOrderLines();
+    }
+
+    private void OnOrderLineBeginningEdit(object sender, DataGridBeginningEditEventArgs e)
+    {
+        _quantityBeforeEditing = (e.Row.Item as OrderLineRow)?.Quantity;
+    }
+
+    private void OnOrderLineCellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+    {
+        if (e.EditAction != DataGridEditAction.Commit || e.Row.Item is not OrderLineRow line) return;
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (line.Quantity <= 0m)
+            {
+                line.Quantity = _quantityBeforeEditing is > 0m ? _quantityBeforeEditing.Value : 1m;
+                MessageText.Text = "La cantidad de compra debe ser mayor a cero.";
+            }
+            RefreshOrderLines();
+        });
     }
 
     private async void OnCreateOrderClick(object sender, RoutedEventArgs e)
@@ -289,7 +274,7 @@ public partial class PurchasePlanningWindow : Window
 
     private void RefreshOrderLines()
     {
-        OrderLinesList.ItemsSource = null; OrderLinesList.ItemsSource = _orderLines;
+        OrderLinesGrid.ItemsSource = null; OrderLinesGrid.ItemsSource = _orderLines;
         var total = _orderLines.Sum(item => item.Quantity * item.UnitCost);
         OrderTotalText.Text = _orderLines.Count == 0 ? "Sin productos seleccionados" : $"{_orderLines.Count} partida(s) | Total estimado: ${total:0.00}";
     }
@@ -311,18 +296,18 @@ public partial class PurchasePlanningWindow : Window
 
     private sealed record SupplierDto(Guid Id, string Name);
     private sealed record DepartmentDto(Guid Id, string Name);
-    private sealed record SuggestionDto(Guid ProductId, string Code, string Description, Guid? DepartmentId, string? Department, Guid? SupplierId, string? Supplier, decimal Stock, decimal MinimumStock, decimal SuggestedQuantity, decimal UnitCost, decimal EstimatedTotal, string UnitOfMeasure);
+    private sealed record SuggestionDto(Guid ProductId, string Code, string Description, Guid? DepartmentId, string? Department, Guid? SupplierId, string? Supplier, decimal Stock, decimal MinimumStock, decimal MaximumStock, decimal SuggestedQuantity, decimal UnitCost, decimal EstimatedTotal, string UnitOfMeasure);
     private sealed record OrderDto(Guid Id, string Status, string? Supplier, string? Notes, decimal Total, int LineCount, DateTimeOffset CreatedAtUtc);
-    private sealed record ProductSearchDto(Guid Id, string Code, string Description, decimal Price, decimal Cost, decimal Stock, string UnitOfMeasure);
+    private sealed record ProductSearchDto(Guid Id, string Code, string Description, decimal Price, decimal Cost, decimal Stock, decimal MinimumStock, decimal MaximumStock, string UnitOfMeasure);
     private sealed record TicketSettingsDto(string Name, string LegalName, string TaxId, string Address, string Phone, string TicketHeader, string TicketFooter, int TicketWidthMm);
     private sealed record SupplierOption(Guid? Id, string Name) { public static SupplierOption All { get; } = new(null, "Todos los proveedores"); public static SupplierOption None { get; } = new(null, "Sin proveedor asignado"); public string DisplayText => Name; }
     private sealed record DepartmentOption(Guid? Id, string Name) { public static DepartmentOption All { get; } = new(null, "Todos los departamentos"); public string DisplayText => Name; }
     private sealed class SuggestionRow(SuggestionDto source)
     {
         public bool IsSelected { get; set; }
-        public Guid ProductId => source.ProductId; public string Code => source.Code; public string Description => source.Description; public string Department => string.IsNullOrWhiteSpace(source.Department) ? "Sin departamento" : source.Department; public string Supplier => string.IsNullOrWhiteSpace(source.Supplier) ? "Sin proveedor" : source.Supplier; public decimal Quantity => source.SuggestedQuantity; public decimal UnitCost => source.UnitCost; public string StockText => $"{source.Stock:0.###} {source.UnitOfMeasure}"; public string MinimumText => source.MinimumStock.ToString("0.###", CultureInfo.CurrentCulture); public string QuantityText => source.SuggestedQuantity.ToString("0.###", CultureInfo.CurrentCulture);
+        public Guid ProductId => source.ProductId; public string Code => source.Code; public string Description => source.Description; public string Department => string.IsNullOrWhiteSpace(source.Department) ? "Sin departamento" : source.Department; public string Supplier => string.IsNullOrWhiteSpace(source.Supplier) ? "Sin proveedor" : source.Supplier; public decimal Quantity => source.SuggestedQuantity; public decimal UnitCost => source.UnitCost; public string StockText => $"{source.Stock:0.###} {source.UnitOfMeasure}"; public string MinimumText => source.MinimumStock.ToString("0.###", CultureInfo.CurrentCulture); public string MaximumText => source.MaximumStock > 0m ? source.MaximumStock.ToString("0.###", CultureInfo.CurrentCulture) : "No definido"; public string QuantityText => source.SuggestedQuantity.ToString("0.###", CultureInfo.CurrentCulture);
     }
-    private sealed class OrderLineRow
+    private sealed class OrderLineRow : INotifyPropertyChanged
     {
         public OrderLineRow(SuggestionRow source)
             : this(source.ProductId, source.Code, source.Description, source.Quantity, source.UnitCost) { }
@@ -335,18 +320,31 @@ public partial class PurchasePlanningWindow : Window
             ProductId = productId;
             Code = code;
             Description = description;
-            Quantity = quantity;
+            _quantity = quantity;
             UnitCost = unitCost;
         }
 
         public Guid ProductId { get; }
         public string Code { get; }
         public string Description { get; }
-        public decimal Quantity { get; set; }
+        private decimal _quantity;
+        public decimal Quantity
+        {
+            get => _quantity;
+            set
+            {
+                if (_quantity == value) return;
+                _quantity = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Quantity)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TotalText)));
+            }
+        }
         public decimal UnitCost { get; }
-        public string DisplayText => $"{Code} | {Description} | {Quantity:0.###} x ${UnitCost:0.00} = ${Quantity * UnitCost:0.00}";
+        public string UnitCostText => $"${UnitCost:0.00}";
+        public string TotalText => $"${Quantity * UnitCost:0.00}";
+        public event PropertyChangedEventHandler? PropertyChanged;
     }
-    private sealed record ProductSearchRow(ProductSearchDto Product) { public string DisplayText => $"{Product.Code} | {Product.Description} | Costo ${Product.Cost:0.00} | Existencia {Product.Stock:0.###} {Product.UnitOfMeasure}"; }
+    private sealed record ProductSearchRow(ProductSearchDto Product);
     private sealed class OrderRow(OrderDto source)
     {
         public Guid Id => source.Id; public string Supplier => string.IsNullOrWhiteSpace(source.Supplier) ? "Sin proveedor" : source.Supplier; public string Status => source.Status; public string StatusText => source.Status == "Open" ? "Pendiente" : "Cerrada"; public string? Notes => source.Notes; public int LineCount => source.LineCount; public string TotalText => $"${source.Total:0.00}"; public string CreatedText => source.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm");

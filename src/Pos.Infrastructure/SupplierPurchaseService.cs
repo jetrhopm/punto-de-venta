@@ -10,7 +10,7 @@ public sealed record SupplierResult(Guid Id, string Name, string? Phone, string?
 public sealed record PurchaseLineCommand(Guid ProductId, decimal Quantity, decimal UnitCost, decimal? SalePrice = null);
 public sealed record ReceivePurchaseCommand(Guid OperationId, Guid? SupplierId, IReadOnlyList<PurchaseLineCommand> Lines);
 public sealed record ReceivePurchaseResult(Guid PurchaseId, Guid OperationId, decimal Total, bool Existing);
-public sealed record PurchaseSuggestion(Guid ProductId, string Code, string Description, Guid? DepartmentId, string? Department, Guid? SupplierId, string? Supplier, decimal Stock, decimal MinimumStock, decimal SuggestedQuantity, decimal UnitCost, decimal EstimatedTotal, string UnitOfMeasure);
+public sealed record PurchaseSuggestion(Guid ProductId, string Code, string Description, Guid? DepartmentId, string? Department, Guid? SupplierId, string? Supplier, decimal Stock, decimal MinimumStock, decimal MaximumStock, decimal SuggestedQuantity, decimal UnitCost, decimal EstimatedTotal, string UnitOfMeasure);
 public sealed record PurchaseOrderLineCommand(Guid ProductId, decimal Quantity, decimal UnitCost);
 public sealed record PurchaseOrderCommand(Guid OperationId, Guid? SupplierId, string? Notes, IReadOnlyList<PurchaseOrderLineCommand> Lines);
 public sealed record PurchaseOrderResult(Guid Id, Guid OperationId, Guid? SupplierId, string? Supplier, string Status, string? Notes, decimal Total, int LineCount, DateTimeOffset CreatedAtUtc, DateTimeOffset? ClosedAtUtc);
@@ -89,13 +89,14 @@ public sealed class SupplierPurchaseService(PosDbContext database)
             .Where(item => !supplierId.HasValue || item.PrimarySupplierId == supplierId)
             .Where(item => !departmentId.HasValue || item.DepartmentId == departmentId)
             .OrderBy(item => item.Department == null ? string.Empty : item.Department.Name).ThenBy(item => item.Description)
-            .Select(item => new { item.Id, item.Code, item.Description, item.DepartmentId, Department = item.Department == null ? null : item.Department.Name, item.PrimarySupplierId, Supplier = item.PrimarySupplierId == null ? null : database.Suppliers.Where(supplier => supplier.Id == item.PrimarySupplierId).Select(supplier => supplier.Name).FirstOrDefault(), item.Stock, item.MinimumStock, item.Cost, item.UnitOfMeasure })
+            .Select(item => new { item.Id, item.Code, item.Description, item.DepartmentId, Department = item.Department == null ? null : item.Department.Name, item.PrimarySupplierId, Supplier = item.PrimarySupplierId == null ? null : database.Suppliers.Where(supplier => supplier.Id == item.PrimarySupplierId).Select(supplier => supplier.Name).FirstOrDefault(), item.Stock, item.MinimumStock, item.MaximumStock, item.Cost, item.UnitOfMeasure })
             .ToListAsync(cancellationToken);
         return products.Select(item =>
         {
-            var suggestedQuantity = decimal.Round(Math.Max(item.MinimumStock - item.Stock, 1m), 3, MidpointRounding.AwayFromZero);
+            var replenishmentTarget = item.MaximumStock > item.Stock ? item.MaximumStock : item.MinimumStock;
+            var suggestedQuantity = decimal.Round(Math.Max(replenishmentTarget - item.Stock, 1m), 3, MidpointRounding.AwayFromZero);
             var total = decimal.Round(suggestedQuantity * item.Cost, 2, MidpointRounding.AwayFromZero);
-            return new PurchaseSuggestion(item.Id, item.Code, item.Description, item.DepartmentId, item.Department, item.PrimarySupplierId, item.Supplier, item.Stock, item.MinimumStock, suggestedQuantity, item.Cost, total, item.UnitOfMeasure);
+            return new PurchaseSuggestion(item.Id, item.Code, item.Description, item.DepartmentId, item.Department, item.PrimarySupplierId, item.Supplier, item.Stock, item.MinimumStock, item.MaximumStock, suggestedQuantity, item.Cost, total, item.UnitOfMeasure);
         }).ToList();
     }
 
