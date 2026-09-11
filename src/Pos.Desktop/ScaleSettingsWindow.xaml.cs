@@ -77,7 +77,7 @@ public partial class ScaleSettingsWindow : Window
                 return;
             }
             StatusText.Text = command.Enabled ? $"Báscula guardada en {command.Port}." : "Báscula desactivada.";
-            OperationFeedback.Show(this, "Báscula", StatusText.Text, OperationResultKind.Success);
+            ConfigurationFeedback.ShowSavedAndClose(this, "Báscula", StatusText.Text);
         }
         catch (Exception exception)
         {

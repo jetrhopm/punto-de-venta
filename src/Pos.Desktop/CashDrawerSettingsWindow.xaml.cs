@@ -69,7 +69,7 @@ public partial class CashDrawerSettingsWindow : Window
                 return;
             }
             StatusText.Text = command.Enabled ? $"Configuración guardada para {command.PrinterName}." : "Cajón desactivado.";
-            OperationFeedback.Show(this, "Cajón de dinero", StatusText.Text, OperationResultKind.Success);
+            ConfigurationFeedback.ShowSavedAndClose(this, "Cajón de dinero", StatusText.Text);
         }
         catch (Exception exception)
         {
