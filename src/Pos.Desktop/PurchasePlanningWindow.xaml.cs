@@ -138,7 +138,11 @@ public partial class PurchasePlanningWindow : Window
 
     private void OnAddSelectedClick(object sender, RoutedEventArgs e)
     {
-        var selected = _suggestions.Where(item => item.IsSelected).ToList();
+        var selected = _suggestions.Where(item => item.IsSelected)
+            .Concat(SuggestionsGrid.SelectedItems.OfType<SuggestionRow>())
+            .GroupBy(item => item.ProductId)
+            .Select(group => group.First())
+            .ToList();
         if (selected.Count == 0) { MessageText.Text = "Selecciona al menos un producto de la lista de sugerencias."; return; }
         foreach (var suggestion in selected)
         {
