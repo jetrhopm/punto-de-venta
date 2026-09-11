@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -26,6 +27,8 @@ public sealed class LanPairingService(PosDbContext database)
     public async Task<PairDeviceResult?> PairAsync(PairDeviceCommand command, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(command.Code) || string.IsNullOrWhiteSpace(command.DeviceName) || string.IsNullOrWhiteSpace(command.RegisterName)) return null;
+        if (command.Code.Trim().Length != 6 || command.DeviceName.Trim().Length > 80 || command.RegisterName.Trim().Length > 80) throw new ArgumentException("Revisa el código y los nombres de equipo y caja.");
+        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var pairing = await database.PairingCodes.SingleOrDefaultAsync(item => item.CodeHash == Hash(command.Code.Trim()) && item.UsedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
         if (pairing is null) return null;
         var registerName = command.RegisterName.Trim();
@@ -36,6 +39,7 @@ public sealed class LanPairingService(PosDbContext database)
         pairing.UsedAtUtc = DateTimeOffset.UtcNow;
         database.Registers.Add(register); database.Devices.Add(device);
         await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return new PairDeviceResult(device.Id, device.StoreId, device.RegisterId, deviceToken, register.Name);
     }
 

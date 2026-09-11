@@ -17,6 +17,8 @@ public partial class JoinServerWindow : Window
         if (CodeBox.Text.Trim().Length != 6 || string.IsNullOrWhiteSpace(DeviceBox.Text) || string.IsNullOrWhiteSpace(RegisterBox.Text)) { MessageText.Text = "Completa el codigo, equipo y caja."; return; }
         try
         {
+            var compatibility = await ApiClient.CheckLanCompatibilityAsync();
+            if (!compatibility.IsCompatible) { MessageText.Text = compatibility.Message; return; }
             using var response = await ApiClient.Client.PostAsJsonAsync("api/lan/pair", new { code = CodeBox.Text.Trim(), deviceName = DeviceBox.Text.Trim(), registerName = RegisterBox.Text.Trim() });
             if (!response.IsSuccessStatusCode) { MessageText.Text = await response.Content.ReadAsStringAsync(); return; }
             var result = await response.Content.ReadFromJsonAsync<PairResult>();

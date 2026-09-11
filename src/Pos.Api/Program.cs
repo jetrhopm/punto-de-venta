@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Hosting.WindowsServices;
 using Pos.Infrastructure;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.RateLimiting;
 
 var startupLog = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "logs", "api-startup.log");
 void WriteStartupLog(string message)
@@ -66,8 +68,20 @@ builder.Services.AddScoped<ProductImportService>();
 builder.Services.AddScoped<DatabaseMaintenanceService>();
 builder.Services.AddScoped<LicenseService>();
 builder.Services.AddHostedService<DailyBackupHostedService>();
+builder.Services.AddRateLimiter(options => options.AddPolicy("lan-auth", context =>
+    RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        })));
 
 var app = builder.Build();
+
+app.UseRateLimiter();
 
 app.Use(async (context, next) =>
 {
@@ -184,6 +198,57 @@ app.MapGet("/api/license/status", async (HttpRequest request, LicenseService lic
     var result = await licenses.GetAsync(token, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
+
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path;
+    var isOAuthCallback = path.StartsWithSegments("/api/integrations/mercado-pago/oauth/callback");
+    if (!isOAuthCallback && !LanNetworkPolicy.IsLocalOrPrivate(context.Connection.RemoteIpAddress))
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new { code = "lan_only", message = "JetVenta sólo acepta conexiones desde localhost o una red privada." });
+        return;
+    }
+
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    if (path.StartsWithSegments("/api")) context.Response.Headers.CacheControl = "no-store";
+
+    var allowsAnonymous = path.StartsWithSegments("/api/setup") ||
+        path.StartsWithSegments("/api/auth/login") ||
+        path.StartsWithSegments("/api/auth/active-users") ||
+        path.StartsWithSegments("/api/license/startup-status") ||
+        path.StartsWithSegments("/api/lan/info") ||
+        path.StartsWithSegments("/api/lan/pair") ||
+        isOAuthCallback;
+    var requiresProtocol = path.StartsWithSegments("/api/auth/login") || path.StartsWithSegments("/api/lan/pair") || (!allowsAnonymous && path.StartsWithSegments("/api"));
+    if (requiresProtocol && context.Request.Headers["X-JetVenta-Lan-Protocol"].ToString() != LanNetworkPolicy.ProtocolVersion.ToString())
+    {
+        context.Response.StatusCode = StatusCodes.Status426UpgradeRequired;
+        await context.Response.WriteAsJsonAsync(new { code = "protocol_mismatch", message = "La caja y el servidor usan versiones de comunicación diferentes. Actualiza JetVenta en esta computadora." });
+        return;
+    }
+
+    if (!allowsAnonymous && path.StartsWithSegments("/api"))
+    {
+        var accessToken = context.Request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+        var deviceToken = context.Request.Headers["X-JetVenta-Device-Token"].ToString();
+        var validation = await context.RequestServices.GetRequiredService<AuthenticationService>().ValidateSessionDeviceAsync(
+            accessToken,
+            deviceToken,
+            LanNetworkPolicy.IsLoopback(context.Connection.RemoteIpAddress),
+            context.RequestAborted);
+        if (!validation.IsValid)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsJsonAsync(new { code = validation.FailureCode, message = validation.FailureMessage });
+            return;
+        }
+    }
+
+    await next();
+});
 app.MapGet("/api/license/startup-status", (LicenseService licenses) => Results.Ok(licenses.GetStartupStatus()));
 app.MapPost("/api/license/import", async (HttpRequest request, ImportLicenseCommand command, LicenseService licenses, CancellationToken cancellationToken) =>
 {
@@ -227,7 +292,7 @@ app.MapDelete("/api/diagnostics/pending-print-documents", async (HttpRequest req
 app.MapGet("/api/lan/info", () => Results.Ok(new
 {
     service = "Pos.Api",
-    protocolVersion = "1",
+    protocolVersion = LanNetworkPolicy.ProtocolVersion,
     apiVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0",
     machine = Environment.MachineName
 }));
@@ -239,8 +304,9 @@ app.MapPost("/api/lan/pairing-codes", async (HttpRequest request, LanPairingServ
 app.MapPost("/api/lan/pair", async (PairDeviceCommand command, LanPairingService pairing, CancellationToken cancellationToken) =>
 {
     try { var result = await pairing.PairAsync(command, cancellationToken); return result is null ? Results.BadRequest(new { message = "Codigo invalido, usado o expirado." }) : Results.Ok(result); }
+    catch (ArgumentException exception) { return Results.BadRequest(new { message = exception.Message }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
-});
+}).RequireRateLimiting("lan-auth");
 app.MapGet("/api/ticket-settings", async (HttpRequest request, TicketSettingsService settings, CancellationToken cancellationToken) => { var result = await settings.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { result.Name, result.LegalName, result.TaxId, result.Address, result.Phone, result.TicketHeader, result.TicketFooter, result.TicketWidthMm }); });
 app.MapPut("/api/ticket-settings", async (HttpRequest request, TicketSettingsCommand command, TicketSettingsService settings, CancellationToken cancellationToken) => { try { var result = await settings.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { result.Name, result.LegalName, result.TaxId, result.Address, result.Phone, result.TicketHeader, result.TicketFooter, result.TicketWidthMm }); } catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["ticket"] = [exception.Message] }); } });
 app.MapGet("/api/currency-settings", async (HttpRequest request, CurrencySettingsService settings, CancellationToken cancellationToken) => { var result = await settings.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); });
@@ -890,7 +956,7 @@ app.MapPost("/api/auth/login", async (HttpRequest request, LoginCommand command,
         _ => StatusCodes.Status403Forbidden
     };
     return Results.Json(new { code = attempt.FailureCode, message = attempt.FailureMessage }, statusCode: statusCode);
-});
+}).RequireRateLimiting("lan-auth");
 app.MapPost("/api/auth/temporary-permission", async (HttpRequest request, TemporaryPermissionAuthorizationCommand command, AuthenticationService authentication, CancellationToken cancellationToken) =>
 {
     var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);

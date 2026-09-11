@@ -46,6 +46,14 @@ public partial class LoginWindow : Window
             return;
         }
 
+        var compatibility = await ApiClient.CheckLanCompatibilityAsync();
+        if (!compatibility.IsCompatible)
+        {
+            SetBusy(false);
+            SetStatus(compatibility.Message, StatusKind.Error);
+            return;
+        }
+
         var configured = await EnsureInitialSetupAsync();
         SetBusy(false);
         if (configured)
@@ -140,6 +148,7 @@ public partial class LoginWindow : Window
             UserComboBox.Focus();
             return;
         }
+
         if (string.IsNullOrEmpty(PasswordBox.Password))
         {
             SetStatus("Escribe la contraseña del usuario autorizado para abrir la activación.", StatusKind.Information);
@@ -175,6 +184,13 @@ public partial class LoginWindow : Window
             if (!await ApiClient.WaitUntilAvailableAsync())
             {
                 SetStatus(UnavailableMessage, StatusKind.Error);
+                return;
+            }
+
+            var compatibility = await ApiClient.CheckLanCompatibilityAsync();
+            if (!compatibility.IsCompatible)
+            {
+                SetStatus(compatibility.Message, StatusKind.Error);
                 return;
             }
 

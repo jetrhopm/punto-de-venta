@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http;
+using System.Net.Http.Json;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -8,6 +9,7 @@ namespace Pos.Desktop;
 
 public static class ApiClient
 {
+    public const int LanProtocolVersion = 2;
     private static HttpClient ClientInstance = CreateClient("http://127.0.0.1:5000");
     // Peripherals and the paired register belong to the Windows computer, not to
     // the Windows profile that happens to open JetVenta.
@@ -68,6 +70,17 @@ public static class ApiClient
         return false;
     }
 
+    public static async Task<LanCompatibilityResult> CheckLanCompatibilityAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await ClientInstance.GetAsync("api/lan/info", cancellationToken);
+        if (!response.IsSuccessStatusCode) return new(false, $"El servidor respondió {(int)response.StatusCode} al comprobar la comunicación LAN.");
+        var info = await response.Content.ReadFromJsonAsync<LanInfo>(cancellationToken: cancellationToken);
+        if (info is null) return new(false, "El servidor no devolvió su versión de comunicación LAN.");
+        return info.ProtocolVersion == LanProtocolVersion
+            ? new(true, $"Servidor {info.Machine} compatible.")
+            : new(false, $"La caja usa protocolo {LanProtocolVersion}, pero el servidor usa {info.ProtocolVersion}. Actualiza JetVenta en esta computadora o en el servidor.");
+    }
+
     public static void SaveDeviceIdentity(Guid deviceId, Guid storeId, Guid registerId, string deviceToken)
     {
         DeviceId = deviceId; StoreId = storeId; RegisterId = registerId; DeviceToken = deviceToken;
@@ -118,7 +131,7 @@ public static class ApiClient
             try { currentToken = JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(SettingsPath))?.DeviceTokenProtected; }
             catch (JsonException) { }
         }
-        WriteSettings(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm, BarcodeScanner, PrintingEnabled, 3, CashDrawer, Scale));
+        WriteSettings(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm, BarcodeScanner, PrintingEnabled, 4, CashDrawer, Scale));
     }
 
     private static void Load()
@@ -232,6 +245,8 @@ public static class ApiClient
 
     private static void ApplyDeviceIdentity(HttpClient client)
     {
+        client.DefaultRequestHeaders.Remove("X-JetVenta-Lan-Protocol");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("X-JetVenta-Lan-Protocol", LanProtocolVersion.ToString());
         client.DefaultRequestHeaders.Remove("X-JetVenta-Device-Token");
         if (!string.IsNullOrWhiteSpace(DeviceToken)) client.DefaultRequestHeaders.TryAddWithoutValidation("X-JetVenta-Device-Token", DeviceToken);
     }
@@ -266,6 +281,9 @@ public sealed record BarcodeScannerProfile(BarcodeScannerMode Mode, string? Port
         BaudRate is >= 1200 and <= 115200 ? BaudRate : 9600,
         Terminator is "CR" or "LF" or "CRLF" ? Terminator : "CRLF");
 }
+
+public sealed record LanCompatibilityResult(bool IsCompatible, string Message);
+internal sealed record LanInfo(int ProtocolVersion, string ApiVersion, string Machine);
 
 public sealed record CashDrawerProfile(bool Enabled, string? PrinterName, string Model, string Port)
 {

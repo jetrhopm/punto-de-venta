@@ -8,6 +8,7 @@ namespace Pos.Infrastructure;
 public sealed record LoginCommand(string UserName, string Password);
 public sealed record LoginResult(Guid SessionId, string AccessToken, Guid UserId, Guid RegisterId, string DisplayName, bool IsAdministrator, DateTimeOffset ExpiresAtUtc, IReadOnlyList<string> Permissions);
 public sealed record LoginAttempt(LoginResult? Session, string? FailureCode, string? FailureMessage);
+public sealed record SessionDeviceValidationAttempt(bool IsValid, string? FailureCode, string? FailureMessage);
 public sealed record TemporaryPermissionAuthorizationCommand(string UserName, string Password, string Permission);
 public sealed record TemporaryPermissionAuthorizationResult(Guid? GrantId, DateTimeOffset ExpiresAtUtc, string AuthorizedBy);
 public sealed record TemporaryPermissionAuthorizationAttempt(
@@ -80,6 +81,29 @@ public sealed class AuthenticationService(PosDbContext database, PasswordHasher<
         session.RevokedAtUtc = DateTimeOffset.UtcNow;
         await database.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    public async Task<SessionDeviceValidationAttempt> ValidateSessionDeviceAsync(string accessToken, string? deviceToken, bool isLocalConnection, CancellationToken cancellationToken)
+    {
+        var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(
+            item => item.TokenHash == Hash(accessToken ?? string.Empty) && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow,
+            cancellationToken);
+        if (session is null) return new(false, "session_invalid", "La sesión ya no es válida. Inicia sesión nuevamente.");
+
+        if (session.DeviceId is not Guid deviceId)
+        {
+            return isLocalConnection
+                ? new(true, null, null)
+                : new(false, "local_session_only", "La sesión de la caja principal sólo puede usarse desde la computadora servidor.");
+        }
+
+        if (string.IsNullOrWhiteSpace(deviceToken)) return new(false, "device_required", "Esta sesión requiere la identidad de la computadora emparejada.");
+        var device = await database.Devices.AsNoTracking().SingleOrDefaultAsync(item =>
+            item.Id == deviceId && item.RegisterId == session.RegisterId && item.IsActive && item.DeviceTokenHash == Hash(deviceToken),
+            cancellationToken);
+        return device is null
+            ? new(false, "device_mismatch", "La identidad de esta computadora no coincide con la sesión. Empareja nuevamente la caja o inicia sesión de nuevo.")
+            : new(true, null, null);
     }
 
     public async Task<TemporaryPermissionAuthorizationResult?> GrantTemporaryPermissionAsync(

@@ -77,3 +77,13 @@
   autenticada, no a la primera caja que encuentre la API.
 - La cuenta de Mercado Pago permanece como información protegida de la tienda;
   sólo la terminal física se decide por caja/equipo.
+
+## Incremento 7 terminado: comunicación y seguridad LAN
+
+- La versión de protocolo LAN se valida antes de login y emparejamiento.
+- Las sesiones de cajas remotas se validan con el token de su dispositivo en
+  cada solicitud; la sesión local del servidor no es reutilizable por red.
+- La API acepta sólo loopback y redes privadas, limita intentos de login y
+  emparejamiento por IP y consume códigos de emparejamiento atómicamente.
+- HTTP sigue destinado exclusivamente a una LAN privada; no se publica el
+  puerto de JetVenta a Internet.

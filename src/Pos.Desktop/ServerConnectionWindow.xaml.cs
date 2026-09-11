@@ -30,6 +30,13 @@ public partial class ServerConnectionWindow : Window
                 return;
             }
 
+            var compatibility = await ApiClient.CheckLanCompatibilityAsync();
+            if (!compatibility.IsCompatible)
+            {
+                MessageText.Text = compatibility.Message;
+                return;
+            }
+
             using var setup = await ApiClient.Client.GetAsync("api/setup/status");
             if (setup.IsSuccessStatusCode)
             {
