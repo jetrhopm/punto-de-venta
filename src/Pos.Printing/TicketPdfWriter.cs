@@ -28,7 +28,9 @@ public sealed record TicketPdfData(
     string CurrencySymbol = "$",
     long Folio = 0,
     long ShiftNumber = 0,
-    decimal? Subtotal = null)
+    decimal? Subtotal = null,
+    string DocumentTitle = "COMPROBANTE DE VENTA",
+    string DocumentNumberLabel = "VENTA")
 {
     public TicketPdfData(string storeName, Guid saleId, DateTimeOffset createdAtUtc, IReadOnlyList<TicketPdfLine> lines, decimal total, decimal received, decimal change)
         : this(storeName, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, "Gracias por su compra", 80, saleId, Guid.Empty, "Caja principal", "Administrador", createdAtUtc, lines, [new TicketPdfPayment("Cash", total, received, change)], total) { }
@@ -68,12 +70,12 @@ public static class TicketPdfWriter
         if (!string.IsNullOrWhiteSpace(ticket.Header)) AddWrapped(rows, ticket.Header, maxCharacters, TextAlignment.Center, normalSize, false, 3m);
 
         AddRule(rows);
-        rows.Add(new LayoutRow("COMPROBANTE DE VENTA", normalSize + 1m, true, TextAlignment.Center, 4m));
+        rows.Add(new LayoutRow(ticket.DocumentTitle, normalSize + 1m, true, TextAlignment.Center, 4m));
         rows.Add(new LayoutRow($"FECHA: {ticket.CreatedAtUtc.ToLocalTime():dd/MM/yyyy HH:mm:ss}", normalSize, false, TextAlignment.Left, 2m));
         rows.Add(new LayoutRow($"CAJA: {ValueOrDefault(ticket.RegisterName, "CAJA PRINCIPAL")}", normalSize, false, TextAlignment.Left, 2m));
         rows.Add(new LayoutRow($"CAJERO: {ValueOrDefault(ticket.CashierName, "ADMINISTRADOR")}", normalSize, false, TextAlignment.Left, 2m));
         rows.Add(new LayoutRow($"TURNO: {FormatShiftNumber(ticket.ShiftNumber)}", normalSize, false, TextAlignment.Left, 2m));
-        rows.Add(new LayoutRow($"VENTA: {FormatFolio(ticket.Folio, ticket.SaleId)}", normalSize, false, TextAlignment.Left, 3m));
+        rows.Add(new LayoutRow($"{ticket.DocumentNumberLabel}: {FormatFolio(ticket.Folio, ticket.SaleId)}", normalSize, false, TextAlignment.Left, 3m));
         AddRule(rows);
 
         var quantityWidth = widthMm == 58 ? 5 : 6;

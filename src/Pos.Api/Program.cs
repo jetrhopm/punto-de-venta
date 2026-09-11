@@ -577,6 +577,11 @@ app.MapPost("/api/purchase-orders", async (HttpRequest request, PurchaseOrderCom
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["order"] = [exception.Message] }); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
+app.MapGet("/api/purchase-orders/{id:guid}/print", async (Guid id, HttpRequest request, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
+{
+    try { var result = await purchases.GetOrderForPrintAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), id, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+});
 app.MapPost("/api/purchase-orders/{id:guid}/close", async (Guid id, HttpRequest request, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
 {
     try { var result = await purchases.CloseOrderAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), id, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }

@@ -15,6 +15,8 @@ public sealed record PurchasePlanningProduct(Guid ProductId, string Code, string
 public sealed record PurchaseOrderLineCommand(Guid ProductId, decimal Quantity, decimal UnitCost);
 public sealed record PurchaseOrderCommand(Guid OperationId, Guid? SupplierId, string? Notes, IReadOnlyList<PurchaseOrderLineCommand> Lines);
 public sealed record PurchaseOrderResult(Guid Id, Guid OperationId, Guid? SupplierId, string? Supplier, string Status, string? Notes, decimal Total, int LineCount, DateTimeOffset CreatedAtUtc, DateTimeOffset? ClosedAtUtc);
+public sealed record PurchaseOrderPrintLine(string Code, string Description, decimal Quantity, decimal UnitCost, decimal Total);
+public sealed record PurchaseOrderPrintResult(Guid Id, string? Supplier, string Status, string? Notes, decimal Total, DateTimeOffset CreatedAtUtc, IReadOnlyList<PurchaseOrderPrintLine> Lines);
 
 public sealed class SupplierPurchaseService(PosDbContext database)
 {
@@ -210,6 +212,23 @@ public sealed class SupplierPurchaseService(PosDbContext database)
         var order = await database.PurchaseOrders.SingleOrDefaultAsync(item => item.Id == orderId, cancellationToken) ?? throw new KeyNotFoundException("Orden no encontrada.");
         if (order.Status == "Open") { order.Status = "Closed"; order.ClosedAtUtc = DateTimeOffset.UtcNow; await database.SaveChangesAsync(cancellationToken); }
         return await OrderResultAsync(order, cancellationToken);
+    }
+
+    public async Task<PurchaseOrderPrintResult?> GetOrderForPrintAsync(string token, Guid orderId, CancellationToken cancellationToken)
+    {
+        if (await UserAsync(token, cancellationToken) is null) return null;
+        var order = await database.PurchaseOrders.AsNoTracking().SingleOrDefaultAsync(item => item.Id == orderId, cancellationToken)
+            ?? throw new KeyNotFoundException("Orden no encontrada.");
+        var lines = await (from line in database.PurchaseOrderLines.AsNoTracking()
+                           join product in database.Products.AsNoTracking() on line.ProductId equals product.Id
+                           where line.PurchaseOrderId == orderId
+                           orderby product.Description
+                           select new PurchaseOrderPrintLine(product.Code, product.Description, line.Quantity, line.UnitCost, line.LineTotal))
+            .ToListAsync(cancellationToken);
+        var supplier = order.SupplierId is Guid supplierId
+            ? await database.Suppliers.AsNoTracking().Where(item => item.Id == supplierId).Select(item => item.Name).SingleOrDefaultAsync(cancellationToken)
+            : null;
+        return new PurchaseOrderPrintResult(order.Id, supplier, order.Status, order.Notes, order.Total, order.CreatedAtUtc, lines);
     }
 
     private async Task<PurchaseOrderResult> OrderResultAsync(PurchaseOrderRecord order, CancellationToken cancellationToken)

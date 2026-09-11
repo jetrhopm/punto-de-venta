@@ -313,7 +313,9 @@ public partial class PurchasePlanningWindow : Window
                 DateTimeOffset.Now,
                 _orderLines.Select(item => new TicketPdfLine($"{item.Code} | {item.Description}", item.Quantity, item.UnitCost, item.Quantity * item.UnitCost)).ToList(),
                 [],
-                total);
+                total,
+                DocumentTitle: "LISTA DE COMPRA",
+                DocumentNumberLabel: "ORDEN");
             TicketWindowsPrinter.Print(ApiClient.PrinterName, ticket, profile, $"Lista de compra {DateTime.Now:yyyyMMddHHmmss}");
             MessageText.Text = $"Lista enviada a {ApiClient.PrinterName} con formato de {profile.WidthMm} mm.";
         }
@@ -321,6 +323,37 @@ public partial class PurchasePlanningWindow : Window
     }
 
     private async void OnRefreshOrdersClick(object sender, RoutedEventArgs e) => await LoadOrdersAsync();
+
+    private async void OnPrintSavedOrderClick(object sender, RoutedEventArgs e)
+    {
+        if (OrdersGrid.SelectedItem is not OrderRow order) { MessageText.Text = "Selecciona una orden guardada para imprimirla."; return; }
+        if (!ApiClient.IsTicketPrintingAvailable || string.IsNullOrWhiteSpace(ApiClient.PrinterName))
+        {
+            MessageText.Text = "Configura y habilita una impresora en Configuración > Impresora antes de imprimir la orden.";
+            return;
+        }
+
+        try
+        {
+            var savedOrder = await GetWithRetryAsync<PurchaseOrderPrintDto>($"/api/purchase-orders/{order.Id}/print");
+            if (savedOrder is null || savedOrder.Lines.Count == 0) { MessageText.Text = "La orden seleccionada no contiene partidas para imprimir."; return; }
+            var settings = await GetWithRetryAsync<TicketSettingsDto>("/api/ticket-settings");
+            var profile = TicketWindowsPrinter.CurrentProfile;
+            var footer = string.IsNullOrWhiteSpace(savedOrder.Notes)
+                ? "Orden guardada. No modifica inventario."
+                : $"Notas: {savedOrder.Notes}";
+            var ticket = new TicketPdfData(
+                settings?.Name ?? "JETVENTA", settings?.LegalName ?? string.Empty, settings?.TaxId ?? string.Empty,
+                settings?.Address ?? string.Empty, settings?.Phone ?? string.Empty, "LISTA DE COMPRA GUARDADA", footer,
+                profile.WidthMm, savedOrder.Id, Guid.Empty, savedOrder.Supplier ?? "Sin proveedor asignado",
+                SessionContext.DisplayName ?? "Usuario", savedOrder.CreatedAtUtc,
+                savedOrder.Lines.Select(item => new TicketPdfLine($"{item.Code} | {item.Description}", item.Quantity, item.UnitCost, item.Total)).ToList(),
+                [], savedOrder.Total, DocumentTitle: "LISTA DE COMPRA", DocumentNumberLabel: "ORDEN");
+            TicketWindowsPrinter.Print(ApiClient.PrinterName, ticket, profile, $"Lista de compra {savedOrder.Id:N}");
+            MessageText.Text = $"Orden enviada a {ApiClient.PrinterName} con formato de {profile.WidthMm} mm.";
+        }
+        catch (Exception exception) { MessageText.Text = $"No se pudo imprimir la orden: {exception.Message}"; }
+    }
 
     private async Task LoadOrdersAsync()
     {
@@ -371,6 +404,8 @@ public partial class PurchasePlanningWindow : Window
     private sealed record DepartmentDto(Guid Id, string Name);
     private sealed record SuggestionDto(Guid ProductId, string Code, string Description, Guid? DepartmentId, string? Department, Guid? SupplierId, string? Supplier, decimal Stock, decimal MinimumStock, decimal MaximumStock, decimal SuggestedQuantity, decimal UnitCost, decimal EstimatedTotal, decimal QuantitySold, string UnitOfMeasure);
     private sealed record OrderDto(Guid Id, string Status, string? Supplier, string? Notes, decimal Total, int LineCount, DateTimeOffset CreatedAtUtc);
+    private sealed record PurchaseOrderPrintLineDto(string Code, string Description, decimal Quantity, decimal UnitCost, decimal Total);
+    private sealed record PurchaseOrderPrintDto(Guid Id, string? Supplier, string Status, string? Notes, decimal Total, DateTimeOffset CreatedAtUtc, List<PurchaseOrderPrintLineDto> Lines);
     private sealed record ProductSearchDto(Guid Id, string Code, string Description, decimal Price, decimal Cost, decimal Stock, decimal MinimumStock, decimal MaximumStock, string UnitOfMeasure);
     private sealed record TicketSettingsDto(string Name, string LegalName, string TaxId, string Address, string Phone, string TicketHeader, string TicketFooter, int TicketWidthMm);
     private sealed record SupplierOption(Guid? Id, string Name) { public static SupplierOption All { get; } = new(null, "Todos los proveedores"); public static SupplierOption None { get; } = new(null, "Sin proveedor asignado"); public string DisplayText => Name; }
