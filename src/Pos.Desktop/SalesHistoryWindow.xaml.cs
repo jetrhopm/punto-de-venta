@@ -6,6 +6,8 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace Pos.Desktop;
 
@@ -13,13 +15,19 @@ public partial class SalesHistoryWindow : UserControl
 {
     private static HttpClient Client => ApiClient.Client;
     private readonly bool _allowSaleActions;
+    private readonly DispatcherTimer _filterDelay;
     private HistoryRow? _selected;
     private Detail? _detail;
+    private bool _filtersReady;
+    private int _searchGeneration;
 
     public SalesHistoryWindow(bool allowSaleActions = true)
     {
         InitializeComponent();
         _allowSaleActions = allowSaleActions;
+        _filterDelay = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
+        _filterDelay.Tick += OnFilterDelayElapsed;
+        Unloaded += (_, _) => _filterDelay.Stop();
         if (!allowSaleActions)
         {
             ReturnButton.Visibility = Visibility.Collapsed;
@@ -37,6 +45,7 @@ public partial class SalesHistoryWindow : UserControl
             var cashiers = await Client.GetFromJsonAsync<List<Cashier>>("/api/sales/history/cashiers") ?? [];
             CashierCombo.ItemsSource = new[] { new Cashier(null, "Todos los cajeros") }.Concat(cashiers.Select(item => new Cashier(item.Id, item.DisplayName))).ToList();
             CashierCombo.SelectedIndex = 0;
+            _filtersReady = true;
             await SearchAsync();
         }
         catch (Exception exception) { MessageBox.Show(ConnectionHelp.FromException(exception, "No se pudo cargar el historial"), "Historial", MessageBoxButton.OK, MessageBoxImage.Error); }
@@ -44,10 +53,33 @@ public partial class SalesHistoryWindow : UserControl
 
     private async void OnSearchClick(object sender, RoutedEventArgs e) => await SearchAsync();
 
+    private void OnFilterChanged(object sender, RoutedEventArgs e)
+    {
+        if (!_filtersReady) return;
+        _filterDelay.Stop();
+        _filterDelay.Start();
+    }
+
+    private async void OnFilterDelayElapsed(object? sender, EventArgs e)
+    {
+        _filterDelay.Stop();
+        await SearchAsync();
+    }
+
+    private async void OnSearchKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        _filterDelay.Stop();
+        await SearchAsync();
+        e.Handled = true;
+    }
+
     private async Task SearchAsync()
     {
         if (FromPicker.SelectedDate is not DateTime from || ToPicker.SelectedDate is not DateTime to) return;
         if (to < from) { MessageBox.Show("La fecha final no puede ser anterior a la fecha inicial.", "Historial", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+        var generation = ++_searchGeneration;
+        ResultText.Text = "Buscando...";
         var end = to.Date.AddDays(1).ToUniversalTime();
         var query = $"/api/sales/history?from={Uri.EscapeDataString(from.Date.ToUniversalTime().ToString("O"))}&to={Uri.EscapeDataString(end.ToString("O"))}";
         if (CashierCombo.SelectedItem is Cashier { Id: not null } cashier) query += $"&userId={cashier.Id}";
@@ -55,11 +87,16 @@ public partial class SalesHistoryWindow : UserControl
         try
         {
             var rows = await Client.GetFromJsonAsync<List<HistoryRow>>(query) ?? [];
+            if (generation != _searchGeneration || !IsLoaded) return;
             SalesList.ItemsSource = rows;
             ResultText.Text = $"{rows.Count:N0} venta(s)";
             _selected = null; _detail = null; LinesList.ItemsSource = null; DetailText.Text = "Selecciona una venta para consultar sus partidas."; PaymentText.Text = string.Empty;
         }
-        catch (Exception exception) { MessageBox.Show(ConnectionHelp.FromException(exception, "No se pudo consultar el historial"), "Historial", MessageBoxButton.OK, MessageBoxImage.Error); }
+        catch (Exception exception)
+        {
+            if (generation != _searchGeneration || !IsLoaded) return;
+            MessageBox.Show(ConnectionHelp.FromException(exception, "No se pudo consultar el historial"), "Historial", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private async void OnSaleSelected(object sender, System.Windows.Controls.SelectionChangedEventArgs e)

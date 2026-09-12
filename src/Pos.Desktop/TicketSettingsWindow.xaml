@@ -47,14 +47,9 @@
                     <TextBlock Text="Mensaje final" FontWeight="SemiBold" Margin="0,12,0,5"/>
                     <TextBox x:Name="FooterBox" Height="70" MaxLength="300" TextWrapping="Wrap" AcceptsReturn="True" VerticalContentAlignment="Top" TextChanged="OnPreviewChanged"/>
 
-                    <Separator Margin="0,20,0,18"/>
-                    <TextBlock Text="Formato" FontSize="17" FontWeight="Bold"/>
-                    <TextBlock Text="Ancho del papel" FontWeight="SemiBold" Margin="0,13,0,6"/>
-                    <Grid Height="42" Width="300" HorizontalAlignment="Left">
-                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-                        <RadioButton x:Name="Width58Button" GroupName="TicketWidth" Content="58 mm" Style="{StaticResource SegmentRadioStyle}" Checked="OnPreviewChanged"/>
-                        <RadioButton x:Name="Width80Button" Grid.Column="1" GroupName="TicketWidth" Content="80 mm" Style="{StaticResource SegmentRadioStyle}" Checked="OnPreviewChanged"/>
-                    </Grid>
+                    <Border Background="{StaticResource SurfaceMutedBrush}" CornerRadius="5" Padding="13" Margin="0,20,0,0">
+                        <StackPanel><TextBlock Text="Formato de impresión" FontWeight="SemiBold"/><TextBlock Text="El ancho de papel y la tipografía se configuran por computadora en Configuración &gt; Impresora de tickets. Esta vista usa el perfil local actual." Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/></StackPanel>
+                    </Border>
                 </StackPanel>
             </ScrollViewer>
 

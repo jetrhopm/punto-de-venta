@@ -77,8 +77,13 @@ public partial class BackupWindow : Window
             await File.WriteAllBytesAsync(dialog.FileName, await response.Content.ReadAsByteArrayAsync());
             await File.WriteAllTextAsync(dialog.FileName + ".sha256", backup.Sha256 + Environment.NewLine);
             StatusText.Text = "Copia externa y comprobante SHA-256 guardados correctamente.";
+            OperationFeedback.Show(this, "Copia externa guardada", $"Se guardó el respaldo y su comprobante SHA-256 en:\n{dialog.FileName}", OperationResultKind.Success);
         }
-        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar la copia"); }
+        catch (Exception exception)
+        {
+            StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar la copia");
+            OperationFeedback.Show(this, "Copia externa no guardada", StatusText.Text, OperationResultKind.Error);
+        }
     }
 
     private async void OnDeleteClick(object sender, RoutedEventArgs e)

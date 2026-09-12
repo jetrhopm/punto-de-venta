@@ -9,6 +9,7 @@ public partial class TicketSettingsWindow : Window
 {
     private static HttpClient Client => ApiClient.Client;
     private bool _loaded;
+    private int _storedTicketWidthMm = 80;
 
     public TicketSettingsWindow()
     {
@@ -30,8 +31,7 @@ public partial class TicketSettingsWindow : Window
                 PhoneBox.Text = settings.Phone;
                 HeaderBox.Text = settings.TicketHeader;
                 FooterBox.Text = settings.TicketFooter;
-                Width58Button.IsChecked = settings.TicketWidthMm == 58;
-                Width80Button.IsChecked = settings.TicketWidthMm != 58;
+                _storedTicketWidthMm = settings.TicketWidthMm == 58 ? 58 : 80;
             }
             _loaded = true;
             UpdatePreview();
@@ -52,14 +52,13 @@ public partial class TicketSettingsWindow : Window
     private async void OnSaveClick(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(StoreNameBox.Text)) { StatusText.Text = "Escribe el nombre comercial que aparecerá en el ticket."; StoreNameBox.Focus(); return; }
-        var widthMm = SelectedWidth;
         try
         {
             using var response = await Client.PutAsJsonAsync("/api/ticket-settings", new
             {
                 header = HeaderBox.Text,
                 footer = FooterBox.Text,
-                widthMm,
+                widthMm = _storedTicketWidthMm,
                 storeName = StoreNameBox.Text,
                 legalName = LegalNameBox.Text,
                 taxId = TaxIdBox.Text,
@@ -67,8 +66,7 @@ public partial class TicketSettingsWindow : Window
                 phone = PhoneBox.Text
             });
             if (!response.IsSuccessStatusCode) { StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo guardar el diseño del ticket."); return; }
-            ApiClient.SetPrinterTicketWidth(widthMm);
-            ConfigurationFeedback.ShowSavedAndClose(this, "Diseño del ticket", "Las próximas ventas usarán los datos y el ancho configurados.");
+            ConfigurationFeedback.ShowSavedAndClose(this, "Diseño del ticket", $"Las próximas ventas usarán los datos configurados. El ancho local de esta caja es {SelectedWidth} mm.");
         }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar"); }
     }
@@ -109,7 +107,7 @@ public partial class TicketSettingsWindow : Window
         };
     }
 
-    private int SelectedWidth => Width58Button.IsChecked == true ? 58 : 80;
+    private int SelectedWidth => ApiClient.PrinterTicketWidthMm == 58 ? 58 : 80;
 
     private sealed record TicketSettings(string Name, string LegalName, string TaxId, string Address, string Phone, string TicketHeader, string TicketFooter, int TicketWidthMm);
 }

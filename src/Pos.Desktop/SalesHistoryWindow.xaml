@@ -7,10 +7,10 @@
         </DockPanel>
         <Border Grid.Row="1" Margin="0,14,0,12" Padding="12" Background="White" BorderBrush="#D9E3EA" BorderThickness="1" CornerRadius="7">
             <WrapPanel VerticalAlignment="Center">
-                <StackPanel Margin="0,0,12,0"><TextBlock Text="Desde" Foreground="#526577"/><DatePicker x:Name="FromPicker" Width="140"/></StackPanel>
-                <StackPanel Margin="0,0,12,0"><TextBlock Text="Hasta" Foreground="#526577"/><DatePicker x:Name="ToPicker" Width="140"/></StackPanel>
-                <StackPanel Margin="0,0,12,0"><TextBlock Text="Cajero" Foreground="#526577"/><ComboBox x:Name="CashierCombo" Width="210" DisplayMemberPath="DisplayName"/></StackPanel>
-                <StackPanel Margin="0,0,12,0"><TextBlock Text="Buscar folio, usuario o cajero" Foreground="#526577"/><TextBox x:Name="SearchTextBox" Width="230" Height="30"/></StackPanel>
+                <StackPanel Margin="0,0,12,0"><TextBlock Text="Desde" Foreground="#526577"/><DatePicker x:Name="FromPicker" Width="140" SelectedDateChanged="OnFilterChanged"/></StackPanel>
+                <StackPanel Margin="0,0,12,0"><TextBlock Text="Hasta" Foreground="#526577"/><DatePicker x:Name="ToPicker" Width="140" SelectedDateChanged="OnFilterChanged"/></StackPanel>
+                <StackPanel Margin="0,0,12,0"><TextBlock Text="Cajero" Foreground="#526577"/><ComboBox x:Name="CashierCombo" Width="210" DisplayMemberPath="DisplayName" SelectionChanged="OnFilterChanged"/></StackPanel>
+                <StackPanel Margin="0,0,12,0"><TextBlock Text="Buscar folio, usuario o cajero" Foreground="#526577"/><TextBox x:Name="SearchTextBox" Width="230" Height="30" TextChanged="OnFilterChanged" KeyDown="OnSearchKeyDown"/></StackPanel>
                 <Button Height="34" Width="120" Margin="0,17,0,0" Click="OnSearchClick"><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><icons:PackIconMaterial Kind="Magnify" Width="17" Height="17" Margin="0,0,6,0"/><TextBlock Text="Buscar"/></StackPanel></Button>
             </WrapPanel>
         </Border>

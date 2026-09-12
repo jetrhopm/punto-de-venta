@@ -16,7 +16,11 @@ public partial class CurrencySettingsWindow : Window
             SymbolBox.Text = string.IsNullOrWhiteSpace(settings?.CurrencySymbol) ? "$" : settings.CurrencySymbol;
             StatusText.Text = "El símbolo se aplicará a los nuevos tickets y comprobantes.";
         }
-        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo cargar la configuración"); }
+        catch (Exception exception)
+        {
+            StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo cargar la configuración");
+            OperationFeedback.Show(this, "Símbolo de moneda no disponible", StatusText.Text, OperationResultKind.Error);
+        }
     }
 
     private void OnSymbolChanged(object sender, TextChangedEventArgs e) => PreviewText.Text = $"{(string.IsNullOrWhiteSpace(SymbolBox.Text) ? "$" : SymbolBox.Text.Trim())}123.45";
@@ -24,14 +28,30 @@ public partial class CurrencySettingsWindow : Window
     private async void OnSaveClick(object sender, RoutedEventArgs e)
     {
         var symbol = SymbolBox.Text.Trim();
-        if (symbol.Length is < 1 or > 5) { StatusText.Text = "Escribe un símbolo de uno a cinco caracteres."; return; }
+        if (symbol.Length is < 1 or > 5)
+        {
+            const string message = "Escribe un símbolo de uno a cinco caracteres.";
+            StatusText.Text = message;
+            OperationFeedback.Show(this, "Revisa el símbolo", message, OperationResultKind.Warning);
+            SymbolBox.Focus();
+            return;
+        }
         try
         {
             using var response = await ApiClient.Client.PutAsJsonAsync("api/currency-settings", new { currencySymbol = symbol });
-            if (!response.IsSuccessStatusCode) { StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo guardar el símbolo de moneda."); return; }
+            if (!response.IsSuccessStatusCode)
+            {
+                StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo guardar el símbolo de moneda.");
+                OperationFeedback.Show(this, "Símbolo no guardado", StatusText.Text, OperationResultKind.Error);
+                return;
+            }
             ConfigurationFeedback.ShowSavedAndClose(this, "Símbolo de moneda", "Los nuevos tickets y comprobantes usarán el símbolo seleccionado.");
         }
-        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar el símbolo"); }
+        catch (Exception exception)
+        {
+            StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar el símbolo");
+            OperationFeedback.Show(this, "Símbolo no guardado", StatusText.Text, OperationResultKind.Error);
+        }
     }
 
     private sealed record CurrencySettings(string CurrencySymbol);
