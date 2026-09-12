@@ -10,7 +10,20 @@ namespace Pos.Desktop;
 
 public partial class BackupWindow : Window
 {
-    public BackupWindow() { InitializeComponent(); Loaded += async (_, _) => await LoadAsync(); }
+    public BackupWindow()
+    {
+        InitializeComponent();
+        Loaded += async (_, _) =>
+        {
+            if (!InstallationRoleContext.IsServer)
+            {
+                StatusText.Text = "Los respaldos, restauraciones y limpieza de datos sólo están disponibles en la caja principal / servidor.";
+                BackupsGrid.IsEnabled = false;
+                return;
+            }
+            await LoadAsync();
+        };
+    }
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -29,6 +42,7 @@ public partial class BackupWindow : Window
 
     private async void OnCreateClick(object sender, RoutedEventArgs e)
     {
+        if (!EnsureServer()) return;
         StatusText.Text = "Creando respaldo y calculando checksum...";
         try
         {
@@ -52,6 +66,7 @@ public partial class BackupWindow : Window
 
     private async void OnExportClick(object sender, RoutedEventArgs e)
     {
+        if (!EnsureServer()) return;
         if (BackupsGrid.SelectedItem is not BackupRow backup) { StatusText.Text = "Selecciona un respaldo."; return; }
         var dialog = new SaveFileDialog { Title = "Guardar copia del respaldo", Filter = "Respaldo PostgreSQL (*.dump)|*.dump", FileName = backup.FileName, AddExtension = true };
         if (dialog.ShowDialog() != true) return;
@@ -68,6 +83,7 @@ public partial class BackupWindow : Window
 
     private async void OnDeleteClick(object sender, RoutedEventArgs e)
     {
+        if (!EnsureServer()) return;
         if (BackupsGrid.SelectedItem is not BackupRow backup)
         {
             StatusText.Text = "Selecciona la copia que deseas eliminar.";
@@ -99,6 +115,7 @@ public partial class BackupWindow : Window
 
     private async void OnResetOperationalDataClick(object sender, RoutedEventArgs e)
     {
+        if (!EnsureServer()) return;
         var firstConfirmation = MessageBox.Show(
             "JetVenta creará un respaldo preventivo y después eliminará los datos de operación de esta tienda: productos, clientes, proveedores, ventas, compras, inventario, turnos, cortes, promociones, tickets pendientes y movimientos.\n\nSe conservarán el nombre y la configuración de la tienda, la cuenta administradora y la licencia local. Los respaldos existentes tampoco se eliminarán.\n\n¿Deseas continuar?",
             "Limpiar datos de operación",
@@ -138,6 +155,7 @@ public partial class BackupWindow : Window
 
     private async void OnRestoreClick(object sender, RoutedEventArgs e)
     {
+        if (!EnsureServer()) return;
         var dialog = new OpenFileDialog
         {
             Title = "Seleccionar respaldo de JetVenta",
@@ -175,6 +193,16 @@ public partial class BackupWindow : Window
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
             if (confirm != MessageBoxResult.Yes) return;
+
+            using (var maintenance = await ApiClient.Client.PostAsync("api/maintenance/restore-session", null))
+            {
+                if (!maintenance.IsSuccessStatusCode)
+                {
+                    StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(maintenance, "No se pudo preparar el servidor para la restauración.");
+                    OperationFeedback.Show(this, "Restauración no iniciada", StatusText.Text, OperationResultKind.Error);
+                    return;
+                }
+            }
 
             var script = FindRestoreScript();
             if (script is null)
@@ -234,11 +262,20 @@ public partial class BackupWindow : Window
             progress = null;
             StatusText.Text = "No se pudo iniciar la restauración.";
             MessageBox.Show($"No se pudo cargar el respaldo. Detalle: {exception.Message}", "Error de restauración", MessageBoxButton.OK, MessageBoxImage.Error);
+            try { await ApiClient.Client.DeleteAsync("api/maintenance/restore-session"); } catch { }
         }
         finally
         {
             progress?.Close();
         }
+    }
+
+    private bool EnsureServer()
+    {
+        if (InstallationRoleContext.IsServer) return true;
+        StatusText.Text = "Esta acción sólo se realiza desde la caja principal / servidor.";
+        OperationFeedback.Show(this, "Acción disponible en servidor", StatusText.Text, OperationResultKind.Warning);
+        return false;
     }
 
     private static string RestoreLogPath() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta", "logs", "restauracion.log");

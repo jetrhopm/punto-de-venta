@@ -98,9 +98,14 @@ public sealed class AuthenticationService(PosDbContext database, PasswordHasher<
         }
 
         if (string.IsNullOrWhiteSpace(deviceToken)) return new(false, "device_required", "Esta sesión requiere la identidad de la computadora emparejada.");
-        var device = await database.Devices.AsNoTracking().SingleOrDefaultAsync(item =>
+        var device = await database.Devices.SingleOrDefaultAsync(item =>
             item.Id == deviceId && item.RegisterId == session.RegisterId && item.IsActive && item.DeviceTokenHash == Hash(deviceToken),
             cancellationToken);
+        if (device is not null && (device.LastSeenAtUtc is null || device.LastSeenAtUtc < DateTimeOffset.UtcNow.AddMinutes(-1)))
+        {
+            device.LastSeenAtUtc = DateTimeOffset.UtcNow;
+            await database.SaveChangesAsync(cancellationToken);
+        }
         return device is null
             ? new(false, "device_mismatch", "La identidad de esta computadora no coincide con la sesión. Empareja nuevamente la caja o inicia sesión de nuevo.")
             : new(true, null, null);

@@ -66,6 +66,8 @@ builder.Services.AddHttpClient<Pos.Integrations.MercadoPago.MercadoPagoPointClie
 });
 builder.Services.AddScoped<ProductImportService>();
 builder.Services.AddScoped<DatabaseMaintenanceService>();
+builder.Services.AddScoped<RegisterAdministrationService>();
+builder.Services.AddScoped<MaintenanceModeService>();
 builder.Services.AddScoped<LicenseService>();
 builder.Services.AddHostedService<DailyBackupHostedService>();
 builder.Services.AddRateLimiter(options => options.AddPolicy("lan-auth", context =>
@@ -131,11 +133,20 @@ WriteStartupLog("Migraciones aplicadas. API lista para recibir solicitudes.");
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path;
+    var bypassMaintenance = path.StartsWithSegments("/health") || path.StartsWithSegments("/api/maintenance/status") || path.StartsWithSegments("/api/maintenance/restore-session");
+    var maintenance = context.RequestServices.GetRequiredService<MaintenanceModeService>().GetStatus();
+    if (!bypassMaintenance && maintenance.IsActive)
+    {
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        await context.Response.WriteAsJsonAsync(new { code = "maintenance", message = maintenance.Reason ?? "El servidor está en mantenimiento." });
+        return;
+    }
     var mayContinueWithoutLicense = path.StartsWithSegments("/health") ||
         path.StartsWithSegments("/api/setup") ||
         path.StartsWithSegments("/api/auth") ||
         path.StartsWithSegments("/api/license") ||
         path.StartsWithSegments("/api/maintenance/backups") ||
+        path.StartsWithSegments("/api/maintenance/status") ||
         path.StartsWithSegments("/api/lan/info");
 
     if (!mayContinueWithoutLicense)
@@ -221,6 +232,7 @@ app.Use(async (context, next) =>
         path.StartsWithSegments("/api/license/startup-status") ||
         path.StartsWithSegments("/api/lan/info") ||
         path.StartsWithSegments("/api/lan/pair") ||
+        path.StartsWithSegments("/api/maintenance/status") ||
         isOAuthCallback;
     var requiresProtocol = path.StartsWithSegments("/api/auth/login") || path.StartsWithSegments("/api/lan/pair") || (!allowsAnonymous && path.StartsWithSegments("/api"));
     if (requiresProtocol && context.Request.Headers["X-JetVenta-Lan-Protocol"].ToString() != LanNetworkPolicy.ProtocolVersion.ToString())
@@ -298,8 +310,12 @@ app.MapGet("/api/lan/info", () => Results.Ok(new
 }));
 app.MapPost("/api/lan/pairing-codes", async (HttpRequest request, LanPairingService pairing, CancellationToken cancellationToken) =>
 {
-    var result = await pairing.CreateCodeAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
-    return result is null ? Results.Unauthorized() : Results.Ok(result);
+    try
+    {
+        var result = await pairing.CreateCodeAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), null, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 app.MapPost("/api/lan/pair", async (PairDeviceCommand command, LanPairingService pairing, CancellationToken cancellationToken) =>
 {
@@ -307,6 +323,51 @@ app.MapPost("/api/lan/pair", async (PairDeviceCommand command, LanPairingService
     catch (ArgumentException exception) { return Results.BadRequest(new { message = exception.Message }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 }).RequireRateLimiting("lan-auth");
+app.MapGet("/api/registers", async (HttpRequest request, RegisterAdministrationService registers, CancellationToken cancellationToken) =>
+{
+    var result = await registers.ListAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapPut("/api/registers/{registerId:guid}/name", async (Guid registerId, HttpRequest request, RenameRegisterCommand command, RegisterAdministrationService registers, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await registers.RenameAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), registerId, command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+});
+app.MapPut("/api/registers/{registerId:guid}/active", async (Guid registerId, HttpRequest request, SetRegisterActiveCommand command, RegisterAdministrationService registers, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await registers.SetActiveAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), registerId, command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+});
+app.MapPost("/api/registers/{registerId:guid}/pairing-code", async (Guid registerId, HttpRequest request, LanPairingService pairing, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await pairing.CreateCodeAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), registerId, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+app.MapGet("/api/maintenance/status", (MaintenanceModeService maintenance) => Results.Ok(maintenance.GetStatus()));
+app.MapPost("/api/maintenance/restore-session", async (HttpRequest request, MaintenanceModeService maintenance, CancellationToken cancellationToken) =>
+{
+    var result = await maintenance.BeginRestoreAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result ? Results.Ok(maintenance.GetStatus()) : Results.Unauthorized();
+});
+app.MapDelete("/api/maintenance/restore-session", async (HttpRequest request, MaintenanceModeService maintenance, CancellationToken cancellationToken) =>
+{
+    var result = await maintenance.EndRestoreAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result ? Results.NoContent() : Results.Unauthorized();
+});
 app.MapGet("/api/ticket-settings", async (HttpRequest request, TicketSettingsService settings, CancellationToken cancellationToken) => { var result = await settings.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { result.Name, result.LegalName, result.TaxId, result.Address, result.Phone, result.TicketHeader, result.TicketFooter, result.TicketWidthMm }); });
 app.MapPut("/api/ticket-settings", async (HttpRequest request, TicketSettingsCommand command, TicketSettingsService settings, CancellationToken cancellationToken) => { try { var result = await settings.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { result.Name, result.LegalName, result.TaxId, result.Address, result.Phone, result.TicketHeader, result.TicketFooter, result.TicketWidthMm }); } catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["ticket"] = [exception.Message] }); } });
 app.MapGet("/api/currency-settings", async (HttpRequest request, CurrencySettingsService settings, CancellationToken cancellationToken) => { var result = await settings.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); });

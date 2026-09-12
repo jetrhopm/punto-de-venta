@@ -6,10 +6,19 @@ namespace Pos.Desktop;
 
 public partial class PairingCodeWindow : Window
 {
+    private readonly string? _existingCode;
+    private readonly string? _description;
     public PairingCodeWindow()
     {
         InitializeComponent();
         Loaded += async (_, _) => await GenerateAsync();
+    }
+    public PairingCodeWindow(string code, string description)
+    {
+        _existingCode = code;
+        _description = description;
+        InitializeComponent();
+        Loaded += (_, _) => { CodeText.Text = _existingCode; DescriptionText.Text = _description; GenerateButton.Visibility = Visibility.Collapsed; };
     }
 
     private async void OnGenerateClick(object sender, RoutedEventArgs e) => await GenerateAsync();

@@ -14,6 +14,11 @@ public partial class DiagnosticWindow : Window
     public DiagnosticWindow()
     {
         InitializeComponent();
+        if (!InstallationRoleContext.IsServer)
+        {
+            ModeText.Text = "Caja adicional: este diagnóstico revisa la conexión y dispositivos de esta computadora; la API y PostgreSQL se administran desde el servidor.";
+            RepairApiButton.Visibility = Visibility.Collapsed;
+        }
         Loaded += async (_, _) => await RefreshAsync();
     }
 
@@ -165,6 +170,18 @@ public partial class DiagnosticWindow : Window
     }
 
     private void AddLocalChecks()
+    {
+        if (!InstallationRoleContext.IsServer)
+        {
+            _checks.Add(new("Modalidad", "Correcto", "Caja adicional conectada al servidor de JetVenta.", "La API, PostgreSQL, respaldos y restauraciones se administran únicamente desde el servidor."));
+            AddPeripheralChecks();
+            return;
+        }
+        _checks.Add(new("Modalidad", "Correcto", "Caja principal / servidor.", "Esta computadora puede administrar API, PostgreSQL, respaldos y restauraciones."));
+        AddPeripheralChecks();
+    }
+
+    private void AddPeripheralChecks()
     {
         var printers = TicketWindowsPrinter.GetInstalledPrinters();
         _checks.Add(printers.Length == 0

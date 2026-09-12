@@ -125,11 +125,23 @@ function Read-ConnectionValue([string]$Connection, [string]$Name) {
     return $match.Groups[1].Value.Trim()
 }
 
-trap { Write-RestoreLog "ERROR: $($_.Exception.Message)"; throw }
+function Set-MaintenanceMode {
+    $path = Join-Path $dataRoot 'config\maintenance.json'
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $path) | Out-Null
+    @{ IsActive = $true; Reason = 'El servidor está restaurando un respaldo. Las ventas y cambios se reanudarán al terminar.'; StartedAtUtc = [DateTimeOffset]::UtcNow } | ConvertTo-Json -Compress | Set-Content -LiteralPath $path -Encoding UTF8
+}
+
+function Clear-MaintenanceMode {
+    $path = Join-Path $dataRoot 'config\maintenance.json'
+    Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+}
+
+trap { Clear-MaintenanceMode; Write-RestoreLog "ERROR: $($_.Exception.Message)"; throw }
 
 Assert-Administrator
 if (-not $Approve) { throw 'La restauración sustituye la base de datos local. Vuelve a ejecutar con -Approve después de verificar el archivo.' }
 $backup = (Resolve-Path -LiteralPath $BackupFile).Path
+Set-MaintenanceMode
 if (-not $backup.EndsWith('.dump', [StringComparison]::OrdinalIgnoreCase)) { throw 'Selecciona un respaldo .dump de JetVenta.' }
 foreach ($file in @($psql, $pgRestore, $pgDump)) { if (-not (Test-Path $file)) { throw "No existe el binario requerido: $file" } }
 
@@ -284,4 +296,5 @@ END $$;
         if ($null -ne $api -and $api.Status -ne 'Running') { Start-Service -Name $apiService -ErrorAction SilentlyContinue }
     }
     Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+    Clear-MaintenanceMode
 }

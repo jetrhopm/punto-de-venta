@@ -152,6 +152,16 @@ public sealed class SaleIntegrityIntegrationTests
         {
             var database = new PosDbContextFactory().CreateDbContext([]);
             await database.Database.MigrateAsync();
+            // SaleService reads the single store configuration used by this
+            // integration database. Keep this fixture independent from a prior
+            // payment-method settings test.
+            var configuredStore = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstOrDefaultAsync();
+            if (configuredStore is not null)
+            {
+                configuredStore.CreditPaymentEnabled = true;
+                configuredStore.CreditSalesEnabled = true;
+                await database.SaveChangesAsync();
+            }
             var suffix = Guid.NewGuid().ToString("N");
             var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
             var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda integridad " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow };

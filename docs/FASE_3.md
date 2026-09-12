@@ -106,3 +106,24 @@
 - Si falla el emparejamiento después de copiar los archivos, se conserva la
   modalidad como pendiente y la siguiente ejecución solicita otro código sin
   convertir la computadora en servidor.
+
+## Incremento 9 terminado: administración y recuperación de cajas
+
+- La caja principal permite consultar cajas activas e inactivas con su nombre,
+  equipo, última conexión, usuario con sesión vigente y turno abierto.
+- Un administrador puede renombrar, desactivar, reactivar o volver a emparejar
+  una caja. La desactivación se bloquea mientras tenga un turno abierto, no
+  borra ventas ni inventario y revoca las sesiones vigentes de esa caja.
+- Volver a emparejar genera un código temporal para la misma caja: invalida la
+  identidad anterior y no crea una caja duplicada.
+- Cada solicitud autenticada de una caja emparejada actualiza su última
+  conexión como máximo una vez por minuto.
+- Diagnóstico identifica la modalidad: el servidor muestra sus tareas locales;
+  la caja adicional revisa su conexión y periféricos, sin ofrecer reparación de
+  API local.
+- Respaldos, restauración, PostgreSQL y limpieza de datos sólo están expuestos
+  desde la caja principal. La interfaz de caja adicional los oculta y rechaza
+  cualquier acceso directo.
+- Antes de restaurar, el servidor entra en mantenimiento persistente. Bloquea
+  nuevos logins y operaciones hasta que el script termina o falla, y el script
+  libera el modo de mantenimiento de forma garantizada.
