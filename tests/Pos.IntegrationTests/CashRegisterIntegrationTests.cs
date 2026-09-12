@@ -9,6 +9,35 @@ namespace Pos.IntegrationTests;
 public sealed class CashRegisterIntegrationTests
 {
     [Fact]
+    public async Task CashierCanReadStorePaymentMethodsButCannotChangeThem()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda pagos " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow };
+        var cashier = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = ("CASHIER_PAY_" + suffix).ToUpperInvariant(), DisplayName = "Cajero de pagos", IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = cashier.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        database.AddRange(store, cashier, session);
+        await database.SaveChangesAsync();
+
+        try
+        {
+            var settings = new PaymentMethodSettingsService(database);
+            Assert.NotNull(await settings.GetAsync(token, CancellationToken.None));
+            Assert.Null(await settings.UpdateAsync(token, new SetPaymentMethodSettingsCommand(false, true, false, false), CancellationToken.None));
+        }
+        finally
+        {
+            database.Sessions.Remove(session);
+            database.Users.Remove(cashier);
+            database.Stores.Remove(store);
+            await database.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
     public async Task CashierCanReadCutSettingsAndCloseWithTemporaryCloseShiftPermission()
     {
         await using var database = new PosDbContextFactory().CreateDbContext([]);

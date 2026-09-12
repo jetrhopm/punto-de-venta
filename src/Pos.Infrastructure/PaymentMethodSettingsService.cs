@@ -11,14 +11,16 @@ public sealed class PaymentMethodSettingsService(PosDbContext database)
 {
     public async Task<PaymentMethodSettingsResult?> GetAsync(string token, CancellationToken cancellationToken)
     {
-        if (!await AuthorizedAsync(token, cancellationToken)) return null;
+        // Las formas activas se aplican a toda la tienda; cualquier cajero autenticado
+        // debe poder leerlas al abrir la ventana de cobro.
+        if (await AuthenticatedUserIdAsync(token, cancellationToken) is null) return null;
         var store = await database.Stores.AsNoTracking().OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
         return ToResult(store);
     }
 
     public async Task<PaymentMethodSettingsResult?> UpdateAsync(string token, SetPaymentMethodSettingsCommand command, CancellationToken cancellationToken)
     {
-        if (!await AuthorizedAsync(token, cancellationToken)) return null;
+        if (!await CanConfigureAsync(token, cancellationToken)) return null;
         if (!command.CashEnabled && !command.CardEnabled && !command.TransferEnabled && !command.CreditEnabled)
             throw new ArgumentException("Activa al menos una forma de pago.");
         var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
@@ -32,12 +34,20 @@ public sealed class PaymentMethodSettingsService(PosDbContext database)
 
     private static PaymentMethodSettingsResult ToResult(StoreRecord store) => new(store.CashPaymentEnabled, store.CardPaymentEnabled, store.TransferPaymentEnabled, store.CreditPaymentEnabled);
 
-    private async Task<bool> AuthorizedAsync(string token, CancellationToken cancellationToken)
+    private async Task<bool> CanConfigureAsync(string token, CancellationToken cancellationToken)
+    {
+        var userId = await AuthenticatedUserIdAsync(token, cancellationToken);
+        if (userId is null) return false;
+        var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == userId, cancellationToken);
+        return user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "ConfigureStore", cancellationToken);
+    }
+
+    private async Task<Guid?> AuthenticatedUserIdAsync(string token, CancellationToken cancellationToken)
     {
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty)));
-        var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
-        if (session is null) return false;
-        var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
-        return user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "ConfigureStore", cancellationToken);
+        return await database.Sessions.AsNoTracking()
+            .Where(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow)
+            .Select(item => (Guid?)item.UserId)
+            .SingleOrDefaultAsync(cancellationToken);
     }
 }
