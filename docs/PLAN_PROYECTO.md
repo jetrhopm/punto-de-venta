@@ -90,15 +90,20 @@ La implementacion local de la Fase 2 esta terminada. La validacion externa requi
 - Pendiente: pruebas con dos cajas y fallas de red.
 - Pendiente: validacion de version y estado activo de la caja en cada solicitud protegida.
 
-### Fase 4: integraciones externas
+### Integraciones externas posteriores a multicaja
 
 - Mercado Pago Point con sandbox, idempotencia, webhooks y conciliacion.
 - Taecel solo con documentacion y credenciales oficiales vigentes.
 
-- Incremento `4.0.0` completado: receptor de Webhooks de Mercado Pago Point
+- Incremento `3.3.9` completado: receptor de Webhooks de Mercado Pago Point
   con firma HMAC, cola transaccional, deduplicación y conciliación asíncrona
   contra la orden oficial. Requiere configurar HTTPS y el secreto del Webhook
   antes de activarlo fuera de pruebas.
+
+- La liberación `4.0.0` queda reservada para multicaja: sólo se declarará
+  después de validar servidor y caja adicional en dos computadoras reales,
+  incluyendo sesiones, turnos, periféricos por equipo, concurrencia y
+  recuperación ante fallas de red.
 
 Estado de validacion: cerrada por validacion del usuario. La siguiente lista no reabre la fase; son observaciones que deben revisarse en una nueva ronda:
 
