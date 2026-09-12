@@ -57,6 +57,7 @@ builder.Services.AddScoped<CutSettingsService>();
 builder.Services.AddScoped<StoreOptionsService>();
 builder.Services.AddScoped<CashDrawerSettingsService>();
 builder.Services.AddScoped<ScaleSettingsService>();
+builder.Services.AddScoped<InvoiceRequestService>();
 builder.Services.AddScoped<SystemDiagnosticsService>();
 builder.Services.AddScoped<MercadoPagoPointService>();
 builder.Services.AddHostedService<MercadoPagoWebhookHostedService>();
@@ -463,6 +464,27 @@ app.MapPut("/api/measure-settings", async (HttpRequest request, SetMeasureSettin
         return result is null ? Results.Unauthorized() : Results.Ok(result);
     }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["unit"] = [exception.Message] }); }
+});
+app.MapGet("/api/invoice-requests", async (HttpRequest request, string? query, InvoiceRequestService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.ListAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), query, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapGet("/api/invoice-requests/sales/{folio:long}", async (long folio, HttpRequest request, InvoiceRequestService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.FindSaleAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), folio, cancellationToken);
+    return result is null ? Results.NotFound(new { message = "No se encontró una venta confirmada con ese folio." }) : Results.Ok(result);
+});
+app.MapPost("/api/invoice-requests", async (HttpRequest request, CreateInvoiceRequestCommand command, InvoiceRequestService service, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await service.CreateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["invoiceRequest"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 app.MapPost("/api/products/import", async (HttpRequest request, ProductImportCommand command, ProductImportService importer, CancellationToken cancellationToken) =>
 {

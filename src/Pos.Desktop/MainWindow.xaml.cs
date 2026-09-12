@@ -169,7 +169,7 @@ public partial class MainWindow : Window
             if (section == "Compras") { ShowEmbeddedModule(new PurchaseWindow(), "Compras", "Registra compras sin cerrar los tickets en atención.", lease); lease = null; return; }
             if (section == "Reportes") { ShowEmbeddedModule(new ReportsWindow(), "Reportes", "Consulta ventas y análisis sin cerrar los tickets en atención.", lease); lease = null; return; }
             if (section == "Historial") { ShowEmbeddedModule(new SalesHistoryWindow(), "Historial", "Consulta ventas anteriores sin cerrar los tickets en atención.", lease); lease = null; return; }
-            if (section == "Facturas") { ShowEmbeddedModule(new InvoicePlaceholderView(), "Facturas", "El módulo CFDI permanece deshabilitado hasta completar su validación fiscal.", lease); lease = null; return; }
+            if (section == "Facturas") { ShowEmbeddedModule(new InvoiceRequestView(), "Facturas", "Registra y consulta solicitudes; el timbrado CFDI se habilitará al integrar un PAC.", lease); lease = null; return; }
             if (section == "Promociones") { var window = new PromotionWindow { Owner = this }; window.ShowDialog(); return; }
             if (section == "Configuracion") { ShowEmbeddedModule(new ConfigurationWindow(), "Configuración", "Administra JetVenta sin cerrar los tickets en atención.", lease); lease = null; return; }
             if (section == "Kits") { var window = new KitWindow { Owner = this }; window.ShowDialog(); return; }
@@ -1878,6 +1878,7 @@ public partial class MainWindow : Window
         "Compras" => "ManageSuppliersAndPurchases",
         "Reportes" => "ViewReports",
         "Historial" => "ViewSalesHistory",
+        "Facturas" => "ConfigureStore",
         "Promociones" or "Kits" => "ManageProducts",
         _ => null
     };

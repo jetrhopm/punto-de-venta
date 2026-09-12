@@ -40,6 +40,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     public DbSet<ImportBatchRecord> ImportBatches => Set<ImportBatchRecord>();
     public DbSet<MercadoPagoOrderRecord> MercadoPagoOrders => Set<MercadoPagoOrderRecord>();
     public DbSet<MercadoPagoWebhookRecord> MercadoPagoWebhooks => Set<MercadoPagoWebhookRecord>();
+    public DbSet<InvoiceRequestRecord> InvoiceRequests => Set<InvoiceRequestRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -231,6 +232,23 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             entity.Property(sale => sale.Total).HasPrecision(18, 2); entity.Property(sale => sale.Status).HasMaxLength(20).IsRequired(); entity.HasIndex(sale => sale.Folio).IsUnique(); entity.HasIndex(sale => sale.CustomerId); entity.HasOne<CustomerRecord>().WithMany().HasForeignKey(sale => sale.CustomerId).OnDelete(DeleteBehavior.Restrict);
             entity.Property(sale => sale.CreatedAtUtc).HasColumnType("timestamp with time zone");
         });
+        modelBuilder.Entity<InvoiceRequestRecord>(entity =>
+        {
+            entity.ToTable("invoice_request");
+            entity.HasKey(item => item.Id);
+            entity.HasIndex(item => item.SaleId).IsUnique();
+            entity.HasIndex(item => new { item.Status, item.RequestedAtUtc });
+            entity.Property(item => item.ReceiverTaxId).HasMaxLength(20).IsRequired();
+            entity.Property(item => item.ReceiverName).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.ReceiverEmail).HasMaxLength(200);
+            entity.Property(item => item.Notes).HasMaxLength(500);
+            entity.Property(item => item.Status).HasMaxLength(40).IsRequired();
+            entity.Property(item => item.RequestedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(item => item.UpdatedAtUtc).HasColumnType("timestamp with time zone");
+            // Historical restored databases may not retain physical foreign keys
+            // on sales. Keep this administrative module compatible without
+            // altering the operational sales schema.
+        });
         modelBuilder.Entity<SaleLineRecord>(entity =>
         {
             entity.ToTable("sale_line"); entity.HasKey(line => line.Id); entity.Property(line => line.Quantity).HasPrecision(18, 3); entity.Property(line => line.OriginalUnitPrice).HasPrecision(18, 2).HasDefaultValue(0m); entity.Property(line => line.UnitPrice).HasPrecision(18, 2); entity.Property(line => line.LineTotal).HasPrecision(18, 2); entity.Property(line => line.DiscountTotal).HasPrecision(18, 2).HasDefaultValue(0m); entity.Property(line => line.PromotionName).HasMaxLength(120).HasDefaultValue(""); entity.Property(line => line.StockBefore).HasPrecision(18, 3); entity.Property(line => line.StockAfter).HasPrecision(18, 3);
@@ -344,6 +362,7 @@ public sealed class SessionRecord { public Guid Id { get; set; } public Guid Use
 public sealed class PermissionRecord { public Guid Id { get; set; } public Guid UserId { get; set; } public string Code { get; set; } = string.Empty; public Guid? GrantedByUserId { get; set; } public DateTimeOffset? ExpiresAtUtc { get; set; } }
 public sealed class ShiftRecord { public Guid Id { get; set; } public Guid RegisterId { get; set; } public Guid UserId { get; set; } public decimal InitialCash { get; set; } public string Status { get; set; } = "Open"; public DateTimeOffset OpenedAtUtc { get; set; } public DateTimeOffset? ClosedAtUtc { get; set; } public decimal? CountedCash { get; set; } public decimal? Difference { get; set; } }
 public sealed class SaleRecord { public Guid Id { get; set; } public Guid OperationId { get; set; } public Guid ShiftId { get; set; } public Guid? CustomerId { get; set; } public long Folio { get; set; } public decimal Total { get; set; } public string Status { get; set; } = "Completed"; public DateTimeOffset CreatedAtUtc { get; set; } }
+public sealed class InvoiceRequestRecord { public Guid Id { get; set; } public Guid SaleId { get; set; } public Guid RequestedByUserId { get; set; } public string ReceiverTaxId { get; set; } = string.Empty; public string ReceiverName { get; set; } = string.Empty; public string? ReceiverEmail { get; set; } public string Notes { get; set; } = string.Empty; public string Status { get; set; } = "PendingStamping"; public DateTimeOffset RequestedAtUtc { get; set; } public DateTimeOffset UpdatedAtUtc { get; set; } }
 public sealed class SaleLineRecord { public Guid Id { get; set; } public Guid SaleId { get; set; } public Guid ProductId { get; set; } public decimal Quantity { get; set; } public decimal OriginalUnitPrice { get; set; } public decimal UnitPrice { get; set; } public decimal LineTotal { get; set; } public decimal DiscountTotal { get; set; } public string PromotionName { get; set; } = string.Empty; public decimal StockBefore { get; set; } public decimal StockAfter { get; set; } }
 public sealed class SaleDraftRecord { public Guid Id { get; set; } public Guid OperationId { get; set; } public Guid ShiftId { get; set; } public Guid UserId { get; set; } public int TicketNumber { get; set; } public string Status { get; set; } = "Open"; public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset UpdatedAtUtc { get; set; } public DateTimeOffset? CompletedAtUtc { get; set; } public List<SaleDraftLineRecord> Lines { get; set; } = []; }
 public sealed class SaleDraftLineRecord { public Guid Id { get; set; } public Guid DraftId { get; set; } public Guid ProductId { get; set; } public string Code { get; set; } = string.Empty; public string Description { get; set; } = string.Empty; public decimal Quantity { get; set; } public decimal UnitPrice { get; set; } }
