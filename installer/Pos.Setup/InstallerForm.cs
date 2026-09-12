@@ -478,6 +478,7 @@ public sealed class InstallerForm : Form
         {
             SetProgress(84, "Actualizando archivos de la caja adicional; se conserva su emparejamiento.");
         }
+        await GrantClientSettingsAccessAsync();
         RegisterInstallation();
         RegisterLicenseFileType();
         CreateShortcuts();
@@ -590,6 +591,21 @@ public sealed class InstallerForm : Form
         var powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe");
         await RunProcessAsync(powershell, "-NoProfile -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='SilentlyContinue'; Get-Service -Name 'PuntoDeVentaApi','PuntoDeVentaPostgreSQL' -ErrorAction SilentlyContinue | Stop-Service -Force -ErrorAction SilentlyContinue; exit 0\"", Path.GetDirectoryName(powershell)!);
         await Task.Delay(TimeSpan.FromSeconds(3));
+    }
+
+    private async Task GrantClientSettingsAccessAsync()
+    {
+        // The profile belongs to the physical register and must be usable by any
+        // Windows account that opens JetVenta on that register. Keep this limited
+        // to the client profile; database, license and server secrets stay private.
+        var clientDirectory = Path.Combine(_dataRoot, "client");
+        Directory.CreateDirectory(clientDirectory);
+        var icacls = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "icacls.exe");
+        await RunProcessAsync(
+            icacls,
+            $"{Program.QuoteArgument(clientDirectory)} /grant \"*S-1-5-32-545:(OI)(CI)M\" /T /C",
+            Path.GetDirectoryName(icacls)!);
+        Log("Permiso de perfil local aplicado para usuarios de esta caja.");
     }
 
     private async Task CopyPayloadAsync(string source)

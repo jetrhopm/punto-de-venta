@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.IO;
 
 namespace Pos.Desktop;
 
@@ -68,7 +69,24 @@ public partial class PrinterSettingsWindow : Window
     {
         if (!TryReadProfile(out var printer, out var profile)) return;
         var printingEnabled = PrintingEnabledCheck.IsChecked == true;
-        ApiClient.SetPrinterProfile(printer, ApiClient.PrinterFontFamily, ApiClient.PrinterFontSize, ApiClient.UseNormalTotals, profile.WidthMm, printingEnabled);
+        try
+        {
+            ApiClient.SetPrinterProfile(printer, ApiClient.PrinterFontFamily, ApiClient.PrinterFontSize, ApiClient.UseNormalTotals, profile.WidthMm, printingEnabled);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            const string message = "Windows no permite guardar el perfil local de esta caja. Actualiza JetVenta con Setup.exe ejecutado como administrador y vuelve a intentarlo.";
+            StatusText.Text = message;
+            ShowResult("Permiso de Windows requerido", message, OperationResultKind.Error);
+            return;
+        }
+        catch (IOException exception)
+        {
+            var message = $"No se pudo guardar el perfil local de esta caja. {exception.Message}";
+            StatusText.Text = message;
+            ShowResult("Impresora no guardada", message, OperationResultKind.Error);
+            return;
+        }
         ProfileSummaryText.Text = $"{profile.WidthMm} mm";
         var status = printingEnabled
             ? $"Configuración guardada para esta caja: {printer}."
