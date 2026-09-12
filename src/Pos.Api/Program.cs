@@ -360,11 +360,13 @@ app.MapPost("/api/registers/{registerId:guid}/pairing-code", async (Guid registe
 app.MapGet("/api/maintenance/status", (MaintenanceModeService maintenance) => Results.Ok(maintenance.GetStatus()));
 app.MapPost("/api/maintenance/restore-session", async (HttpRequest request, MaintenanceModeService maintenance, CancellationToken cancellationToken) =>
 {
+    if (!LanNetworkPolicy.IsLoopback(request.HttpContext.Connection.RemoteIpAddress)) return Results.Forbid();
     var result = await maintenance.BeginRestoreAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
     return result ? Results.Ok(maintenance.GetStatus()) : Results.Unauthorized();
 });
 app.MapDelete("/api/maintenance/restore-session", async (HttpRequest request, MaintenanceModeService maintenance, CancellationToken cancellationToken) =>
 {
+    if (!LanNetworkPolicy.IsLoopback(request.HttpContext.Connection.RemoteIpAddress)) return Results.Forbid();
     var result = await maintenance.EndRestoreAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
     return result ? Results.NoContent() : Results.Unauthorized();
 });
@@ -440,16 +442,19 @@ app.MapPost("/api/products/import", async (HttpRequest request, ProductImportCom
 });
 app.MapGet("/api/maintenance/backups", async (HttpRequest request, DatabaseMaintenanceService maintenance, CancellationToken cancellationToken) =>
 {
+    if (!LanNetworkPolicy.IsLoopback(request.HttpContext.Connection.RemoteIpAddress)) return Results.Forbid();
     var result = await maintenance.ListAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
 app.MapPost("/api/maintenance/backups", async (HttpRequest request, DatabaseMaintenanceService maintenance, CancellationToken cancellationToken) =>
 {
+    if (!LanNetworkPolicy.IsLoopback(request.HttpContext.Connection.RemoteIpAddress)) return Results.Forbid();
     try { var result = await maintenance.CreateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
     catch (InvalidOperationException exception) { return Results.Problem(exception.Message, statusCode: StatusCodes.Status500InternalServerError); }
 });
 app.MapGet("/api/maintenance/backups/{fileName}", async (string fileName, HttpRequest request, DatabaseMaintenanceService maintenance, CancellationToken cancellationToken) =>
 {
+    if (!LanNetworkPolicy.IsLoopback(request.HttpContext.Connection.RemoteIpAddress)) return Results.Forbid();
     try
     {
         var path = await maintenance.ResolveFileAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), fileName, cancellationToken);
@@ -460,6 +465,7 @@ app.MapGet("/api/maintenance/backups/{fileName}", async (string fileName, HttpRe
 });
 app.MapDelete("/api/maintenance/backups/{fileName}", async (string fileName, HttpRequest request, DatabaseMaintenanceService maintenance, CancellationToken cancellationToken) =>
 {
+    if (!LanNetworkPolicy.IsLoopback(request.HttpContext.Connection.RemoteIpAddress)) return Results.Forbid();
     try
     {
         var deleted = await maintenance.DeleteAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), fileName, cancellationToken);
@@ -469,6 +475,7 @@ app.MapDelete("/api/maintenance/backups/{fileName}", async (string fileName, Htt
 });
 app.MapPost("/api/maintenance/reset-operational-data", async (HttpRequest request, DatabaseMaintenanceService maintenance, CancellationToken cancellationToken) =>
 {
+    if (!LanNetworkPolicy.IsLoopback(request.HttpContext.Connection.RemoteIpAddress)) return Results.Forbid();
     try
     {
         var result = await maintenance.ResetOperationalDataAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);

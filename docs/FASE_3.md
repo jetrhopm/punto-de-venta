@@ -122,8 +122,8 @@
   la caja adicional revisa su conexión y periféricos, sin ofrecer reparación de
   API local.
 - Respaldos, restauración, PostgreSQL y limpieza de datos sólo están expuestos
-  desde la caja principal. La interfaz de caja adicional los oculta y rechaza
-  cualquier acceso directo.
+  desde la caja principal. La interfaz de caja adicional los oculta y la API
+  rechaza cualquier llamada de red remota a esas operaciones.
 - Antes de restaurar, el servidor entra en mantenimiento persistente. Bloquea
   nuevos logins y operaciones hasta que el script termina o falla, y el script
   libera el modo de mantenimiento de forma garantizada.
