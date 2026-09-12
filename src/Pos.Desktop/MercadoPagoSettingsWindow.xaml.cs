@@ -25,7 +25,9 @@ public partial class MercadoPagoSettingsWindow : Window
             DisconnectButton.ToolTip = "Quita de JetVenta los tokens, la cuenta y las terminales asociadas. No borra ventas ni cobros históricos.";
             AuthorizeButton.IsEnabled = true;
             AuthorizeButton.ToolTip = settings.OAuthAvailable ? "Abrir Mercado Pago para autorizar JetVenta" : "La API todavía necesita la aplicación OAuth y su callback HTTPS";
-            StatusText.Text = settings.TerminalLabel;
+            StatusText.Text = settings.WebhookConfigured
+                ? settings.TerminalLabel
+                : string.IsNullOrWhiteSpace(settings.TerminalLabel) ? "Webhook HTTPS pendiente de configurar en el servidor." : $"{settings.TerminalLabel}\nWebhook HTTPS pendiente de configurar en el servidor.";
             if (settings.AccountConnected) await RefreshTerminalsAsync();
         }
         catch (Exception exception) { StatusText.Text = "No se pudo consultar Mercado Pago: " + exception.Message; }
@@ -244,7 +246,7 @@ public partial class MercadoPagoSettingsWindow : Window
         }
     }
 
-    private sealed record SettingsResult(bool Enabled, string Environment, bool AccountConnected, long? AccountUserId, string TerminalId, string TerminalLabel, bool OAuthAvailable, string Message);
+    private sealed record SettingsResult(bool Enabled, string Environment, bool AccountConnected, long? AccountUserId, string TerminalId, string TerminalLabel, bool OAuthAvailable, bool WebhookConfigured, string Message);
     private sealed record TerminalResult(string Id, string Label, string OperatingMode, bool Selected);
     private sealed record OAuthStartResult(string Url);
 }

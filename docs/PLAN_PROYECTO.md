@@ -95,6 +95,11 @@ La implementacion local de la Fase 2 esta terminada. La validacion externa requi
 - Mercado Pago Point con sandbox, idempotencia, webhooks y conciliacion.
 - Taecel solo con documentacion y credenciales oficiales vigentes.
 
+- Incremento `4.0.0` completado: receptor de Webhooks de Mercado Pago Point
+  con firma HMAC, cola transaccional, deduplicación y conciliación asíncrona
+  contra la orden oficial. Requiere configurar HTTPS y el secreto del Webhook
+  antes de activarlo fuera de pruebas.
+
 Estado de validacion: cerrada por validacion del usuario. La siguiente lista no reabre la fase; son observaciones que deben revisarse en una nueva ronda:
 
 - API detenida durante una venta abierta: la reparacion automatica funciono, pero hay que volver a comprobar el estado seguro de caja, corte y operaciones pendientes cuando la API cae a mitad de la sesion.

@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Pos.Infrastructure;
 
-public sealed record MercadoPagoSettingsResult(bool Enabled, string Environment, bool AccountConnected, long? AccountUserId, string TerminalId, string TerminalLabel, bool OAuthAvailable, string Message);
+public sealed record MercadoPagoSettingsResult(bool Enabled, string Environment, bool AccountConnected, long? AccountUserId, string TerminalId, string TerminalLabel, bool OAuthAvailable, bool WebhookConfigured, string Message);
 public sealed record MercadoPagoTerminalResult(string Id, string Label, string OperatingMode, bool Selected);
 public sealed record ConfigureMercadoPagoTestCommand(string AccessToken);
 public sealed record SelectMercadoPagoTerminalCommand(string TerminalId, string Label);
@@ -14,6 +14,7 @@ public sealed record ActivateMercadoPagoTerminalCommand(string TerminalId);
 public sealed record SetMercadoPagoEnabledCommand(bool Enabled);
 public sealed record CreateMercadoPagoOrderCommand(Guid OperationId, decimal Amount, string Description);
 public sealed record MercadoPagoOrderResult(Guid OperationId, string OrderId, string Status, string StatusDetail, decimal Amount, bool Approved, bool Finished);
+public sealed record MercadoPagoWebhookReceipt(bool Accepted, string Message);
 
 public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPointClient client, IConfiguration configuration)
 {
@@ -24,8 +25,9 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
         var connected = !string.IsNullOrWhiteSpace(store.MercadoPagoAccessTokenProtected);
         var oauth = !string.IsNullOrWhiteSpace(configuration["MercadoPago:ClientId"]) && !string.IsNullOrWhiteSpace(configuration["MercadoPago:ClientSecret"]) && !string.IsNullOrWhiteSpace(configuration["MercadoPago:RedirectUri"]);
-        var message = !connected ? "Autoriza la cuenta de Mercado Pago o guarda un Access Token de prueba." : string.IsNullOrWhiteSpace(register.MercadoPagoTerminalId) ? "Cuenta conectada. Selecciona una terminal Point en modo PDV." : !store.MercadoPagoEnabled ? "Cuenta y terminal configuradas. Point está desactivado." : "Cuenta y terminal listas para cobrar.";
-        return new(store.MercadoPagoEnabled, store.MercadoPagoEnvironment, connected, store.MercadoPagoUserId, register.MercadoPagoTerminalId, register.MercadoPagoTerminalLabel, oauth, message);
+        var webhook = !string.IsNullOrWhiteSpace(configuration["MercadoPago:WebhookSecret"]);
+        var message = !connected ? "Autoriza la cuenta de Mercado Pago o guarda un Access Token de prueba." : string.IsNullOrWhiteSpace(register.MercadoPagoTerminalId) ? "Cuenta conectada. Selecciona una terminal Point en modo PDV." : !store.MercadoPagoEnabled ? "Cuenta y terminal configuradas. Point está desactivado." : !webhook ? "Cuenta y terminal listas para cobrar. Falta configurar el secreto Webhook HTTPS para conciliación automática." : "Cuenta, terminal y conciliación Webhook listas para cobrar.";
+        return new(store.MercadoPagoEnabled, store.MercadoPagoEnvironment, connected, store.MercadoPagoUserId, register.MercadoPagoTerminalId, register.MercadoPagoTerminalLabel, oauth, webhook, message);
     }
 
     public async Task<MercadoPagoSettingsResult?> ConfigureTestTokenAsync(string token, ConfigureMercadoPagoTestCommand command, CancellationToken cancellationToken)
@@ -205,12 +207,96 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         return true;
     }
 
+    public async Task<MercadoPagoWebhookReceipt> ReceiveWebhookAsync(string providerOrderId, string requestId, string action, string signature, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(providerOrderId)) return new(false, "La notificación no incluye la orden de Mercado Pago.");
+        var now = DateTimeOffset.UtcNow;
+        var eventKey = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{providerOrderId.Trim()}|{requestId.Trim()}|{action.Trim()}|{signature.Trim()}")));
+        if (await database.MercadoPagoWebhooks.AnyAsync(item => item.EventKey == eventKey, cancellationToken))
+            return new(true, "La notificación ya estaba registrada.");
+
+        database.MercadoPagoWebhooks.Add(new MercadoPagoWebhookRecord
+        {
+            Id = Guid.NewGuid(),
+            EventKey = eventKey,
+            ProviderOrderId = providerOrderId.Trim(),
+            RequestId = requestId.Trim(),
+            Action = action.Trim(),
+            Status = "Received",
+            ReceivedAtUtc = now,
+            NextAttemptAtUtc = now
+        });
+
+        try { await database.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateException)
+        {
+            if (await database.MercadoPagoWebhooks.AsNoTracking().AnyAsync(item => item.EventKey == eventKey, cancellationToken))
+                return new(true, "La notificación ya estaba registrada.");
+            throw;
+        }
+
+        return new(true, "La notificación se registró para conciliación.");
+    }
+
+    public async Task<int> ReconcileWebhookQueueAsync(CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var pending = await database.MercadoPagoWebhooks
+            .Where(item => (item.Status == "Received" || item.Status == "Retry") && item.NextAttemptAtUtc <= now)
+            .OrderBy(item => item.ReceivedAtUtc)
+            .Take(20)
+            .ToListAsync(cancellationToken);
+
+        foreach (var webhook in pending)
+        {
+            webhook.AttemptCount++;
+            try
+            {
+                var order = await database.MercadoPagoOrders.SingleOrDefaultAsync(item => item.ProviderOrderId == webhook.ProviderOrderId, cancellationToken);
+                if (order is null)
+                {
+                    ScheduleRetry(webhook, now, "La orden aún no existe localmente.");
+                }
+                else
+                {
+                    var store = await database.Stores.SingleAsync(item => item.Id == order.StoreId, cancellationToken);
+                    Apply(order, await client.GetOrderAsync(await GetAccessTokenAsync(store, cancellationToken), webhook.ProviderOrderId, cancellationToken));
+                    webhook.Status = "Reconciled";
+                    webhook.ProcessedAtUtc = now;
+                    webhook.LastError = string.Empty;
+                }
+            }
+            catch (Exception exception) when (exception is MercadoPagoPointException or HttpRequestException or InvalidOperationException or TaskCanceledException)
+            {
+                ScheduleRetry(webhook, now, exception.Message);
+            }
+
+            await database.SaveChangesAsync(cancellationToken);
+        }
+
+        return pending.Count;
+    }
+
     private static void Apply(MercadoPagoOrderRecord record, MercadoPagoOrder order) { record.ProviderOrderId = order.Id; record.ProviderPaymentId = order.PaymentId ?? string.Empty; record.Status = MapStatus(order.Status); record.StatusDetail = order.StatusDetail; record.UpdatedAtUtc = DateTimeOffset.UtcNow; }
     private static string MapStatus(string status) => status switch { "created" => "Created", "at_terminal" => "AtTerminal", "processed" => "Approved", "failed" => "Rejected", "canceled" => "Canceled", "expired" => "Expired", "refunded" => "Refunded", "action_required" => "Unknown", _ => "Unknown" };
     private static bool IsFinished(string status) => status is "Approved" or "Rejected" or "Canceled" or "Expired" or "Refunded" or "Unknown";
     private static MercadoPagoOrderResult ToResult(MercadoPagoOrderRecord item) => new(item.OperationId, item.ProviderOrderId ?? string.Empty, item.Status, item.StatusDetail, item.Amount, item.Status == "Approved", IsFinished(item.Status));
     private static string BuildTerminalLabel(MercadoPagoTerminal item) => $"{item.Id} | Caja {item.ExternalPosId} | {item.OperatingMode}";
     private static bool IsPdvCompatible(string terminalId) => terminalId.StartsWith("NEWLAND_N950__", StringComparison.OrdinalIgnoreCase) || terminalId.StartsWith("PAX_A910__", StringComparison.OrdinalIgnoreCase);
+    private static void ScheduleRetry(MercadoPagoWebhookRecord webhook, DateTimeOffset now, string error)
+    {
+        if (webhook.AttemptCount >= 12)
+        {
+            webhook.Status = "Ignored";
+            webhook.ProcessedAtUtc = now;
+            webhook.LastError = error[..Math.Min(error.Length, 500)];
+            return;
+        }
+
+        webhook.Status = "Retry";
+        webhook.LastError = error[..Math.Min(error.Length, 500)];
+        webhook.NextAttemptAtUtc = now.AddMinutes(Math.Min(15, Math.Max(1, webhook.AttemptCount)));
+    }
     private async Task<string> GetAccessTokenAsync(StoreRecord store, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(store.MercadoPagoAccessTokenProtected)) throw new InvalidOperationException("La cuenta de Mercado Pago no está autorizada.");

@@ -59,6 +59,7 @@ builder.Services.AddScoped<CashDrawerSettingsService>();
 builder.Services.AddScoped<ScaleSettingsService>();
 builder.Services.AddScoped<SystemDiagnosticsService>();
 builder.Services.AddScoped<MercadoPagoPointService>();
+builder.Services.AddHostedService<MercadoPagoWebhookHostedService>();
 builder.Services.AddHttpClient<Pos.Integrations.MercadoPago.MercadoPagoPointClient>(client =>
 {
     client.BaseAddress = new Uri("https://api.mercadopago.com/");
@@ -133,7 +134,8 @@ WriteStartupLog("Migraciones aplicadas. API lista para recibir solicitudes.");
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path;
-    var bypassMaintenance = path.StartsWithSegments("/health") || path.StartsWithSegments("/api/maintenance/status") || path.StartsWithSegments("/api/maintenance/restore-session");
+    var isMercadoPagoWebhook = path.StartsWithSegments("/api/integrations/mercado-pago/webhook");
+    var bypassMaintenance = path.StartsWithSegments("/health") || path.StartsWithSegments("/api/maintenance/status") || path.StartsWithSegments("/api/maintenance/restore-session") || isMercadoPagoWebhook;
     var maintenance = context.RequestServices.GetRequiredService<MaintenanceModeService>().GetStatus();
     if (!bypassMaintenance && maintenance.IsActive)
     {
@@ -145,6 +147,7 @@ app.Use(async (context, next) =>
         path.StartsWithSegments("/api/setup") ||
         path.StartsWithSegments("/api/auth") ||
         path.StartsWithSegments("/api/license") ||
+        isMercadoPagoWebhook ||
         path.StartsWithSegments("/api/maintenance/backups") ||
         path.StartsWithSegments("/api/maintenance/status") ||
         path.StartsWithSegments("/api/lan/info");
@@ -214,7 +217,8 @@ app.Use(async (context, next) =>
 {
     var path = context.Request.Path;
     var isOAuthCallback = path.StartsWithSegments("/api/integrations/mercado-pago/oauth/callback");
-    if (!isOAuthCallback && !LanNetworkPolicy.IsLocalOrPrivate(context.Connection.RemoteIpAddress))
+    var isMercadoPagoWebhook = path.StartsWithSegments("/api/integrations/mercado-pago/webhook");
+    if (!isOAuthCallback && !isMercadoPagoWebhook && !LanNetworkPolicy.IsLocalOrPrivate(context.Connection.RemoteIpAddress))
     {
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         await context.Response.WriteAsJsonAsync(new { code = "lan_only", message = "JetVenta sólo acepta conexiones desde localhost o una red privada." });
@@ -233,7 +237,8 @@ app.Use(async (context, next) =>
         path.StartsWithSegments("/api/lan/info") ||
         path.StartsWithSegments("/api/lan/pair") ||
         path.StartsWithSegments("/api/maintenance/status") ||
-        isOAuthCallback;
+        isOAuthCallback ||
+        isMercadoPagoWebhook;
     var requiresProtocol = path.StartsWithSegments("/api/auth/login") || path.StartsWithSegments("/api/lan/pair") || (!allowsAnonymous && path.StartsWithSegments("/api"));
     if (requiresProtocol && context.Request.Headers["X-JetVenta-Lan-Protocol"].ToString() != LanNetworkPolicy.ProtocolVersion.ToString())
     {
@@ -385,6 +390,30 @@ app.MapPut("/api/integrations/mercado-pago/enabled", async (HttpRequest request,
 app.MapPost("/api/integrations/mercado-pago/disconnect", async (HttpRequest request, MercadoPagoPointService service, CancellationToken cancellationToken) => { var result = await service.DisconnectAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(); });
 app.MapPost("/api/integrations/mercado-pago/oauth/start", async (HttpRequest request, MercadoPagoPointService service, CancellationToken cancellationToken) => { try { var url = await service.BeginOAuthAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return url is null ? Results.Unauthorized() : Results.Ok(new { url }); } catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); } });
 app.MapGet("/api/integrations/mercado-pago/oauth/callback", async (string code, string state, MercadoPagoPointService service, CancellationToken cancellationToken) => { try { await service.CompleteOAuthAsync(code, state, cancellationToken); return Results.Content("<html><body style='font-family:Segoe UI;padding:40px'><h1>Cuenta autorizada</h1><p>Regresa a JetVenta para seleccionar tu terminal Point.</p></body></html>", "text/html"); } catch (Exception exception) { return Results.Problem(exception.Message, statusCode: StatusCodes.Status400BadRequest); } });
+app.MapPost("/api/integrations/mercado-pago/webhook", async (HttpRequest request, MercadoPagoPointService service, IConfiguration configuration, CancellationToken cancellationToken) =>
+{
+    var providerOrderId = request.Query["data.id"].ToString();
+    var requestId = request.Headers["x-request-id"].ToString();
+    var signature = request.Headers["x-signature"].ToString();
+    var secret = configuration["MercadoPago:WebhookSecret"];
+    var validation = Pos.Integrations.MercadoPago.MercadoPagoWebhookSignature.Validate(signature, requestId, providerOrderId, secret, DateTimeOffset.UtcNow);
+    if (!validation.IsValid) return string.IsNullOrWhiteSpace(secret) ? Results.Problem(validation.Error, statusCode: StatusCodes.Status503ServiceUnavailable) : Results.Unauthorized();
+
+    var action = "order.updated";
+    var type = "order";
+    try
+    {
+        using var body = await System.Text.Json.JsonDocument.ParseAsync(request.Body, cancellationToken: cancellationToken);
+        if (body.RootElement.TryGetProperty("action", out var actionElement)) action = actionElement.GetString() ?? action;
+        if (body.RootElement.TryGetProperty("type", out var typeElement)) type = typeElement.GetString() ?? string.Empty;
+    }
+    catch (System.Text.Json.JsonException) { }
+
+    if (!string.Equals(type, "order", StringComparison.OrdinalIgnoreCase)) return Results.Ok(new { accepted = true, message = "El evento no corresponde a una orden Point." });
+
+    var receipt = await service.ReceiveWebhookAsync(providerOrderId, requestId, action, signature, cancellationToken);
+    return receipt.Accepted ? Results.Ok(receipt) : Results.BadRequest(new { message = receipt.Message });
+});
 app.MapPost("/api/integrations/mercado-pago/orders", async (HttpRequest request, CreateMercadoPagoOrderCommand command, MercadoPagoPointService service, CancellationToken cancellationToken) => { try { var result = await service.CreateOrderAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); } catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["order"] = [exception.Message] }); } catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); } catch (Pos.Integrations.MercadoPago.MercadoPagoPointException exception) { return Results.Problem(exception.Message, statusCode: StatusCodes.Status502BadGateway); } });
 app.MapGet("/api/integrations/mercado-pago/orders/{operationId:guid}", async (Guid operationId, HttpRequest request, MercadoPagoPointService service, CancellationToken cancellationToken) => { try { var result = await service.RefreshOrderAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), operationId, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); } catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); } catch (Pos.Integrations.MercadoPago.MercadoPagoPointException exception) { return Results.Problem(exception.Message, statusCode: StatusCodes.Status502BadGateway); } });
 app.MapPost("/api/integrations/mercado-pago/orders/{operationId:guid}/cancel", async (Guid operationId, HttpRequest request, MercadoPagoPointService service, CancellationToken cancellationToken) => { try { var result = await service.CancelOrderAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), operationId, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(); } catch (Pos.Integrations.MercadoPago.MercadoPagoPointException exception) { return Results.Problem(exception.Message, statusCode: StatusCodes.Status502BadGateway); } });

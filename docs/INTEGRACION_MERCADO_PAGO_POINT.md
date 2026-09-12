@@ -27,9 +27,21 @@ No se guardan credenciales reales en Git. Para habilitar OAuth define en el serv
 MercadoPago__ClientId=<APP_ID>
 MercadoPago__ClientSecret=<CLIENT_SECRET>
 MercadoPago__RedirectUri=https://<dominio-publico>/api/integrations/mercado-pago/oauth/callback
+MercadoPago__WebhookSecret=<SECRETO_GENERADO_EN_WEBHOOKS>
 ```
 
 El callback debe ser HTTPS, público y coincidir exactamente con el registrado en la aplicación de Mercado Pago. El Access Token y el refresh token se cifran con DPAPI vinculado al equipo servidor. JetVenta renueva automáticamente el Access Token antes de su vencimiento y conserva el nuevo refresh token.
+
+Desde 4.0.0 se configura además el evento **Order** de Mercado Pago hacia:
+
+```text
+https://<dominio-publico>/api/integrations/mercado-pago/webhook
+```
+
+La firma `x-signature` se valida con `MercadoPago__WebhookSecret`; la API
+registra el evento, responde de inmediato y concilia la orden posteriormente.
+No expongas la API local de una tienda a Internet: usa un servidor HTTPS o proxy
+controlado que entregue el Webhook al servicio de JetVenta.
 
 Para desarrollo local se puede usar **Configuración > Mercado Pago Point > Solo pruebas de desarrollo**. Esa opción valida un Access Token de prueba contra la lista de terminales antes de guardarlo. No debe ser el flujo de una instalación distribuida.
 
