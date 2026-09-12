@@ -185,16 +185,19 @@ public partial class StartupWindow : Window
             return;
         }
 
+        // An installed server must always use the elevated repair script. Source
+        // builds have no adjacent script and keep the lightweight local fallback.
+        var installedRoot = FindInstalledRoot();
+        if (forceRepair && installedRoot is not null)
+        {
+            await RunProductionRepairAsync(installedRoot);
+            return;
+        }
+
         var developmentRoot = FindDevelopmentRoot();
         if (developmentRoot is not null)
         {
             await TryStartDevelopmentServicesAsync(developmentRoot, forceRepair);
-            return;
-        }
-
-        if (forceRepair)
-        {
-            await RunProductionRepairAsync();
             return;
         }
 
@@ -243,11 +246,10 @@ public partial class StartupWindow : Window
         }
     }
 
-    private async Task RunProductionRepairAsync()
+    private async Task RunProductionRepairAsync(string installRoot)
     {
-        var installRoot = Directory.GetParent(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar))?.FullName;
-        var script = installRoot is null ? null : Path.Combine(installRoot, "install-production.ps1");
-        if (script is null || !File.Exists(script))
+        var script = Path.Combine(installRoot, "install-production.ps1");
+        if (!File.Exists(script))
         {
             Log($"No se encontró el reparador de producción. Ruta revisada: {script ?? "desconocida"}");
             return;
@@ -379,6 +381,20 @@ public partial class StartupWindow : Window
         }
 
         return null;
+    }
+
+    private static string? FindInstalledRoot()
+    {
+        try
+        {
+            var root = Directory.GetParent(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar))?.FullName;
+            return root is not null && File.Exists(Path.Combine(root, "install-production.ps1")) ? root : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Log($"No se pudo localizar la reparación instalada: {exception.Message}");
+            return null;
+        }
     }
 
     private static int ReadDevelopmentPort(string settingsPath)

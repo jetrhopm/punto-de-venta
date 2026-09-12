@@ -1007,6 +1007,11 @@ app.MapPost("/api/setup/initial", async (InitialSetupCommand command, InitialSet
     try { return Results.Created("/api/setup/initial", await setup.ExecuteAsync(command, cancellationToken)); }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["setup"] = [exception.Message] }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+    catch (DbUpdateException exception)
+    {
+        WriteStartupLog($"No se pudo guardar la configuración inicial: {exception}");
+        return Results.Problem("No se pudo preparar la configuración inicial de la tienda. Ejecuta Reparar servicios y vuelve a intentarlo.", statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
 });
 
 app.MapPost("/api/auth/login", async (HttpRequest request, LoginCommand command, AuthenticationService authentication, CancellationToken cancellationToken) =>

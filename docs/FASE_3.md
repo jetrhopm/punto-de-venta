@@ -127,3 +127,14 @@
 - Antes de restaurar, el servidor entra en mantenimiento persistente. Bloquea
   nuevos logins y operaciones hasta que el script termina o falla, y el script
   libera el modo de mantenimiento de forma garantizada.
+
+## Corrección 3.3.8: instalación inicial y reparación local
+
+- La primera configuración ya no vuelve a insertar departamentos que una
+  migración inicial haya creado. Completa solamente los departamentos faltantes,
+  evitando que el alta de tienda, usuario administrador y caja falle por un
+  nombre de departamento duplicado.
+- En una instalación de servidor, el botón **Reparar servicios** localiza de
+  forma explícita el script de reparación junto a la instalación y lo ejecuta
+  con elevación. Las compilaciones desde código fuente mantienen su inicio local
+  de desarrollo.
