@@ -58,6 +58,7 @@ builder.Services.AddScoped<StoreOptionsService>();
 builder.Services.AddScoped<CashDrawerSettingsService>();
 builder.Services.AddScoped<ScaleSettingsService>();
 builder.Services.AddScoped<InvoiceRequestService>();
+builder.Services.AddHttpClient<FacturamaSettingsService>(client => client.Timeout = TimeSpan.FromSeconds(20));
 builder.Services.AddScoped<SystemDiagnosticsService>();
 builder.Services.AddScoped<MercadoPagoPointService>();
 builder.Services.AddHostedService<MercadoPagoWebhookHostedService>();
@@ -485,6 +486,31 @@ app.MapPost("/api/invoice-requests", async (HttpRequest request, CreateInvoiceRe
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["invoiceRequest"] = [exception.Message] }); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+app.MapGet("/api/integrations/facturama/settings", async (HttpRequest request, FacturamaSettingsService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapPut("/api/integrations/facturama/settings", async (HttpRequest request, ConfigureFacturamaCommand command, FacturamaSettingsService service, CancellationToken cancellationToken) =>
+{
+    if (!LanNetworkPolicy.IsLoopback(request.HttpContext.Connection.RemoteIpAddress)) return Results.Forbid();
+    try
+    {
+        var result = await service.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["facturama"] = [exception.Message] }); }
+});
+app.MapPost("/api/integrations/facturama/test", async (HttpRequest request, FacturamaSettingsService service, CancellationToken cancellationToken) =>
+{
+    if (!LanNetworkPolicy.IsLoopback(request.HttpContext.Connection.RemoteIpAddress)) return Results.Forbid();
+    try
+    {
+        var result = await service.TestConnectionAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (InvalidOperationException exception) { return Results.BadRequest(new { message = exception.Message }); }
 });
 app.MapPost("/api/products/import", async (HttpRequest request, ProductImportCommand command, ProductImportService importer, CancellationToken cancellationToken) =>
 {

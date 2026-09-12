@@ -13,7 +13,15 @@ public partial class InvoiceRequestView : UserControl
     public InvoiceRequestView()
     {
         InitializeComponent();
+        PacSettingsButton.Visibility = InstallationRoleContext.IsServer ? Visibility.Visible : Visibility.Collapsed;
         Loaded += async (_, _) => await LoadRequestsAsync();
+    }
+
+    private void OnPacSettingsClick(object sender, RoutedEventArgs e)
+    {
+        var owner = Window.GetWindow(this);
+        if (owner is null) return;
+        new FacturamaSettingsWindow { Owner = owner }.ShowDialog();
     }
 
     private async void OnFindSaleClick(object sender, RoutedEventArgs e) => await FindSaleAsync();

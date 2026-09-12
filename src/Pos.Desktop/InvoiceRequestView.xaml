@@ -8,9 +8,9 @@
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal">
                 <Border Width="52" Height="52" Background="#FFF4DE" CornerRadius="6"><icons:PackIconMaterial Kind="FileDocumentEditOutline" Width="30" Height="30" Foreground="#A96300" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
-                <StackPanel Margin="14,1,0,0"><TextBlock Text="Solicitudes de factura" FontSize="23" FontWeight="Bold"/><TextBlock Text="Registra datos para facturación; el timbrado CFDI aún no está conectado a un PAC." Foreground="{StaticResource TextMutedBrush}" Margin="0,4,0,0"/></StackPanel>
+                <StackPanel Margin="14,1,0,0"><TextBlock Text="Solicitudes de factura" FontSize="23" FontWeight="Bold"/><TextBlock Text="Registra y consulta solicitudes; configura tu PAC propio antes del futuro timbrado CFDI." Foreground="{StaticResource TextMutedBrush}" Margin="0,4,0,0"/></StackPanel>
             </StackPanel>
-            <Border Grid.Column="1" Background="#FFF4DE" BorderBrush="#F2D18B" BorderThickness="1" CornerRadius="5" Padding="13,8" VerticalAlignment="Center"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ClockOutline" Width="18" Height="18" Foreground="#A96300" Margin="0,0,7,0"/><TextBlock Text="Sin timbrado fiscal" Foreground="#7A520B" FontWeight="SemiBold"/></StackPanel></Border>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><Button x:Name="PacSettingsButton" Background="#146CB0" Foreground="White" Padding="12,8" Margin="0,0,10,0" Click="OnPacSettingsClick"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="CogOutline" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Configurar PAC"/></StackPanel></Button><Border Background="#FFF4DE" BorderBrush="#F2D18B" BorderThickness="1" CornerRadius="5" Padding="13,8"><StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ClockOutline" Width="18" Height="18" Foreground="#A96300" Margin="0,0,7,0"/><TextBlock Text="Sin timbrado fiscal" Foreground="#7A520B" FontWeight="SemiBold"/></StackPanel></Border></StackPanel>
         </Grid>
 
         <Grid Grid.Row="2">

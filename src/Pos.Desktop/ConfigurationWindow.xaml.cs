@@ -13,6 +13,7 @@ public partial class ConfigurationWindow : UserControl
             BackupButton.Visibility = Visibility.Collapsed;
             RegistersButton.Visibility = Visibility.Collapsed;
             ConnectRegisterButton.Visibility = Visibility.Collapsed;
+            FacturamaButton.Visibility = Visibility.Collapsed;
             StatusText.Text = "Caja adicional: los respaldos, PostgreSQL y administración de cajas se realizan desde el servidor.";
         }
         else StatusText.Text = "Las acciones con acceso restringido solicitarán autorización temporal.";
@@ -44,6 +45,7 @@ public partial class ConfigurationWindow : UserControl
     private async void OnImportClick(object sender, RoutedEventArgs e) => await OpenAsync("ImportOrExportData", "Importar productos", () => new ProductImportWindow());
     private async void OnLicenseClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Administrar la licencia", () => new LicenseWindow());
     private async void OnAutomaticStartClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar inicio automático", () => new AutomaticStartSettingsWindow());
+    private async void OnFacturamaClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar la cuenta Facturama", () => new FacturamaSettingsWindow());
 
     private async Task OpenAsync(string permission, string action, Func<Window> createWindow)
     {
