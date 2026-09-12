@@ -22,6 +22,12 @@ un código temporal de seis dígitos generado por un administrador y el nombre d
 la caja. El instalador comprueba `/health`, compatibilidad de protocolo LAN y
 empareja el equipo antes de habilitar **Abrir JetVenta**.
 
+Al elegir esta modalidad, el instalador incluye el enlace **Ver pasos para
+preparar la red privada**. Indica cómo conectar ambos equipos al mismo router o
+switch, cambiar el perfil de Windows a **Privada**, evitar redes de invitados y
+usar la IP LAN de la caja principal, nunca `127.0.0.1`. No pide compartir
+carpetas, abrir PostgreSQL, desactivar Firewall ni abrir puertos en el router.
+
 La modalidad se guarda en
 `C:\ProgramData\PuntoDeVenta\config\installation-mode.json`. Las
 actualizaciones la conservan automáticamente. Las instalaciones anteriores a
@@ -66,6 +72,12 @@ Si la API no responde por una migración pendiente o permisos heredados al resta
 La API depende del servicio `PuntoDeVentaPostgreSQL`, reintenta la conexión mientras PostgreSQL termina de arrancar y tiene recuperación automática configurada en Windows. Después de reiniciar el equipo, el cliente también espera al servidor local antes de habilitar el inicio de sesión.
 
 La pantalla de inicio de sesión mantiene el diagnóstico visible y diferencia credenciales incorrectas, demora, falta de conexión y errores del servidor. Cuando el servicio no puede arrancar indica la ubicación de `api-startup.log`.
+
+Desde la caja principal, `Configuración > Conectar caja` muestra las IP privadas
+reales del equipo, permite copiarlas y genera el código temporal de seis dígitos.
+La misma ventana explica los pasos sencillos que se seguirán en la segunda
+computadora. Las cajas adicionales no pueden generar códigos ni reparar
+servicios locales.
 
 ## Registros
 

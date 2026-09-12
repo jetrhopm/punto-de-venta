@@ -138,7 +138,20 @@ public sealed class InstallerForm : Form
         _registerName.SetBounds(700, 395, 190, 31);
         _registerName.MaxLength = 80;
         AddAdditionalControl(_registerName);
-        AddAdditionalControl(CreateLabel("Se comprobará la conexión y se emparejará este equipo antes de terminar la instalación.", new Point(500, 433), new Size(420, 34), 9, FontStyle.Regular, Color.FromArgb(137, 169, 195)));
+        AddAdditionalControl(CreateLabel("Se comprobará la conexión y se emparejará este equipo antes de terminar la instalación.", new Point(500, 433), new Size(420, 24), 9, FontStyle.Regular, Color.FromArgb(137, 169, 195)));
+        var networkHelp = new LinkLabel
+        {
+            Text = "Ver pasos para preparar la red privada",
+            Location = new Point(500, 458),
+            Size = new Size(300, 26),
+            LinkColor = Color.FromArgb(74, 205, 237),
+            ActiveLinkColor = Color.White,
+            VisitedLinkColor = Color.FromArgb(74, 205, 237),
+            Font = new Font("Segoe UI", 9f, FontStyle.Underline),
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        networkHelp.Click += (_, _) => ShowAdditionalNetworkHelp();
+        AddAdditionalControl(networkHelp);
 
         Controls.Add(CreateSectionTitle("Opciones de acceso", new Point(30, 540)));
         _desktopShortcut.SetBounds(30, 572, 355, 24);
@@ -213,6 +226,18 @@ public sealed class InstallerForm : Form
         Text = text, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(36, 57, 79), ForeColor = Color.FromArgb(226, 238, 248),
         Font = new Font("Segoe UI", 10f), FlatAppearance = { BorderColor = Color.FromArgb(66, 101, 130), BorderSize = 1 }
     };
+
+    private static void ShowAdditionalNetworkHelp()
+    {
+        const string message = "Antes de instalar una caja adicional:\n\n" +
+                               "1. Conecta ambas computadoras al mismo router o switch. Por cable es más estable.\n\n" +
+                               "2. En ambas abre Configuración de Windows > Red e Internet > Wi-Fi o Ethernet > Propiedades y selecciona Perfil de red: Privada.\n\n" +
+                               "3. No uses red Pública, red de invitados ni Wi-Fi con aislamiento de equipos.\n\n" +
+                               "4. En la caja principal evita que Windows la suspenda automáticamente.\n\n" +
+                               "5. No compartas carpetas, no abras PostgreSQL, no desactives Firewall y no abras puertos en el router.\n\n" +
+                               "6. En esta pantalla escribe la IP de la caja principal, no 127.0.0.1. El administrador la muestra en JetVenta > Configuración > Conectar caja.";
+        MessageBox.Show(message, "Red privada para caja adicional", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
 
     private static RadioButton CreateModeRadio(string text) => new()
     {

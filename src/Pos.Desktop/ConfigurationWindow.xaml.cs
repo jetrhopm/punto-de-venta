@@ -12,6 +12,7 @@ public partial class ConfigurationWindow : UserControl
         {
             BackupButton.Visibility = Visibility.Collapsed;
             RegistersButton.Visibility = Visibility.Collapsed;
+            ConnectRegisterButton.Visibility = Visibility.Collapsed;
             StatusText.Text = "Caja adicional: los respaldos, PostgreSQL y administración de cajas se realizan desde el servidor.";
         }
         else StatusText.Text = "Las acciones con acceso restringido solicitarán autorización temporal.";
@@ -27,6 +28,7 @@ public partial class ConfigurationWindow : UserControl
     private async void OnOptionsClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Modificar opciones habilitadas", () => new StoreOptionsWindow());
     private async void OnUsersClick(object sender, RoutedEventArgs e) => await OpenAsync("ManageUsers", "Administrar cajeros y permisos", () => new UserAdministrationWindow());
     private async void OnRegistersClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Administrar cajas y equipos", () => new RegisterAdministrationWindow());
+    private async void OnConnectRegisterClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Conectar una caja adicional", () => new PairingCodeWindow());
     private async void OnPrinterClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigurePrinters", "Configurar impresoras", () => new PrinterSettingsWindow());
     private async void OnScannerClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar lector de códigos", () => new BarcodeScannerSettingsWindow());
     private async void OnTicketClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar tickets", () => new TicketSettingsWindow());

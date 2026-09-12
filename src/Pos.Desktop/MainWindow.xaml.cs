@@ -179,6 +179,11 @@ public partial class MainWindow : Window
 
     private async void OnPairingCodeClick(object sender, RoutedEventArgs e)
     {
+        if (!InstallationRoleContext.IsServer)
+        {
+            StatusText.Text = "Las cajas adicionales se conectan desde Configuración de la caja principal / servidor.";
+            return;
+        }
         await using var authorization = await PermissionAuthorization.RequestAsync(this, "ConfigureStore", "Generar un código para emparejar una caja requiere autorización.");
         if (authorization is null) return;
         new PairingCodeWindow { Owner = this }.ShowDialog();
