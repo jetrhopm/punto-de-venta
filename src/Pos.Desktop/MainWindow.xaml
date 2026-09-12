@@ -123,6 +123,26 @@
         </Border>
         </StackPanel>
 
+        <Border x:Name="MaintenanceOverlay" Grid.Row="1" Grid.RowSpan="3" Panel.ZIndex="20" Background="#DDECF4FA" Visibility="Collapsed">
+            <Border Width="600" MaxWidth="600" Background="White" BorderBrush="#D59A22" BorderThickness="1" CornerRadius="6" Padding="30" HorizontalAlignment="Center" VerticalAlignment="Center" Effect="{StaticResource PanelShadowEffect}">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="54" Height="54" Background="#FFF4DE" CornerRadius="6">
+                            <icons:PackIconMaterial Kind="DatabaseSyncOutline" Width="31" Height="31" Foreground="#A96300" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel Margin="15,2,0,0">
+                            <TextBlock Text="Servidor en mantenimiento" FontSize="23" FontWeight="Bold" Foreground="#6B4300"/>
+                            <TextBlock Text="Restauración de respaldo en curso" Margin="0,4,0,0" Foreground="#8A6117" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <Border Background="#FFF9ED" BorderBrush="#F2D18B" BorderThickness="1" CornerRadius="5" Padding="15" Margin="0,22,0,0">
+                        <TextBlock x:Name="MaintenanceMessageText" Text="El servidor está restaurando la información de la tienda. Las ventas y cambios se reanudarán al terminar." TextWrapping="Wrap" Foreground="#624700" FontSize="14"/>
+                    </Border>
+                    <TextBlock Margin="0,16,0,0" Text="No confirmes ventas ni realices cambios. Al concluir la restauración, esta caja se cerrará para que vuelvas a iniciar sesión con la información recuperada." TextWrapping="Wrap" Foreground="{StaticResource TextMutedBrush}"/>
+                </StackPanel>
+            </Border>
+        </Border>
+
         <Grid x:Name="SalesWorkspace" Grid.Row="2" Margin="14,12" Background="#EDF4FA">
             <Grid.ColumnDefinitions><ColumnDefinition Width="122"/><ColumnDefinition Width="*"/><ColumnDefinition Width="310"/></Grid.ColumnDefinitions>
 

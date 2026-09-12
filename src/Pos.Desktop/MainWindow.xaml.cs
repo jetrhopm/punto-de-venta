@@ -35,6 +35,9 @@ public partial class MainWindow : Window
     private TemporaryPermissionLease? _modulePermissionLease;
     private string? _licenseReminder;
     private readonly ApiAvailabilityMonitor _apiAvailabilityMonitor = new();
+    private ApiAvailabilityState? _lastApiAvailabilityState;
+    private bool _maintenanceRecoveryRequired;
+    private bool _maintenanceActive;
     public MainWindow()
     {
         InitializeComponent();
@@ -129,6 +132,7 @@ public partial class MainWindow : Window
 
     private async Task OpenSectionAsync(string section)
     {
+        if (_maintenanceActive) return;
         if (section == "Ventas") { ShowSalesWorkspace(); return; }
 
         ReleaseModulePermission();
@@ -191,6 +195,11 @@ public partial class MainWindow : Window
 
     private async void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (_maintenanceActive)
+        {
+            e.Handled = true;
+            return;
+        }
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         var section = key switch
         {
@@ -852,12 +861,50 @@ public partial class MainWindow : Window
         await AddCommonProductAsync(window.ProductCode, window.ProductDescription, window.Price, window.UnitOfMeasure, window.Quantity);
     }
 
-    private void OnApiAvailabilityChanged(object? sender, bool available)
+    private void OnApiAvailabilityChanged(object? sender, ApiAvailabilityStatus status)
     {
         if (!IsLoaded || _exitConfirmed) return;
-        ApiStatusBanner.Visibility = Visibility.Visible;
-        if (available)
+        var previousState = _lastApiAvailabilityState;
+        _lastApiAvailabilityState = status.State;
+
+        if (status.State == ApiAvailabilityState.Maintenance)
         {
+            _maintenanceActive = true;
+            _maintenanceRecoveryRequired = true;
+            SalesWorkspace.IsEnabled = false;
+            ModuleWorkspace.IsEnabled = false;
+            foreach (var button in FindVisualChildren<Button>(this).Where(item => item.Tag is string)) button.IsEnabled = false;
+            MaintenanceMessageText.Text = string.IsNullOrWhiteSpace(status.Message)
+                ? "El servidor está restaurando la información de la tienda. Las ventas y cambios se reanudarán al terminar."
+                : status.Message;
+            MaintenanceOverlay.Visibility = Visibility.Visible;
+            StatusText.Text = "Servidor en mantenimiento. Esta caja quedó bloqueada temporalmente.";
+            return;
+        }
+
+        if (status.State == ApiAvailabilityState.Available && _maintenanceRecoveryRequired)
+        {
+            _maintenanceActive = false;
+            _maintenanceRecoveryRequired = false;
+            MaintenanceOverlay.Visibility = Visibility.Collapsed;
+            OperationFeedback.Show(this, "Restauración terminada", "El servidor ya usa la información recuperada. JetVenta se cerrará en esta caja para iniciar sesión de nuevo y evitar operar con datos anteriores.", OperationResultKind.Success);
+            _exitConfirmed = true;
+            _apiAvailabilityMonitor.Dispose();
+            Closing -= OnClosing;
+            Close();
+            System.Windows.Application.Current.Shutdown(0);
+            return;
+        }
+
+        _maintenanceActive = false;
+        ApiStatusBanner.Visibility = Visibility.Visible;
+        if (status.State == ApiAvailabilityState.Available)
+        {
+            if (previousState is null)
+            {
+                ApiStatusBanner.Visibility = Visibility.Collapsed;
+                return;
+            }
             ApiStatusBanner.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(229, 244, 252));
             ApiStatusBanner.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(38, 132, 190));
             ApiStatusIcon.Kind = MahApps.Metro.IconPacks.PackIconMaterialKind.LanConnect;
@@ -1665,6 +1712,11 @@ public partial class MainWindow : Window
     private async Task RequestExitAsync()
     {
         if (_exitDialogOpen) return;
+        if (_maintenanceActive)
+        {
+            CompleteExit();
+            return;
+        }
         _exitDialogOpen = true;
         try
         {

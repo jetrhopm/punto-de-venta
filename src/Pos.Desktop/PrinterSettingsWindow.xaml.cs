@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -16,10 +15,6 @@ public partial class PrinterSettingsWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        FontBox.ItemsSource = TicketWindowsPrinter.GetInstalledFonts();
-        FontBox.Text = ApiClient.PrinterFontFamily;
-        FontSizeBox.Text = ApiClient.PrinterFontSize.ToString("0.#", CultureInfo.CurrentCulture);
-        NormalTotalsCheck.IsChecked = ApiClient.UseNormalTotals;
         PrintingEnabledCheck.IsChecked = ApiClient.PrintingEnabled;
         Width58Button.IsChecked = ApiClient.PrinterTicketWidthMm == 58;
         Width80Button.IsChecked = ApiClient.PrinterTicketWidthMm != 58;
@@ -73,8 +68,8 @@ public partial class PrinterSettingsWindow : Window
     {
         if (!TryReadProfile(out var printer, out var profile)) return;
         var printingEnabled = PrintingEnabledCheck.IsChecked == true;
-        ApiClient.SetPrinterProfile(printer, profile.FontFamily, profile.FontSize, profile.UseNormalTotals, profile.WidthMm, printingEnabled);
-        ProfileSummaryText.Text = $"{profile.WidthMm} mm · {profile.FontFamily} {profile.FontSize:0.#} pt";
+        ApiClient.SetPrinterProfile(printer, ApiClient.PrinterFontFamily, ApiClient.PrinterFontSize, ApiClient.UseNormalTotals, profile.WidthMm, printingEnabled);
+        ProfileSummaryText.Text = $"{profile.WidthMm} mm";
         var status = printingEnabled
             ? $"Configuración guardada para esta caja: {printer}."
             : "La impresión de tickets quedó desactivada para esta caja.";
@@ -130,22 +125,12 @@ public partial class PrinterSettingsWindow : Window
             ShowResult("Selecciona una impresora", message, OperationResultKind.Warning);
             return false;
         }
-        if (!double.TryParse(FontSizeBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var size) || size is < 6d or > 24d)
-        {
-            const string message = "El tamaño de fuente debe estar entre 6 y 24 puntos.";
-            StatusText.Text = message;
-            ShowResult("Tamaño de fuente inválido", message, OperationResultKind.Warning);
-            return false;
-        }
-        profile = profile with { FontSize = size };
         return true;
     }
 
     private TicketPrintProfile ReadProfileForPreview()
     {
-        var family = string.IsNullOrWhiteSpace(FontBox.Text) ? "Consolas" : FontBox.Text.Trim();
-        var size = double.TryParse(FontSizeBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var parsed) && parsed is >= 6d and <= 24d ? parsed : 9d;
-        return new TicketPrintProfile(family, size, NormalTotalsCheck.IsChecked == true, Width58Button.IsChecked == true ? 58 : 80);
+        return new TicketPrintProfile(ApiClient.PrinterFontFamily, ApiClient.PrinterFontSize, ApiClient.UseNormalTotals, Width58Button.IsChecked == true ? 58 : 80);
     }
 
     private void ShowResult(string title, string message, OperationResultKind kind) => new OperationResultWindow(title, message, kind) { Owner = this }.ShowDialog();

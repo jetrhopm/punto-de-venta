@@ -48,24 +48,9 @@
                         <RadioButton x:Name="Width80Button" Grid.Column="1" GroupName="PaperWidth" Content="80 mm" Style="{StaticResource SegmentRadioStyle}" Checked="OnPreviewChanged"/>
                     </Grid>
 
-                    <Separator Margin="0,20,0,18"/>
-                    <TextBlock Text="Tipografía" FontSize="17" FontWeight="Bold"/>
-                    <Grid Margin="0,13,0,0">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="112"/></Grid.ColumnDefinitions>
-                        <StackPanel>
-                            <TextBlock Text="Fuente instalada en Windows" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                            <ComboBox x:Name="FontBox" Height="40" IsEditable="True" IsTextSearchEnabled="True" SelectionChanged="OnPreviewChanged"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Margin="12,0,0,0">
-                            <TextBlock Text="Tamaño" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                            <ComboBox x:Name="FontSizeBox" Height="40" IsEditable="True" SelectionChanged="OnPreviewChanged">
-                                <ComboBoxItem>7</ComboBoxItem><ComboBoxItem>8</ComboBoxItem><ComboBoxItem>9</ComboBoxItem><ComboBoxItem>10</ComboBoxItem><ComboBoxItem>11</ComboBoxItem><ComboBoxItem>12</ComboBoxItem><ComboBoxItem>14</ComboBoxItem><ComboBoxItem>16</ComboBoxItem>
-                            </ComboBox>
-                        </StackPanel>
-                    </Grid>
-                    <CheckBox x:Name="NormalTotalsCheck" Margin="0,16,0,0" Checked="OnPreviewChanged" Unchecked="OnPreviewChanged">
-                        <StackPanel><TextBlock Text="Usar fuente normal para los totales" FontWeight="SemiBold"/><TextBlock Text="Si se desactiva, subtotal, total y cambio se imprimen en negrita." Foreground="{StaticResource TextMutedBrush}" FontSize="12" Margin="0,2,0,0"/></StackPanel>
-                    </CheckBox>
+                    <Border Background="{StaticResource SurfaceMutedBrush}" CornerRadius="5" Padding="13" Margin="0,22,0,0">
+                        <StackPanel><TextBlock Text="Diseño del ticket" FontWeight="SemiBold"/><TextBlock Text="La tipografía y los totales se ajustan desde Configuración &gt; Diseño de ticket. El ancho de papel permanece en esta pantalla porque depende de la impresora de esta caja." Foreground="{StaticResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"/></StackPanel>
+                    </Border>
                 </StackPanel>
             </ScrollViewer>
 

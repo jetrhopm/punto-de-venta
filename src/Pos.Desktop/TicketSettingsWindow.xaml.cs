@@ -1,6 +1,7 @@
 using Pos.Printing;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Globalization;
 using System.Windows;
 
 namespace Pos.Desktop;
@@ -21,6 +22,10 @@ public partial class TicketSettingsWindow : Window
     {
         try
         {
+            FontBox.ItemsSource = TicketWindowsPrinter.GetInstalledFonts();
+            FontBox.Text = ApiClient.PrinterFontFamily;
+            FontSizeBox.Text = ApiClient.PrinterFontSize.ToString("0.#", CultureInfo.CurrentCulture);
+            NormalTotalsCheck.IsChecked = ApiClient.UseNormalTotals;
             var settings = await Client.GetFromJsonAsync<TicketSettings>("/api/ticket-settings");
             if (settings is not null)
             {
@@ -52,6 +57,7 @@ public partial class TicketSettingsWindow : Window
     private async void OnSaveClick(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(StoreNameBox.Text)) { StatusText.Text = "Escribe el nombre comercial que aparecerá en el ticket."; StoreNameBox.Focus(); return; }
+        if (!TryReadProfile(out var profile)) return;
         try
         {
             using var response = await Client.PutAsJsonAsync("/api/ticket-settings", new
@@ -66,6 +72,7 @@ public partial class TicketSettingsWindow : Window
                 phone = PhoneBox.Text
             });
             if (!response.IsSuccessStatusCode) { StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo guardar el diseño del ticket."); return; }
+            ApiClient.SetPrinterProfile(ApiClient.PrinterName, profile.FontFamily, profile.FontSize, profile.UseNormalTotals, ApiClient.PrinterTicketWidthMm, ApiClient.PrintingEnabled);
             ConfigurationFeedback.ShowSavedAndClose(this, "Diseño del ticket", $"Las próximas ventas usarán los datos configurados. El ancho local de esta caja es {SelectedWidth} mm.");
         }
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo guardar"); }
@@ -76,7 +83,7 @@ public partial class TicketSettingsWindow : Window
         if (string.IsNullOrWhiteSpace(ApiClient.PrinterName)) { StatusText.Text = "Primero selecciona una impresora en Configuración > Impresora."; return; }
         try
         {
-            var profile = TicketWindowsPrinter.CurrentProfile with { WidthMm = SelectedWidth };
+            var profile = CurrentProfile();
             TicketWindowsPrinter.Print(ApiClient.PrinterName, CreatePreviewData(), profile, "Muestra de ticket JetVenta");
             StatusText.Text = $"Ticket muestra enviado a {ApiClient.PrinterName}.";
         }
@@ -87,7 +94,7 @@ public partial class TicketSettingsWindow : Window
     {
         var width = SelectedWidth;
         PreviewWidthText.Text = $"{width} mm";
-        var profile = TicketWindowsPrinter.CurrentProfile with { WidthMm = width };
+        var profile = CurrentProfile();
         TicketPreviewHost.Content = TicketWindowsPrinter.CreateTicketVisual(CreatePreviewData(), profile);
     }
 
@@ -108,6 +115,23 @@ public partial class TicketSettingsWindow : Window
     }
 
     private int SelectedWidth => ApiClient.PrinterTicketWidthMm == 58 ? 58 : 80;
+
+    private TicketPrintProfile CurrentProfile() => TryReadProfile(out var profile)
+        ? profile
+        : new TicketPrintProfile(ApiClient.PrinterFontFamily, ApiClient.PrinterFontSize, ApiClient.UseNormalTotals, SelectedWidth);
+
+    private bool TryReadProfile(out TicketPrintProfile profile)
+    {
+        var family = string.IsNullOrWhiteSpace(FontBox.Text) ? "Consolas" : FontBox.Text.Trim();
+        if (!double.TryParse(FontSizeBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var size) || size is < 6d or > 24d)
+        {
+            StatusText.Text = "El tamaño de fuente debe estar entre 6 y 24 puntos.";
+            profile = default!;
+            return false;
+        }
+        profile = new TicketPrintProfile(family, size, NormalTotalsCheck.IsChecked == true, SelectedWidth);
+        return true;
+    }
 
     private sealed record TicketSettings(string Name, string LegalName, string TaxId, string Address, string Phone, string TicketHeader, string TicketFooter, int TicketWidthMm);
 }
