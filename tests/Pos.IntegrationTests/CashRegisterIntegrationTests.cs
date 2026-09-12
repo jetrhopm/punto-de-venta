@@ -18,8 +18,9 @@ public sealed class CashRegisterIntegrationTests
         var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda pagos " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow };
         var cashier = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = ("CASHIER_PAY_" + suffix).ToUpperInvariant(), DisplayName = "Cajero de pagos", IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
-        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = cashier.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
-        database.AddRange(store, cashier, session);
+        var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja pagos " + suffix, IsActive = true };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = cashier.Id, RegisterId = register.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        database.AddRange(store, cashier, register, session);
         await database.SaveChangesAsync();
 
         try
@@ -31,7 +32,48 @@ public sealed class CashRegisterIntegrationTests
         finally
         {
             database.Sessions.Remove(session);
+            database.Registers.Remove(register);
             database.Users.Remove(cashier);
+            database.Stores.Remove(store);
+            await database.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
+    public async Task PaymentMethodsAreConfiguredAndValidatedPerRegister()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var firstToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var secondToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda perfiles " + suffix, BusinessType = "Pruebas", CashPaymentEnabled = false, CardPaymentEnabled = false, TransferPaymentEnabled = false, CreditPaymentEnabled = false, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var administrator = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "ADMIN_PAY_" + suffix, DisplayName = "Administrador de pagos", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var firstRegister = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja uno " + suffix, IsActive = true, CashPaymentEnabled = true, CardPaymentEnabled = true, TransferPaymentEnabled = true, CreditPaymentEnabled = true };
+        var secondRegister = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja dos " + suffix, IsActive = true, CashPaymentEnabled = true, CardPaymentEnabled = true, TransferPaymentEnabled = true, CreditPaymentEnabled = true };
+        var firstSession = new SessionRecord { Id = Guid.NewGuid(), UserId = administrator.Id, RegisterId = firstRegister.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(firstToken))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        var secondSession = new SessionRecord { Id = Guid.NewGuid(), UserId = administrator.Id, RegisterId = secondRegister.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(secondToken))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        database.AddRange(store, administrator, firstRegister, secondRegister, firstSession, secondSession);
+        await database.SaveChangesAsync();
+
+        try
+        {
+            var settings = new PaymentMethodSettingsService(database);
+            var updated = await settings.UpdateAsync(firstToken, new SetPaymentMethodSettingsCommand(true, false, false, false), CancellationToken.None);
+            var second = await settings.GetAsync(secondToken, CancellationToken.None);
+
+            Assert.NotNull(updated);
+            Assert.False(updated!.CardEnabled);
+            Assert.NotNull(second);
+            Assert.True(second!.CardEnabled);
+            Assert.Equal(secondRegister.Name, second.RegisterName);
+        }
+        finally
+        {
+            database.Sessions.RemoveRange(firstSession, secondSession);
+            database.Registers.RemoveRange(firstRegister, secondRegister);
+            database.Users.Remove(administrator);
             database.Stores.Remove(store);
             await database.SaveChangesAsync();
         }

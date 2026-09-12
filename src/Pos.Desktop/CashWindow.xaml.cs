@@ -52,7 +52,7 @@ public partial class CashWindow : Window
     {
         try
         {
-            var settings = await ApiClient.Client.GetFromJsonAsync<PaymentSettings>("api/payment-method-settings") ?? new PaymentSettings(true, true, true, true);
+            var settings = await ApiClient.Client.GetFromJsonAsync<PaymentSettings>("api/payment-method-settings") ?? new PaymentSettings(true, true, true, true, string.Empty);
             _cashEnabled = settings.CashEnabled;
             _cardEnabled = settings.CardEnabled;
             _transferEnabled = settings.TransferEnabled;
@@ -155,5 +155,5 @@ public partial class CashWindow : Window
     }
 
     private static decimal ParseAmount(string? value) => decimal.TryParse(value, NumberStyles.Number, CultureInfo.GetCultureInfo("es-MX"), out var amount) ? decimal.Round(amount, 2) : -1m;
-    private sealed record PaymentSettings(bool CashEnabled, bool CardEnabled, bool TransferEnabled, bool CreditEnabled);
+    private sealed record PaymentSettings(bool CashEnabled, bool CardEnabled, bool TransferEnabled, bool CreditEnabled, string RegisterName);
 }

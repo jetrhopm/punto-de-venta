@@ -22,6 +22,8 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
         if (!user.IsAdministrator && !await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "Sell", cancellationToken)) return null;
         var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        var register = await database.Registers.AsNoTracking().SingleOrDefaultAsync(item => item.Id == registerId && item.StoreId == store.Id && item.IsActive, cancellationToken)
+            ?? throw new InvalidOperationException("La caja de esta sesión ya no está disponible.");
         var manualWholesaleGrant = await GetManualWholesaleAuthorizationAsync(user, command, cancellationToken);
         if (command.PaymentMethod == "Credit" && !store.CreditSalesEnabled) throw new InvalidOperationException("Las ventas a crédito están deshabilitadas en Opciones habilitadas.");
         if (command.PaymentMethod == "Credit" && !user.IsAdministrator && !await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "SellOnCredit", cancellationToken)) throw new UnauthorizedAccessException("El usuario no tiene permiso para cobrar a credito.");
@@ -79,7 +81,7 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
             if (originalLine is not null) lines.Add(new SaleLineRecord { Id = Guid.NewGuid(), ProductId = product.Id, Quantity = requestedQuantity, OriginalUnitPrice = originalUnitPrice, UnitPrice = unitPrice, LineTotal = total, DiscountTotal = discountTotal, PromotionName = discountTotal > 0m ? promotionCalculation.PromotionName : string.Empty, StockBefore = stockBefore, StockAfter = stockAfterByProduct.GetValueOrDefault(product.Id, product.Stock) });
         }
         var totalSale = RoundSaleAmount(lines.Sum(line => line.LineTotal), store);
-        ValidatePaymentMethodEnabled(store, command, totalSale);
+        ValidatePaymentMethodEnabled(register, command, totalSale);
         var cashForThisSale = command.PaymentMethod switch
         {
             "Card" or "Transfer" or "Credit" => 0m,
@@ -171,16 +173,16 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         return new CompleteSaleResult(sale.Id, sale.OperationId, totalSale, command.CashReceived, change, false, inventoryAttentionRequired);
     }
 
-    private static void ValidatePaymentMethodEnabled(StoreRecord store, CompleteSaleCommand command, decimal total)
+    private static void ValidatePaymentMethodEnabled(RegisterRecord register, CompleteSaleCommand command, decimal total)
     {
         var card = command.PaymentMethod == "Card" ? total : decimal.Round(command.CardAmount, 2, MidpointRounding.AwayFromZero);
         var transfer = command.PaymentMethod == "Transfer" ? total : decimal.Round(command.TransferAmount, 2, MidpointRounding.AwayFromZero);
         var cash = decimal.Round(total - card - transfer, 2, MidpointRounding.AwayFromZero);
 
-        if (command.PaymentMethod == "Credit" && !store.CreditPaymentEnabled) throw new InvalidOperationException("El pago a crédito está desactivado en esta tienda.");
-        if (command.PaymentMethod != "Credit" && cash > 0m && !store.CashPaymentEnabled) throw new InvalidOperationException("El pago en efectivo está desactivado en esta tienda.");
-        if (card > 0m && !store.CardPaymentEnabled) throw new InvalidOperationException("El pago con tarjeta está desactivado en esta tienda.");
-        if (transfer > 0m && !store.TransferPaymentEnabled) throw new InvalidOperationException("El pago por transferencia está desactivado en esta tienda.");
+        if (command.PaymentMethod == "Credit" && !register.CreditPaymentEnabled) throw new InvalidOperationException("El pago a crédito está desactivado en esta caja.");
+        if (command.PaymentMethod != "Credit" && cash > 0m && !register.CashPaymentEnabled) throw new InvalidOperationException("El pago en efectivo está desactivado en esta caja.");
+        if (card > 0m && !register.CardPaymentEnabled) throw new InvalidOperationException("El pago con tarjeta está desactivado en esta caja.");
+        if (transfer > 0m && !register.TransferPaymentEnabled) throw new InvalidOperationException("El pago por transferencia está desactivado en esta caja.");
     }
 
     private async Task<PermissionRecord?> GetManualWholesaleAuthorizationAsync(UserRecord user, CompleteSaleCommand command, CancellationToken cancellationToken)

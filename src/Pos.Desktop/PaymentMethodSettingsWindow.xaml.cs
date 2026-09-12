@@ -14,7 +14,7 @@ public partial class PaymentMethodSettingsWindow : Window
             var settings = await ApiClient.Client.GetFromJsonAsync<PaymentSettings>("api/payment-method-settings");
             CashBox.IsChecked = settings?.CashEnabled ?? true; CardBox.IsChecked = settings?.CardEnabled ?? true;
             TransferBox.IsChecked = settings?.TransferEnabled ?? true; CreditBox.IsChecked = settings?.CreditEnabled ?? true;
-            StatusText.Text = "Los cambios se aplican a las siguientes ventas.";
+            StatusText.Text = $"Estás configurando sólo esta caja: {settings?.RegisterName ?? "caja actual"}. Los cambios se aplican a sus siguientes ventas.";
         }
         catch (Exception exception)
         {
@@ -42,7 +42,7 @@ public partial class PaymentMethodSettingsWindow : Window
                 OperationFeedback.Show(this, "Formas de pago no guardadas", StatusText.Text, OperationResultKind.Error);
                 return;
             }
-            ConfigurationFeedback.ShowSavedAndClose(this, "Formas de pago", "Las siguientes ventas mostrarán únicamente las formas de pago activas.");
+            ConfigurationFeedback.ShowSavedAndClose(this, "Formas de pago", "Las siguientes ventas de esta caja mostrarán únicamente las formas de pago activas.");
         }
         catch (Exception exception)
         {
@@ -51,5 +51,5 @@ public partial class PaymentMethodSettingsWindow : Window
         }
     }
 
-    private sealed record PaymentSettings(bool CashEnabled, bool CardEnabled, bool TransferEnabled, bool CreditEnabled);
+    private sealed record PaymentSettings(bool CashEnabled, bool CardEnabled, bool TransferEnabled, bool CreditEnabled, string RegisterName);
 }
