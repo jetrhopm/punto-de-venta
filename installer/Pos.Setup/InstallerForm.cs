@@ -939,7 +939,7 @@ public sealed class InstallerForm : Form
         using var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PuntoDeVenta");
         key?.SetValue("DisplayName", ProductTitle);
         key?.SetValue("DisplayVersion", version);
-        key?.SetValue("Publisher", ProductTitle);
+        key?.SetValue("Publisher", "Jetrho Pérez M.");
         key?.SetValue("InstallLocation", _installRoot);
         key?.SetValue("DisplayIcon", Path.Combine(_installRoot, "client", "app.ico"));
         key?.SetValue("UninstallString", $"{Program.QuoteArgument(Path.Combine(_installRoot, "Setup.exe"))} /uninstall");

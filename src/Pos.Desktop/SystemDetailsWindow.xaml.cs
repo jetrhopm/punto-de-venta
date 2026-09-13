@@ -22,6 +22,7 @@ public partial class SystemDetailsWindow : Window
         {
             "JETVENTA - DETALLES DEL SISTEMA",
             "================================",
+            "Autor del programa: Jetrho Pérez M.",
             $"Versión de JetVenta: {version}",
             $"Sistema operativo: {RuntimeInformation.OSDescription}",
             $"Arquitectura del proceso: {RuntimeInformation.ProcessArchitecture}",
