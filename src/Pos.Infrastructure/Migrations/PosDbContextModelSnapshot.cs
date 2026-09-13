@@ -1030,6 +1030,11 @@ namespace Pos.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("MercadoPagoEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("MercadoPagoTerminalId")
                         .IsRequired()
                         .ValueGeneratedOnAdd()

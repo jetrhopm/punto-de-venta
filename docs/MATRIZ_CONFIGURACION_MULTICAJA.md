@@ -1,6 +1,6 @@
 # Matriz de configuracion multicaja
 
-**Estado de control:** 3.3.16  
+**Estado de control:** 3.3.18
 **Objetivo:** separar de forma explicita la configuracion de tienda, de caja y
 de equipo. Esta matriz es el requisito previo para cambiar configuraciones sin
 afectar ventas, turnos, inventario ni cajas ya emparejadas.
@@ -39,7 +39,7 @@ afectar ventas, turnos, inventario ni cajas ya emparejadas.
 | Formas de pago | Efectivo, tarjeta, transferencia y credito disponibles para cobrar | Caja | Perfil de pagos por `register` | Implementado en 3.3.17 | Administrador |
 | Credito | Permitir ventas a credito en la tienda | Global | `store` | Ya global | Administrador |
 | Mercado Pago | Cuenta, ambiente y credenciales | Global / servidor | `store`, cifrado | Ya global | Administrador en servidor |
-| Mercado Pago Point | Terminal asignada y habilitada para cobrar | Caja | `register` | Terminal ya por caja; habilitacion aun global | Administrador |
+| Mercado Pago Point | Terminal asignada y habilitada para cobrar | Caja | `register` | Implementado en 3.3.18 | Administrador |
 | Futuras terminales | BBVA, Getnet e Inbursa: proveedor, terminal y habilitacion | Caja; credenciales de comercio globales | Perfil por `register` y secretos en servidor | Pendiente de integracion | Administrador |
 | Impresora | Cola de Windows, prueba y uso de tickets | Equipo | Perfil local de maquina | Ya local; permisos reparados en 3.3.16 | Permiso `ConfigurePrinters` |
 | Lector | Modo teclado/serial, COM, velocidad y terminador | Equipo | Perfil local de maquina | Ya local | Administrador |
@@ -99,8 +99,8 @@ ya funciona en una caja.
 
 1. Completado en `3.3.17`: perfil de pagos por caja, migracion de valores
    globales existentes y validacion API por sesion/caja.
-2. Separar la habilitacion de Mercado Pago Point por caja, sin alterar cuenta,
-   terminal asignada ni ordenes existentes.
+2. Completado en `3.3.18`: habilitacion de Mercado Pago Point por caja,
+   conservando cuenta, secretos, terminales y ordenes existentes.
 3. Consolidar ticket, cajon y bascula, eliminando solo despues los campos
    globales duplicados mediante una migracion reversible.
 4. Agregar leyendas de alcance en todas las ventanas de configuracion y

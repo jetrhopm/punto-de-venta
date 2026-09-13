@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Pos.Infrastructure;
 
-public sealed record MercadoPagoSettingsResult(bool Enabled, string Environment, bool AccountConnected, long? AccountUserId, string TerminalId, string TerminalLabel, bool OAuthAvailable, bool WebhookConfigured, string Message);
+public sealed record MercadoPagoSettingsResult(bool Enabled, string Environment, bool AccountConnected, long? AccountUserId, string TerminalId, string TerminalLabel, bool OAuthAvailable, bool WebhookConfigured, string RegisterName, string Message);
 public sealed record MercadoPagoTerminalResult(string Id, string Label, string OperatingMode, bool Selected);
 public sealed record ConfigureMercadoPagoTestCommand(string AccessToken);
 public sealed record SelectMercadoPagoTerminalCommand(string TerminalId, string Label);
@@ -26,8 +26,8 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         var connected = !string.IsNullOrWhiteSpace(store.MercadoPagoAccessTokenProtected);
         var oauth = !string.IsNullOrWhiteSpace(configuration["MercadoPago:ClientId"]) && !string.IsNullOrWhiteSpace(configuration["MercadoPago:ClientSecret"]) && !string.IsNullOrWhiteSpace(configuration["MercadoPago:RedirectUri"]);
         var webhook = !string.IsNullOrWhiteSpace(configuration["MercadoPago:WebhookSecret"]);
-        var message = !connected ? "Autoriza la cuenta de Mercado Pago o guarda un Access Token de prueba." : string.IsNullOrWhiteSpace(register.MercadoPagoTerminalId) ? "Cuenta conectada. Selecciona una terminal Point en modo PDV." : !store.MercadoPagoEnabled ? "Cuenta y terminal configuradas. Point está desactivado." : !webhook ? "Cuenta y terminal listas para cobrar. Falta configurar el secreto Webhook HTTPS para conciliación automática." : "Cuenta, terminal y conciliación Webhook listas para cobrar.";
-        return new(store.MercadoPagoEnabled, store.MercadoPagoEnvironment, connected, store.MercadoPagoUserId, register.MercadoPagoTerminalId, register.MercadoPagoTerminalLabel, oauth, webhook, message);
+        var message = !connected ? "Autoriza la cuenta de Mercado Pago o guarda un Access Token de prueba." : string.IsNullOrWhiteSpace(register.MercadoPagoTerminalId) ? "Cuenta conectada. Selecciona una terminal Point en modo PDV para esta caja." : !register.MercadoPagoEnabled ? "Cuenta y terminal configuradas. Point está desactivado sólo en esta caja." : !webhook ? "Cuenta y terminal listas para cobrar en esta caja. Falta configurar el secreto Webhook HTTPS para conciliación automática." : "Cuenta, terminal y conciliación Webhook listas para cobrar en esta caja.";
+        return new(register.MercadoPagoEnabled, store.MercadoPagoEnvironment, connected, store.MercadoPagoUserId, register.MercadoPagoTerminalId, register.MercadoPagoTerminalLabel, oauth, webhook, register.Name, message);
     }
 
     public async Task<MercadoPagoSettingsResult?> ConfigureTestTokenAsync(string token, ConfigureMercadoPagoTestCommand command, CancellationToken cancellationToken)
@@ -40,7 +40,7 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         store.MercadoPagoAccessTokenProtected = Protect(command.AccessToken.Trim());
         store.MercadoPagoRefreshTokenProtected = string.Empty;
         store.MercadoPagoEnvironment = "Test";
-        store.MercadoPagoEnabled = true;
+        register.MercadoPagoEnabled = true;
         store.MercadoPagoUserId = null;
         store.MercadoPagoTokenExpiresAtUtc = null;
         await database.SaveChangesAsync(cancellationToken);
@@ -66,7 +66,7 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         if (!string.Equals(terminal.OperatingMode, "PDV", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("La terminal debe estar configurada en modo PDV dentro de Mercado Pago.");
         register.MercadoPagoTerminalId = terminal.Id;
         register.MercadoPagoTerminalLabel = BuildTerminalLabel(terminal);
-        store.MercadoPagoEnabled = true;
+        register.MercadoPagoEnabled = true;
         await database.SaveChangesAsync(cancellationToken);
         return true;
     }
@@ -91,7 +91,7 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         {
             if (string.IsNullOrWhiteSpace(store.MercadoPagoAccessTokenProtected) || string.IsNullOrWhiteSpace(register.MercadoPagoTerminalId)) throw new InvalidOperationException("Autoriza la cuenta y selecciona una terminal PDV antes de activar Mercado Pago Point.");
         }
-        store.MercadoPagoEnabled = command.Enabled;
+        register.MercadoPagoEnabled = command.Enabled;
         await database.SaveChangesAsync(cancellationToken);
         return true;
     }
@@ -104,10 +104,13 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         var registers = await database.Registers.Where(item => item.StoreId == store.Id).ToListAsync(cancellationToken);
         foreach (var storeRegister in registers)
         {
+            storeRegister.MercadoPagoEnabled = false;
             storeRegister.MercadoPagoTerminalId = string.Empty;
             storeRegister.MercadoPagoTerminalLabel = string.Empty;
         }
 
+        // This historical store flag is retained only as the migration baseline
+        // for older installations. The active setting is now on each register.
         store.MercadoPagoEnabled = false;
         store.MercadoPagoEnvironment = "Test";
         store.MercadoPagoAccessTokenProtected = string.Empty;
@@ -150,7 +153,6 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         store.MercadoPagoUserId = result.UserId;
         store.MercadoPagoTokenExpiresAtUtc = DateTimeOffset.UtcNow.AddSeconds(result.ExpiresIn);
         store.MercadoPagoEnvironment = "Production";
-        store.MercadoPagoEnabled = true;
         store.MercadoPagoOAuthState = string.Empty;
         store.MercadoPagoOAuthVerifierProtected = string.Empty;
         store.MercadoPagoOAuthStateExpiresAtUtc = null;
@@ -166,7 +168,7 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         if (existing is not null && existing.RegisterId != register.Id) throw new InvalidOperationException("El cobro pertenece a otra caja.");
         if (existing is not null && !string.IsNullOrWhiteSpace(existing.ProviderOrderId)) return ToResult(existing);
         var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
-        if (!store.MercadoPagoEnabled) throw new InvalidOperationException("Mercado Pago Point no está activado en esta tienda.");
+        if (!register.MercadoPagoEnabled) throw new InvalidOperationException("Mercado Pago Point no está activado en esta caja.");
         if (string.IsNullOrWhiteSpace(register.MercadoPagoTerminalId)) throw new InvalidOperationException("Selecciona una terminal Point para esta caja desde Configuración.");
         existing ??= new MercadoPagoOrderRecord { Id = Guid.NewGuid(), StoreId = store.Id, RegisterId = register.Id, OperationId = command.OperationId, Amount = decimal.Round(command.Amount, 2), Status = "Pending", CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow };
         if (database.Entry(existing).State == EntityState.Detached) { database.MercadoPagoOrders.Add(existing); await database.SaveChangesAsync(cancellationToken); }

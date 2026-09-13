@@ -17,7 +17,7 @@ public partial class MercadoPagoSettingsWindow : Window
             var settings = await ApiClient.Client.GetFromJsonAsync<SettingsResult>("api/integrations/mercado-pago/settings");
             if (settings is null) return;
             ConnectionTitle.Text = settings.AccountConnected ? $"Cuenta conectada ({settings.Environment})" : "Cuenta sin autorizar";
-            ConnectionMessage.Text = settings.Message;
+            ConnectionMessage.Text = $"Caja actual: {settings.RegisterName}\n{settings.Message}";
             _enabled = settings.Enabled;
             EnabledButton.Content = _enabled ? "Desactivar Point" : "Activar Point";
             EnabledButton.IsEnabled = settings.AccountConnected;
@@ -126,7 +126,7 @@ public partial class MercadoPagoSettingsWindow : Window
                 OperationFeedback.Show(this, "Mercado Pago Point", StatusText.Text, OperationResultKind.Error);
                 return;
             }
-            StatusText.Text = !_enabled ? "Mercado Pago Point quedó activo." : "Mercado Pago Point quedó desactivado; las credenciales se conservaron.";
+            StatusText.Text = !_enabled ? "Mercado Pago Point quedó activo sólo en esta caja." : "Mercado Pago Point quedó desactivado sólo en esta caja; las credenciales se conservaron.";
             await LoadAsync();
             OperationFeedback.Show(this, "Mercado Pago Point", StatusText.Text, OperationResultKind.Success);
         }
@@ -208,7 +208,7 @@ public partial class MercadoPagoSettingsWindow : Window
                 OperationFeedback.Show(this, "Mercado Pago Point", StatusText.Text, OperationResultKind.Error);
                 return;
             }
-            StatusText.Text = "Terminal guardada. Los cobros con tarjeta se enviarán a Point.";
+            StatusText.Text = "Terminal guardada. Los cobros con tarjeta de esta caja se enviarán a Point.";
             await LoadAsync();
             OperationFeedback.Show(this, "Terminal guardada", StatusText.Text, OperationResultKind.Success);
         }
@@ -246,7 +246,7 @@ public partial class MercadoPagoSettingsWindow : Window
         }
     }
 
-    private sealed record SettingsResult(bool Enabled, string Environment, bool AccountConnected, long? AccountUserId, string TerminalId, string TerminalLabel, bool OAuthAvailable, bool WebhookConfigured, string Message);
+    private sealed record SettingsResult(bool Enabled, string Environment, bool AccountConnected, long? AccountUserId, string TerminalId, string TerminalLabel, bool OAuthAvailable, bool WebhookConfigured, string RegisterName, string Message);
     private sealed record TerminalResult(string Id, string Label, string OperatingMode, bool Selected);
     private sealed record OAuthStartResult(string Url);
 }
