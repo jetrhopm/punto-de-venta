@@ -1,6 +1,6 @@
 # Matriz de configuracion multicaja
 
-**Estado de control:** 3.3.19
+**Estado de control:** 3.3.20
 **Objetivo:** separar de forma explicita la configuracion de tienda, de caja y
 de equipo. Esta matriz es el requisito previo para cambiar configuraciones sin
 afectar ventas, turnos, inventario ni cajas ya emparejadas.
@@ -103,8 +103,9 @@ que configurar una caja no puede modificar otra.
 3. Completado en `3.3.19`: ticket fisico, impresora, lector, cajon y bascula
    operan desde un unico perfil local; se eliminaron campos globales y rutas
    API duplicadas mediante una migracion reversible.
-4. Agregar leyendas de alcance en todas las ventanas de configuracion y
-   pruebas multicaja de regresion.
+4. Completado en `3.3.20`: todas las ventanas abiertas desde Configuración
+   muestran de forma transversal su alcance: todas las cajas, esta caja con
+   nombre real, configuración mixta o sólo servidor.
 
 ## Pruebas obligatorias antes de cada liberacion
 
