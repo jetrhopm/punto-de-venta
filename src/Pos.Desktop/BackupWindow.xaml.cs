@@ -68,16 +68,22 @@ public partial class BackupWindow : Window
     {
         if (!EnsureServer()) return;
         if (BackupsGrid.SelectedItem is not BackupRow backup) { StatusText.Text = "Selecciona un respaldo."; return; }
-        var dialog = new SaveFileDialog { Title = "Guardar copia del respaldo", Filter = "Respaldo PostgreSQL (*.dump)|*.dump", FileName = backup.FileName, AddExtension = true };
+        var dialog = new SaveFileDialog
+        {
+            Title = "Guardar copia externa de JetVenta",
+            Filter = "Respaldo de JetVenta (*.bjv)|*.bjv",
+            FileName = Path.ChangeExtension(backup.FileName, ".bjv"),
+            AddExtension = true
+        };
         if (dialog.ShowDialog() != true) return;
         try
         {
             using var response = await ApiClient.Client.GetAsync($"api/maintenance/backups/{Uri.EscapeDataString(backup.FileName)}");
             response.EnsureSuccessStatusCode();
-            await File.WriteAllBytesAsync(dialog.FileName, await response.Content.ReadAsByteArrayAsync());
-            await File.WriteAllTextAsync(dialog.FileName + ".sha256", backup.Sha256 + Environment.NewLine);
-            StatusText.Text = "Copia externa y comprobante SHA-256 guardados correctamente.";
-            OperationFeedback.Show(this, "Copia externa guardada", $"Se guardó el respaldo y su comprobante SHA-256 en:\n{dialog.FileName}", OperationResultKind.Success);
+            var dump = await response.Content.ReadAsByteArrayAsync();
+            await JetVentaBackupArchive.CreateAsync(dialog.FileName, backup.FileName, dump, backup.Sha256, backup.CreatedAtUtc);
+            StatusText.Text = "Copia externa .bjv guardada y verificada correctamente.";
+            OperationFeedback.Show(this, "Copia externa guardada", $"Se guardó un respaldo .bjv verificable en:\n{dialog.FileName}", OperationResultKind.Success);
         }
         catch (Exception exception)
         {
@@ -164,32 +170,41 @@ public partial class BackupWindow : Window
         var dialog = new OpenFileDialog
         {
             Title = "Seleccionar respaldo de JetVenta",
-            Filter = "Respaldo PostgreSQL (*.dump)|*.dump",
+            Filter = "Respaldo de JetVenta (*.bjv)|*.bjv|Respaldo PostgreSQL anterior (*.dump)|*.dump",
             CheckFileExists = true,
             Multiselect = false
         };
         if (dialog.ShowDialog() != true) return;
 
         var backup = dialog.FileName;
-        var checksum = backup + ".sha256";
-        if (!File.Exists(checksum))
-        {
-            MessageBox.Show("No se encontró el archivo de verificación .dump.sha256 junto al respaldo. Selecciona ambos archivos en la misma carpeta.", "Respaldo incompleto", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
+        JetVentaBackupArchive? archive = null;
         RestoreProgressWindow? progress = null;
         try
         {
             StatusText.Text = "Verificando el respaldo antes de cargarlo...";
-            var expected = (await File.ReadAllTextAsync(checksum)).Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)[0].ToUpperInvariant();
-            await using var stream = File.OpenRead(backup);
-            var actual = Convert.ToHexString(await SHA256.HashDataAsync(stream)).ToUpperInvariant();
-            if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+            if (Path.GetExtension(backup).Equals(".bjv", StringComparison.OrdinalIgnoreCase))
             {
-                StatusText.Text = "El respaldo no coincide con su comprobante SHA-256.";
-                MessageBox.Show("El archivo está dañado o fue modificado. No se restauró ningún dato.", "Verificación fallida", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
+                archive = await JetVentaBackupArchive.OpenVerifiedAsync(backup);
+                backup = archive.DumpPath;
+            }
+            else
+            {
+                var checksum = backup + ".sha256";
+                if (!File.Exists(checksum))
+                {
+                    MessageBox.Show("No se encontró el archivo de verificación .dump.sha256 junto al respaldo. Selecciona ambos archivos en la misma carpeta.", "Respaldo incompleto", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var expected = (await File.ReadAllTextAsync(checksum)).Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)[0].ToUpperInvariant();
+                await using var stream = File.OpenRead(backup);
+                var actual = Convert.ToHexString(await SHA256.HashDataAsync(stream)).ToUpperInvariant();
+                if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+                {
+                    StatusText.Text = "El respaldo no coincide con su comprobante SHA-256.";
+                    MessageBox.Show("El archivo está dañado o fue modificado. No se restauró ningún dato.", "Verificación fallida", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
             }
 
             var confirm = MessageBox.Show(
@@ -272,6 +287,7 @@ public partial class BackupWindow : Window
         finally
         {
             progress?.Close();
+            archive?.Dispose();
         }
     }
 

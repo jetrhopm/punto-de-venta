@@ -22,6 +22,10 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>license-file.ico</TargetPath>
     </Content>
+    <Content Include="Assets\Icons\backup-file.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>backup-file.ico</TargetPath>
+    </Content>
   </ItemGroup>
 
   <PropertyGroup>

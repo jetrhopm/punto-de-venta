@@ -22,6 +22,9 @@ public sealed class InstallerForm : Form
     private const string LicenseFileExtensionKey = @"SOFTWARE\Classes\.jv";
     private const string LicenseFileTypeKey = @"SOFTWARE\Classes\JetVenta.LicenseFile";
     private const string LicenseFileTypeName = "JetVenta.LicenseFile";
+    private const string BackupFileExtensionKey = @"SOFTWARE\Classes\.bjv";
+    private const string BackupFileTypeKey = @"SOFTWARE\Classes\JetVenta.BackupFile";
+    private const string BackupFileTypeName = "JetVenta.BackupFile";
     private readonly string _installRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), ProductTitle);
     private readonly string _dataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PuntoDeVenta");
     private readonly bool _uninstall;
@@ -481,6 +484,7 @@ public sealed class InstallerForm : Form
         await GrantClientSettingsAccessAsync();
         RegisterInstallation();
         RegisterLicenseFileType();
+        RegisterBackupFileType();
         CreateShortcuts();
         ConfigureAutomaticStart(_startWithWindows.Checked);
         SetProgress(100, _installationMode == InstallationMode.AdditionalRegister
@@ -502,6 +506,7 @@ public sealed class InstallerForm : Form
         }
         Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PuntoDeVenta", false);
         UnregisterLicenseFileType();
+        UnregisterBackupFileType();
         DeleteShortcuts();
         ConfigureAutomaticStart(false);
         SetProgress(100, "Desinstalación terminada. Se conservaron datos, respaldos y el historial de demo.");
@@ -983,6 +988,54 @@ public sealed class InstallerForm : Form
         catch (Exception exception) when (exception is UnauthorizedAccessException or System.Security.SecurityException)
         {
             Log($"No se pudo retirar el icono de archivos .jv: {exception.Message}");
+        }
+    }
+
+    private void RegisterBackupFileType()
+    {
+        try
+        {
+            using (var extension = Registry.LocalMachine.CreateSubKey(BackupFileExtensionKey))
+            {
+                extension?.SetValue(string.Empty, BackupFileTypeName);
+                extension?.SetValue("Content Type", "application/vnd.jetventa.backup");
+                extension?.SetValue("PerceivedType", "document");
+            }
+
+            using (var fileType = Registry.LocalMachine.CreateSubKey(BackupFileTypeKey))
+            {
+                fileType?.SetValue(string.Empty, "Respaldo de JetVenta");
+                fileType?.SetValue("FriendlyTypeName", "Respaldo de JetVenta");
+            }
+
+            using var icon = Registry.LocalMachine.CreateSubKey($@"{BackupFileTypeKey}\DefaultIcon");
+            icon?.SetValue(string.Empty, $"\"{Path.Combine(_installRoot, "client", "backup-file.ico")}\",0");
+            NotifyFileAssociationsChanged();
+            Log("Extensión .bjv registrada con el icono de respaldo de JetVenta.");
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            Log($"No se pudo registrar el icono de archivos .bjv: {exception.Message}");
+        }
+    }
+
+    private void UnregisterBackupFileType()
+    {
+        try
+        {
+            var removeExtension = false;
+            using (var extension = Registry.LocalMachine.OpenSubKey(BackupFileExtensionKey))
+            {
+                removeExtension = string.Equals(extension?.GetValue(string.Empty)?.ToString(), BackupFileTypeName, StringComparison.Ordinal);
+            }
+
+            if (removeExtension) Registry.LocalMachine.DeleteSubKeyTree(BackupFileExtensionKey, false);
+            Registry.LocalMachine.DeleteSubKeyTree(BackupFileTypeKey, false);
+            NotifyFileAssociationsChanged();
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            Log($"No se pudo retirar el icono de archivos .bjv: {exception.Message}");
         }
     }
 
