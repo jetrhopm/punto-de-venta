@@ -67,7 +67,7 @@ public sealed class TicketService(PosDbContext database)
             store.Phone,
             store.TicketHeader,
             store.TicketFooter,
-            store.TicketWidthMm,
+            80,
             sale.Id,
             shift.Id,
             register.Name,

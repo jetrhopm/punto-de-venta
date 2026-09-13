@@ -1478,32 +1478,6 @@ namespace Pos.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
-                    b.Property<bool>("CashDrawerEnabled")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
-                    b.Property<string>("CashDrawerModel")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)")
-                        .HasDefaultValue("PrinterPulse");
-
-                    b.Property<string>("CashDrawerPort")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("USB");
-
-                    b.Property<string>("CashDrawerPrinterName")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(260)
-                        .HasColumnType("character varying(260)")
-                        .HasDefaultValue("");
-
                     b.Property<decimal>("CashLimit")
                         .ValueGeneratedOnAdd()
                         .HasPrecision(18, 2)
@@ -1711,61 +1685,6 @@ namespace Pos.Infrastructure.Migrations
                         .HasColumnType("character varying(20)")
                         .HasDefaultValue("Tenths");
 
-                    b.Property<int>("ScaleBaudRate")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(9600);
-
-                    b.Property<int>("ScaleDataBits")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(8);
-
-                    b.Property<bool>("ScaleEnabled")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
-                    b.Property<string>("ScaleParity")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasDefaultValue("None");
-
-                    b.Property<string>("ScalePort")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("");
-
-                    b.Property<int>("ScaleReadTimeoutMs")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(1500);
-
-                    b.Property<string>("ScaleStopBits")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasDefaultValue("One");
-
-                    b.Property<string>("ScaleTerminator")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasDefaultValue("CRLF");
-
-                    b.Property<string>("ScaleUnit")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("Kilogramo");
-
                     b.Property<string>("TaxId")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -1780,9 +1699,6 @@ namespace Pos.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
-
-                    b.Property<int>("TicketWidthMm")
-                        .HasColumnType("integer");
 
                     b.Property<string>("TimeZoneId")
                         .IsRequired()

@@ -5,7 +5,6 @@ namespace Pos.Infrastructure;
 public sealed record TicketSettingsCommand(
     string Header,
     string Footer,
-    int WidthMm,
     string? StoreName = null,
     string? LegalName = null,
     string? TaxId = null,
@@ -17,15 +16,14 @@ public sealed class TicketSettingsService(PosDbContext database)
     public async Task<StoreRecord?> UpdateAsync(string token, TicketSettingsCommand command, CancellationToken cancellationToken)
     {
         if (await AuthorizedAsync(token, cancellationToken) is null) return null;
-        if (command.WidthMm is not (58 or 80) || command.Header.Length > 300 || command.Footer.Length > 300)
-            throw new ArgumentException("El formato debe ser 58 u 80 mm y los textos no deben superar 300 caracteres.");
+        if (command.Header.Length > 300 || command.Footer.Length > 300)
+            throw new ArgumentException("Los textos del ticket no deben superar 300 caracteres.");
         if (command.StoreName?.Length > 160 || command.LegalName?.Length > 200 || command.TaxId?.Length > 20 || command.Address?.Length > 300 || command.Phone?.Length > 30)
             throw new ArgumentException("Revisa la longitud de los datos comerciales del ticket.");
 
         var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
         store.TicketHeader = command.Header.Trim();
         store.TicketFooter = command.Footer.Trim();
-        store.TicketWidthMm = command.WidthMm;
         if (command.StoreName is not null)
         {
             if (string.IsNullOrWhiteSpace(command.StoreName)) throw new ArgumentException("El nombre comercial es obligatorio.");

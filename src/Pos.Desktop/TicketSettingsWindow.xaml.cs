@@ -10,7 +10,6 @@ public partial class TicketSettingsWindow : Window
 {
     private static HttpClient Client => ApiClient.Client;
     private bool _loaded;
-    private int _storedTicketWidthMm = 80;
 
     public TicketSettingsWindow()
     {
@@ -36,7 +35,6 @@ public partial class TicketSettingsWindow : Window
                 PhoneBox.Text = settings.Phone;
                 HeaderBox.Text = settings.TicketHeader;
                 FooterBox.Text = settings.TicketFooter;
-                _storedTicketWidthMm = settings.TicketWidthMm == 58 ? 58 : 80;
             }
             _loaded = true;
             UpdatePreview();
@@ -64,7 +62,6 @@ public partial class TicketSettingsWindow : Window
             {
                 header = HeaderBox.Text,
                 footer = FooterBox.Text,
-                widthMm = _storedTicketWidthMm,
                 storeName = StoreNameBox.Text,
                 legalName = LegalNameBox.Text,
                 taxId = TaxIdBox.Text,
@@ -133,5 +130,5 @@ public partial class TicketSettingsWindow : Window
         return true;
     }
 
-    private sealed record TicketSettings(string Name, string LegalName, string TaxId, string Address, string Phone, string TicketHeader, string TicketFooter, int TicketWidthMm);
+    private sealed record TicketSettings(string Name, string LegalName, string TaxId, string Address, string Phone, string TicketHeader, string TicketFooter);
 }
