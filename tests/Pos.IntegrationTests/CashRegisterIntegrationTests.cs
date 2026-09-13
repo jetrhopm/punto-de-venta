@@ -80,6 +80,60 @@ public sealed class CashRegisterIntegrationTests
     }
 
     [Fact]
+    public async Task StoreDataChangedFromSecondRegisterIsVisibleFromFirstRegister()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var firstToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var secondToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda original " + suffix, BusinessType = "Abarrotes", CreatedAtUtc = DateTimeOffset.UtcNow };
+        var firstAdministrator = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "ADMIN_ONE_" + suffix, DisplayName = "Administrador caja uno", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var secondAdministrator = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "ADMIN_TWO_" + suffix, DisplayName = "Administrador caja dos", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var firstRegister = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja uno " + suffix, IsActive = true };
+        var secondRegister = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja dos " + suffix, IsActive = true };
+        var firstSession = new SessionRecord { Id = Guid.NewGuid(), UserId = firstAdministrator.Id, RegisterId = firstRegister.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(firstToken))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        var secondSession = new SessionRecord { Id = Guid.NewGuid(), UserId = secondAdministrator.Id, RegisterId = secondRegister.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(secondToken))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        database.AddRange(store, firstAdministrator, secondAdministrator, firstRegister, secondRegister, firstSession, secondSession);
+        await database.SaveChangesAsync();
+
+        try
+        {
+            var settings = new StoreSettingsService(database);
+            var expectedName = "Tienda actualizada " + suffix;
+            var updated = await settings.UpdateAsync(secondToken, new StoreSettingsCommand(expectedName, "Minisúper", "Razón social", "XAXX010101000", "Dirección de prueba", "4490000000", "America/Mexico_City"), CancellationToken.None);
+            var fromFirstRegister = await settings.GetAsync(firstToken, CancellationToken.None);
+
+            Assert.NotNull(updated);
+            Assert.NotNull(fromFirstRegister);
+            Assert.Equal(expectedName, fromFirstRegister!.Name);
+            Assert.Equal("Minisúper", fromFirstRegister.BusinessType);
+            Assert.Equal("XAXX010101000", fromFirstRegister.TaxId);
+        }
+        finally
+        {
+            database.Sessions.RemoveRange(firstSession, secondSession);
+            database.Registers.RemoveRange(firstRegister, secondRegister);
+            database.Users.RemoveRange(firstAdministrator, secondAdministrator);
+            database.Stores.Remove(store);
+            await database.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
+    public void PeripheralProfilesAreNotPartOfTheGlobalStoreModel()
+    {
+        using var database = new PosDbContextFactory().CreateDbContext([]);
+        var store = database.Model.FindEntityType(typeof(StoreRecord));
+
+        Assert.NotNull(store);
+        Assert.Null(store!.FindProperty("CashDrawerEnabled"));
+        Assert.Null(store.FindProperty("ScaleEnabled"));
+        Assert.Null(store.FindProperty("TicketWidthMm"));
+    }
+
+    [Fact]
     public async Task CashierCanReadCutSettingsAndCloseWithTemporaryCloseShiftPermission()
     {
         await using var database = new PosDbContextFactory().CreateDbContext([]);

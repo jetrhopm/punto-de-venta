@@ -122,3 +122,8 @@ que configurar una caja no puede modificar otra.
 6. Restaurar un respaldo en servidor y confirmar que ninguna caja puede
    vender durante mantenimiento; al terminar, cada caja conserva sus perfiles
    de equipo.
+7. Cambiar una forma de pago en Caja 2 y confirmar que Caja 1 no cambia.
+8. Cambiar impresora, ancho, lector, cajón o báscula en Caja 2 y confirmar que
+   Caja 1 conserva su perfil local.
+9. Cambiar nombre, RFC o giro de tienda desde Caja 2 y confirmar que Caja 1
+   obtiene los mismos datos al abrir de nuevo la configuración.
