@@ -39,7 +39,7 @@ public sealed class CashRegisterService(PosDbContext database)
     public async Task<IReadOnlyList<CashierCutOption>> CashiersForDayAsync(string token, DateOnly date, CancellationToken cancellationToken)
     {
         if (await AuthorizedUserAsync(token, cancellationToken) is null) return [];
-        var (fromUtc, toUtc) = DayRangeUtc(date);
+        var (fromUtc, toUtc) = await DayRangeUtcAsync(date, cancellationToken);
         return await (from shift in database.Shifts.AsNoTracking()
                       join user in database.Users.AsNoTracking() on shift.UserId equals user.Id
                       where shift.OpenedAtUtc >= fromUtc && shift.OpenedAtUtc < toUtc
@@ -50,7 +50,7 @@ public sealed class CashRegisterService(PosDbContext database)
     public async Task<CashCutSummary?> CutForDayAsync(string token, DateOnly date, Guid? cashierId, CancellationToken cancellationToken)
     {
         if (await AuthorizedUserAsync(token, cancellationToken) is null) return null;
-        var (fromUtc, toUtc) = DayRangeUtc(date);
+        var (fromUtc, toUtc) = await DayRangeUtcAsync(date, cancellationToken);
         var query = database.Shifts.AsNoTracking().Where(shift => shift.OpenedAtUtc >= fromUtc && shift.OpenedAtUtc < toUtc);
         if (cashierId.HasValue) query = query.Where(shift => shift.UserId == cashierId.Value);
         var shifts = await query.ToListAsync(cancellationToken);
@@ -166,12 +166,13 @@ public sealed class CashRegisterService(PosDbContext database)
         return new CashCutSummary(decimal.Round(shifts.Sum(item => item.InitialCash), 2), decimal.Round(sales.Sum(item => item.Total), 2), sales.Count, decimal.Round(cashSales, 2), decimal.Round(payments.Where(item => item.Method == "Card").Sum(item => item.Amount), 2), decimal.Round(payments.Where(item => item.Method == "Transfer").Sum(item => item.Amount), 2), decimal.Round(payments.Where(item => item.Method == "Credit").Sum(item => item.Amount), 2), decimal.Round(cashIn, 2), decimal.Round(cashOut, 2), decimal.Round(cashReturns, 2), profit, expectedCash);
     }
 
-    private static (DateTimeOffset FromUtc, DateTimeOffset ToUtc) DayRangeUtc(DateOnly date)
+    private async Task<(DateTimeOffset FromUtc, DateTimeOffset ToUtc)> DayRangeUtcAsync(DateOnly date, CancellationToken cancellationToken)
     {
-        var zone = TimeZoneInfo.Local;
-        var localStart = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
-        var nextStart = localStart.AddDays(1);
-        return (new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localStart, zone)), new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(nextStart, zone)));
+        var timeZoneId = await database.Stores.AsNoTracking()
+            .OrderBy(store => store.CreatedAtUtc)
+            .Select(store => store.TimeZoneId)
+            .FirstOrDefaultAsync(cancellationToken);
+        return StoreTimeZone.DayRangeUtc(date, StoreTimeZone.Resolve(timeZoneId));
     }
 
     private async Task<ShiftSummary> SummaryAsync(ShiftRecord shift, decimal? counted, CancellationToken cancellationToken)

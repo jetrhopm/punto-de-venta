@@ -959,6 +959,11 @@ app.MapGet("/api/reports/sales", async (DateTimeOffset from, DateTimeOffset to, 
     var result = await reports.SalesAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), from, to, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
+app.MapGet("/api/reports/time-zone", async (HttpRequest request, ReportService reports, CancellationToken cancellationToken) =>
+{
+    var timeZoneId = await reports.TimeZoneIdAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return timeZoneId is null ? Results.Unauthorized() : Results.Ok(new { timeZoneId });
+});
 app.MapGet("/api/reports/sales.csv", async (DateTimeOffset from, DateTimeOffset to, HttpRequest request, ReportService reports, CancellationToken cancellationToken) =>
 {
     var content = await reports.SalesCsvAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), from, to, cancellationToken); return content is null ? Results.Unauthorized() : Results.File(content, "text/csv", $"ventas-{from:yyyyMMdd}-{to:yyyyMMdd}.csv");

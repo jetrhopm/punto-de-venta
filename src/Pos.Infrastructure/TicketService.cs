@@ -72,7 +72,7 @@ public sealed class TicketService(PosDbContext database)
             shift.Id,
             register.Name,
             cashier.DisplayName,
-            sale.CreatedAtUtc,
+            StoreTimeZone.ToStoreTime(sale.CreatedAtUtc, StoreTimeZone.Resolve(store.TimeZoneId)),
             lines,
             payments,
             sale.Total,

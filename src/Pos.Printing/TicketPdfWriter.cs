@@ -71,7 +71,7 @@ public static class TicketPdfWriter
 
         AddRule(rows);
         rows.Add(new LayoutRow(ticket.DocumentTitle, normalSize + 1m, true, TextAlignment.Center, 4m));
-        rows.Add(new LayoutRow($"FECHA: {ticket.CreatedAtUtc.ToLocalTime():dd/MM/yyyy HH:mm:ss}", normalSize, false, TextAlignment.Left, 2m));
+        rows.Add(new LayoutRow($"FECHA: {ticket.CreatedAtUtc:dd/MM/yyyy HH:mm:ss}", normalSize, false, TextAlignment.Left, 2m));
         rows.Add(new LayoutRow($"CAJA: {ValueOrDefault(ticket.RegisterName, "CAJA PRINCIPAL")}", normalSize, false, TextAlignment.Left, 2m));
         rows.Add(new LayoutRow($"CAJERO: {ValueOrDefault(ticket.CashierName, "ADMINISTRADOR")}", normalSize, false, TextAlignment.Left, 2m));
         rows.Add(new LayoutRow($"TURNO: {FormatShiftNumber(ticket.ShiftNumber)}", normalSize, false, TextAlignment.Left, 2m));

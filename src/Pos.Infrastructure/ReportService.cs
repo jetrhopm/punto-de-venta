@@ -20,13 +20,15 @@ public sealed class ReportService(PosDbContext database)
     public async Task<IReadOnlyList<SalesReportRow>?> SalesAsync(string token, DateTimeOffset startDate, DateTimeOffset endDate, CancellationToken cancellationToken)
     {
         if (await AuthorizedAsync(token, "ViewReports", cancellationToken) is null) return null;
+        var timeZone = await GetStoreTimeZoneAsync(cancellationToken);
         var query = from sale in database.Sales.AsNoTracking()
                     join payment in database.Payments.AsNoTracking() on sale.Id equals payment.SaleId
                     where sale.CreatedAtUtc >= startDate
                     where sale.CreatedAtUtc < endDate
                     orderby sale.CreatedAtUtc descending
                     select new SalesReportRow(sale.CreatedAtUtc, sale.Id, sale.Status, sale.Total, payment.Method, sale.CustomerId);
-        return await query.Take(5000).ToListAsync(cancellationToken);
+        var rows = await query.Take(5000).ToListAsync(cancellationToken);
+        return rows.Select(row => row with { CreatedAtUtc = StoreTimeZone.ToStoreTime(row.CreatedAtUtc, timeZone) }).ToList();
     }
 
     public async Task<IReadOnlyList<InventoryReportRow>?> InventoryAsync(string token, CancellationToken cancellationToken)
@@ -111,6 +113,7 @@ public sealed class ReportService(PosDbContext database)
     public async Task<SalesDashboardResult?> SalesDashboardAsync(string token, DateTimeOffset startDate, DateTimeOffset endDate, CancellationToken cancellationToken)
     {
         if (await AuthorizedAsync(token, "ViewReports", cancellationToken) is null) return null;
+        var timeZone = await GetStoreTimeZoneAsync(cancellationToken);
 
         var completedSales = database.Sales.AsNoTracking()
             .Where(item => item.Status == "Completed")
@@ -122,12 +125,13 @@ public sealed class ReportService(PosDbContext database)
             .Select(group => new { SalesCount = group.Count(), Total = group.Sum(item => item.Total) })
             .SingleOrDefaultAsync(cancellationToken);
 
-        var dailySales = await completedSales
-            .Select(item => new { Date = item.CreatedAtUtc.Date, item.Total })
-            .GroupBy(item => item.Date)
+        var dailySales = (await completedSales
+            .Select(item => new { item.CreatedAtUtc, item.Total })
+            .ToListAsync(cancellationToken))
+            .GroupBy(item => StoreTimeZone.ToStoreTime(item.CreatedAtUtc, timeZone).Date)
             .Select(group => new { Date = group.Key, SalesCount = group.Count(), Total = group.Sum(item => item.Total) })
             .OrderBy(item => item.Date)
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         var lineRows = from line in database.SaleLines.AsNoTracking()
                        join sale in completedSales on line.SaleId equals sale.Id
@@ -136,23 +140,23 @@ public sealed class ReportService(PosDbContext database)
                        from department in departmentMatches.DefaultIfEmpty()
                        select new
                        {
-                           Date = sale.CreatedAtUtc.Date,
+                           sale.CreatedAtUtc,
                            line.LineTotal,
                            EstimatedProfit = (line.UnitPrice - product.Cost) * line.Quantity,
                            Department = department == null ? product.Category : department.Name
                        };
 
-        var profitByDay = await lineRows
-            .GroupBy(item => item.Date)
-            .Select(group => new { Date = group.Key, Profit = group.Sum(item => item.EstimatedProfit) })
-            .ToDictionaryAsync(item => item.Date, item => item.Profit, cancellationToken);
+        var loadedLineRows = await lineRows.ToListAsync(cancellationToken);
+        var profitByDay = loadedLineRows
+            .GroupBy(item => StoreTimeZone.ToStoreTime(item.CreatedAtUtc, timeZone).Date)
+            .ToDictionary(group => group.Key, group => group.Sum(item => item.EstimatedProfit));
 
-        var departments = await lineRows
+        var departments = loadedLineRows
             .GroupBy(item => item.Department)
             .Select(group => new { Department = group.Key, Total = group.Sum(item => item.LineTotal), EstimatedProfit = group.Sum(item => item.EstimatedProfit) })
             .OrderByDescending(item => item.Total)
             .Take(12)
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         var payments = await (from payment in database.Payments.AsNoTracking()
                               join sale in completedSales on payment.SaleId equals sale.Id
@@ -182,6 +186,13 @@ public sealed class ReportService(PosDbContext database)
         return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(builder.ToString())).ToArray();
     }
 
+    public async Task<string?> TimeZoneIdAsync(string token, CancellationToken cancellationToken)
+    {
+        return await AuthorizedAsync(token, "ViewReports", cancellationToken) is null
+            ? null
+            : await database.Stores.AsNoTracking().OrderBy(store => store.CreatedAtUtc).Select(store => store.TimeZoneId).FirstOrDefaultAsync(cancellationToken);
+    }
+
     private async Task<PeriodSummaryRow> SummaryAsync(string period, DateTimeOffset startDate, DateTimeOffset endDate, CancellationToken cancellationToken)
     {
         var summary = await database.Sales.AsNoTracking()
@@ -193,6 +204,15 @@ public sealed class ReportService(PosDbContext database)
             .SingleOrDefaultAsync(cancellationToken);
 
         return new PeriodSummaryRow(period, startDate, endDate, summary?.SalesCount ?? 0, summary?.Total ?? 0m);
+    }
+
+    private async Task<TimeZoneInfo> GetStoreTimeZoneAsync(CancellationToken cancellationToken)
+    {
+        var timeZoneId = await database.Stores.AsNoTracking()
+            .OrderBy(store => store.CreatedAtUtc)
+            .Select(store => store.TimeZoneId)
+            .FirstOrDefaultAsync(cancellationToken);
+        return StoreTimeZone.Resolve(timeZoneId);
     }
 
     private async Task<UserRecord?> AuthorizedAsync(string token, string permission, CancellationToken cancellationToken)

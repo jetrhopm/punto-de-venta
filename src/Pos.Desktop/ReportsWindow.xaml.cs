@@ -14,6 +14,7 @@ public partial class ReportsWindow : UserControl
     private static HttpClient Client => ApiClient.Client;
     private DateTimeOffset _from;
     private DateTimeOffset _to;
+    private TimeZoneInfo _storeTimeZone = TimeZoneInfo.Local;
 
     public ReportsWindow()
     {
@@ -23,7 +24,8 @@ public partial class ReportsWindow : UserControl
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", SessionContext.AccessToken);
-        var today = DateTime.Today;
+        await LoadStoreTimeZoneAsync();
+        var today = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, _storeTimeZone).Date;
         await SetPeriodAsync(StartOfWeek(today), today);
     }
 
@@ -223,10 +225,23 @@ public partial class ReportsWindow : UserControl
     }
 
     private static DateTime StartOfWeek(DateTime date) => date.Date.AddDays(-((int)date.DayOfWeek + 6) % 7);
-    private static DateTimeOffset ToUtcStart(DateTime date) => new DateTimeOffset(date.Date, TimeZoneInfo.Local.GetUtcOffset(date.Date)).ToUniversalTime();
+    private DateTimeOffset ToUtcStart(DateTime date) => new(TimeZoneInfo.ConvertTimeToUtc(date.Date, _storeTimeZone));
+
+    private async Task LoadStoreTimeZoneAsync()
+    {
+        try
+        {
+            var result = await Client.GetFromJsonAsync<StoreTimeZoneDto>("/api/reports/time-zone");
+            if (!string.IsNullOrWhiteSpace(result?.TimeZoneId)) _storeTimeZone = TimeZoneInfo.FindSystemTimeZoneById(result.TimeZoneId);
+        }
+        catch (TimeZoneNotFoundException) { _storeTimeZone = TimeZoneInfo.Local; }
+        catch (InvalidTimeZoneException) { _storeTimeZone = TimeZoneInfo.Local; }
+        catch (HttpRequestException) { _storeTimeZone = TimeZoneInfo.Local; }
+    }
     private static SalesDashboardResult EmptyDashboard() => new(0m, 0, 0m, 0m, 0m, [], [], []);
 
     private sealed record SalesRow(DateTimeOffset CreatedAtUtc, Guid SaleId, string Status, decimal Total, string PaymentMethod, Guid? CustomerId);
+    private sealed record StoreTimeZoneDto(string TimeZoneId);
     private sealed record SalesAnalysisResult(List<PeriodSummaryRow> Periods, List<ProductAnalysisRow> BestSellers, List<ProductAnalysisRow> RestockNeeded, List<ProductAnalysisRow> LowMovement, List<ProductAnalysisRow> NoMovement);
     private sealed record PeriodSummaryRow(string Period, DateTimeOffset FromUtc, DateTimeOffset ToUtc, int SalesCount, decimal Total);
     private sealed record ProductAnalysisRow(Guid ProductId, string Code, string Description, string Category, string UnitOfMeasure, decimal QuantitySold, decimal TotalSold, decimal Stock, decimal MinimumStock, decimal MaximumStock);
