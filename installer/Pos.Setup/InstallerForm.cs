@@ -141,7 +141,8 @@ public sealed class InstallerForm : Form
         _registerName.SetBounds(700, 395, 190, 31);
         _registerName.MaxLength = 80;
         AddAdditionalControl(_registerName);
-        AddAdditionalControl(CreateLabel("Se comprobará la conexión y se emparejará este equipo antes de terminar la instalación.", new Point(500, 433), new Size(420, 24), 9, FontStyle.Regular, Color.FromArgb(137, 169, 195)));
+        AddAdditionalControl(CreateLabel("Se comprobará la conexión antes de terminar.", new Point(500, 433), new Size(190, 24), 9, FontStyle.Regular, Color.FromArgb(137, 169, 195)));
+        AddAdditionalControl(CreateLabel("Puedes cambiarlo: por ejemplo, Caja 2 o Caja mostrador.", new Point(700, 433), new Size(290, 24), 8.5f, FontStyle.Regular, Color.FromArgb(137, 169, 195)));
         var networkHelp = new LinkLabel
         {
             Text = "Ver pasos para preparar la red privada",
@@ -308,6 +309,13 @@ public sealed class InstallerForm : Form
         if (!_uninstall && !_terms.Checked)
         {
             SetProgress(_progress.Value, "Debes aceptar los términos y condiciones para continuar.");
+            _terms.Focus();
+            MessageBox.Show(
+                this,
+                "Para instalar o actualizar JetVenta debes leer y aceptar los términos y condiciones.",
+                "Aceptación requerida",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
             return;
         }
 
