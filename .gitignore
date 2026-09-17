@@ -21,6 +21,7 @@ publish/
 .local/
 .postgres/
 **/tmp/
+.tmp/
 *.db
 *.db-shm
 *.db-wal
