@@ -101,6 +101,7 @@ public sealed class InstallerForm : Form
         Controls.Add(CreateLabel("INSTALACIÓN DE JETVENTA", new Point(307, 39), new Size(550, 34), 25, FontStyle.Bold, Color.White));
         Controls.Add(CreateLabel("Instalador autocontenido para Windows 10 y Windows 11 de 64 bits", new Point(309, 78), new Size(550, 24), 11, FontStyle.Regular, Color.FromArgb(158, 192, 220)));
         Controls.Add(CreateLabel("Todo lo necesario para operar se instala y configura en este equipo.", new Point(309, 104), new Size(550, 24), 10, FontStyle.Regular, Color.FromArgb(117, 155, 186)));
+        Controls.Add(CreateLabel($"Versión del instalador: {GetPackageVersion()}", new Point(309, 128), new Size(300, 20), 9, FontStyle.Bold, Color.FromArgb(74, 205, 237)));
         Controls.Add(new Panel { BackColor = Color.FromArgb(34, 71, 101), Location = new Point(30, 156), Size = new Size(960, 1) });
     }
 
@@ -1134,6 +1135,16 @@ public sealed class InstallerForm : Form
     {
         using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PuntoDeVenta");
         return key?.GetValue("DisplayVersion")?.ToString();
+    }
+
+    private static string GetPackageVersion()
+    {
+        var informationalVersion = Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion;
+        return string.IsNullOrWhiteSpace(informationalVersion)
+            ? Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0"
+            : informationalVersion.Split('+')[0];
     }
 
     private static bool IsVisualCppInstalled()
