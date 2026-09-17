@@ -66,6 +66,29 @@ function Invoke-Native([string]$File, [string[]]$Arguments) {
     Write-InstallLog "Finalizo $([IO.Path]::GetFileName($File)) correctamente."
 }
 
+function Stop-StaleJetVentaApiProcesses {
+    # Un intento de reparación puede dejar una API iniciada directamente. Antes
+    # de actualizar debemos cerrarla: de otro modo el cliente puede conectarse
+    # al binario anterior aunque el servicio nuevo ya esté instalado.
+    $staleProcesses = Get-CimInstance Win32_Process -Filter "Name = 'Pos.Api.exe'" -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.CommandLine -and (
+                $_.CommandLine.IndexOf($InstallRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+                $_.CommandLine.IndexOf('PuntoDeVenta', [StringComparison]::OrdinalIgnoreCase) -ge 0)
+        }
+    foreach ($process in $staleProcesses) {
+        Write-InstallLog "Deteniendo API residual PID $($process.ProcessId) antes de iniciar el servicio."
+        Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-Port5000Owner {
+    $connection = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($null -eq $connection) { return $null }
+    return $connection.OwningProcess
+}
+
 function Start-PostgresForRecovery {
     $status = & $pgCtl status -D $pgData 2>&1
     if ($LASTEXITCODE -eq 0) {
@@ -351,6 +374,7 @@ if (-not (Get-Service $apiService -ErrorAction SilentlyContinue)) {
     }
     Write-InstallLog "Servicio PuntoDeVentaApi actualizado. Ejecutable: $apiBinaryPath"
 }
+Stop-StaleJetVentaApiProcesses
 & (Join-Path $env:SystemRoot 'System32\sc.exe') failure $apiService 'reset=' '86400' 'actions=' 'restart/5000/restart/15000/restart/30000' | ForEach-Object { Write-InstallLog "  $_" }
 if ($LASTEXITCODE -ne 0) { throw "No se pudo configurar la recuperación automática de $apiService." }
 Write-InstallLog 'Dependencia de PostgreSQL y recuperación automática de la API configuradas.'
@@ -360,11 +384,14 @@ $apiReady = $false
 for ($attempt = 1; $attempt -le 30; $attempt++) {
     try {
         $health = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:5000/health' -TimeoutSec 2
-        if ($health.StatusCode -eq 200) {
+        $serviceProcessId = (Get-CimInstance Win32_Service -Filter "Name='$apiService'" -ErrorAction SilentlyContinue).ProcessId
+        $portOwner = Get-Port5000Owner
+        if ($health.StatusCode -eq 200 -and $serviceProcessId -gt 0 -and $portOwner -eq $serviceProcessId) {
             $apiReady = $true
             Write-InstallLog "API disponible despues de $attempt intento(s)."
             break
         }
+        Write-InstallLog "El puerto 5000 no pertenece aún al servicio de JetVenta. Servicio PID: $serviceProcessId. Puerto PID: $portOwner."
     } catch {
         Write-InstallLog "Esperando que la API termine de iniciar ($attempt/30)."
         Start-Sleep -Seconds 1
@@ -382,6 +409,10 @@ if (-not $apiReady) {
         Where-Object { $_.ProviderName -in @('.NET Runtime', 'Application Error', 'PuntoDeVentaApi') } |
         Select-Object -First 10 |
         ForEach-Object { Write-InstallLog "Evento Windows $($_.ProviderName): $($_.Message -replace '[\r\n]+',' ')" }
+    $portOwner = Get-Port5000Owner
+    if ($portOwner) {
+        throw "El puerto 5000 está ocupado por el proceso $portOwner y no por la API de JetVenta. Cierra el programa que ocupa el puerto y ejecuta el instalador nuevamente. El diagnóstico quedó agregado a instalacion.log."
+    }
     throw 'La API no respondió a la comprobación de inicio. El diagnóstico quedó agregado a instalacion.log.'
 }
 Write-InstallLog 'Etapa 8/8: instalacion terminada. PostgreSQL y la API quedaron registrados como servicios de Windows.'

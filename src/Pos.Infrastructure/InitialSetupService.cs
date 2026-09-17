@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Data;
 using System.Globalization;
 using System.Text;
@@ -9,7 +10,7 @@ namespace Pos.Infrastructure;
 public sealed record InitialSetupCommand(string StoreName, string BusinessType, string UserName, string Password, string AdministratorName, string RegisterName, string CurrencySymbol = "$", string DefaultWeightUnit = "Kilogramo");
 public sealed record InitialSetupResult(Guid StoreId, Guid AdministratorId, Guid RegisterId);
 
-public sealed class InitialSetupService(PosDbContext database, PasswordHasher<UserRecord> passwordHasher)
+public sealed class InitialSetupService(PosDbContext database, PasswordHasher<UserRecord> passwordHasher, ILogger<InitialSetupService> logger)
 {
     private static readonly HashSet<string> BusinessTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -34,11 +35,19 @@ public sealed class InitialSetupService(PosDbContext database, PasswordHasher<Us
         database.AddRange(store, user, register);
         database.Permissions.AddRange(Enum.GetNames<Pos.Domain.Permission>().Select(code => new PermissionRecord { Id = Guid.NewGuid(), UserId = user.Id, Code = code }));
         await database.SaveChangesAsync(cancellationToken);
-        // Las migraciones pueden haber creado departamentos predeterminados antes
-        // de que exista una tienda. EnsureAsync completa los faltantes sin volver
-        // a insertar Abarrotes, Limpieza u otros nombres ya existentes.
-        await DepartmentDefaults.EnsureAsync(database, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
+        // La tienda, administrador y caja son el núcleo de la instalación. Los
+        // departamentos se pueden completar después; nunca deben impedir que el
+        // cliente pueda terminar su configuración inicial por un dato heredado.
+        try
+        {
+            await DepartmentDefaults.EnsureAsync(database, cancellationToken);
+        }
+        catch (DbUpdateException exception)
+        {
+            logger.LogWarning(exception, "No se pudieron completar los departamentos predeterminados tras crear la tienda {StoreId}.", store.Id);
+        }
         return new InitialSetupResult(store.Id, user.Id, register.Id);
     }
 
