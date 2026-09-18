@@ -38,4 +38,29 @@ public sealed class TicketWindowsPrinterTests
         Assert.Null(failure);
         Assert.InRange(width, 300d, 304d);
     }
+
+    [Fact]
+    public void CreateTicketVisual_58MmCentersContentInsideSafePrintableWidth()
+    {
+        Exception? failure = null;
+        double contentWidth = 0d;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var visual = Pos.Desktop.TicketWindowsPrinter.CreateTicketVisual(
+                    Pos.Desktop.TicketWindowsPrinter.CreateSample(58),
+                    new("Consolas", 9d, false, 58));
+                visual.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                contentWidth = ((System.Windows.Controls.StackPanel)((System.Windows.Controls.Border)visual).Child).Width;
+            }
+            catch (Exception exception) { failure = exception; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        Assert.True(thread.Join(TimeSpan.FromSeconds(10)), "La creación visual no terminó a tiempo.");
+
+        Assert.Null(failure);
+        Assert.InRange(contentWidth, 173d, 174d);
+    }
 }

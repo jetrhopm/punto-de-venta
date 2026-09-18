@@ -68,14 +68,15 @@ public static class TicketWindowsPrinter
     {
         var widthMm = profile.WidthMm == 58 ? 58 : 80;
         var pageWidth = widthMm * DipsPerMillimeter;
-        var padding = widthMm == 58 ? 8d : 11d;
+        var printableWidth = GetPrintableWidthMm(widthMm) * DipsPerMillimeter;
+        var padding = widthMm == 58 ? 4d : 7d;
         var baseSize = profile.FontSize * 96d / 72d;
-        var horizontalOffset = Math.Clamp(profile.HorizontalOffsetCharacters, 0, 30) * baseSize * 0.6d;
+        var compactLayout = widthMm == 58;
         var family = new FontFamily(string.IsNullOrWhiteSpace(profile.FontFamily) ? "Consolas" : profile.FontFamily);
         var root = new StackPanel
         {
-            Width = pageWidth - (padding * 2d),
-            Margin = new Thickness(-horizontalOffset, 0, 0, 0),
+            Width = printableWidth - (padding * 2d),
+            HorizontalAlignment = HorizontalAlignment.Center,
             Background = Brushes.White
         };
         TextElement.SetFontFamily(root, family);
@@ -93,7 +94,7 @@ public static class TicketWindowsPrinter
             root.Children.Add(AmountLine(ticket, "TOTAL RETIRADO", ticket.Total, baseSize + 3d, FontWeights.Bold));
             root.Children.Add(Rule());
             AddOptionalCentered(root, string.IsNullOrWhiteSpace(ticket.Footer) ? "Conserve este comprobante" : ticket.Footer, baseSize);
-            return new Border { Width = pageWidth, Padding = new Thickness(padding), Background = Brushes.White, Child = root };
+            return CreateTicketPage(pageWidth, root, padding);
         }
 
         root.Children.Add(Text(ticket.StoreName.ToUpperInvariant(), baseSize + 4d, FontWeights.Bold, TextAlignment.Center, new Thickness(0, 0, 0, 3)));
@@ -122,8 +123,8 @@ public static class TicketWindowsPrinter
         }
         root.Children.Add(Rule());
 
-        root.Children.Add(ProductHeader(baseSize));
-        foreach (var line in ticket.Lines) root.Children.Add(ProductLine(ticket, line, baseSize));
+        root.Children.Add(ProductHeader(baseSize, compactLayout));
+        foreach (var line in ticket.Lines) root.Children.Add(ProductLine(ticket, line, baseSize, compactLayout));
         root.Children.Add(Rule());
 
         root.Children.Add(Text($"Articulos: {ticket.Lines.Sum(line => line.Quantity):0.###}", baseSize, FontWeights.Normal, TextAlignment.Left, new Thickness(0, 1, 0, 4)));
@@ -151,13 +152,7 @@ public static class TicketWindowsPrinter
         AddOptionalCentered(root, string.IsNullOrWhiteSpace(ticket.Footer) ? "Gracias por su compra" : ticket.Footer, baseSize);
         root.Children.Add(Text("Conserve este comprobante", Math.Max(7d, baseSize - 1d), FontWeights.Normal, TextAlignment.Center, new Thickness(0, 1, 0, 5)));
 
-        return new Border
-        {
-            Width = pageWidth,
-            Padding = new Thickness(padding),
-            Background = Brushes.White,
-            Child = root
-        };
+        return CreateTicketPage(pageWidth, root, padding);
     }
 
     public static void Print(string printerName, TicketPdfData ticket, TicketPrintProfile profile, string jobName)
@@ -277,19 +272,36 @@ public static class TicketWindowsPrinter
         return grid;
     }
 
-    private static Grid ProductHeader(double size)
+    private static Border CreateTicketPage(double pageWidth, FrameworkElement root, double padding) => new()
     {
-        var grid = ProductGrid();
+        Width = pageWidth,
+        Padding = new Thickness(0, padding, 0, padding),
+        Background = Brushes.White,
+        Child = root
+    };
+
+    private static double GetPrintableWidthMm(int widthMm) => widthMm == 58 ? 48d : 72d;
+
+    private static Grid ProductHeader(double size, bool compactLayout)
+    {
+        var grid = compactLayout ? CompactProductGrid() : ProductGrid();
         grid.Margin = new Thickness(0, 0, 0, 3);
         AddCell(grid, "Cant.", 0, size, FontWeights.Bold, TextAlignment.Left);
         AddCell(grid, "Descripcion", 1, size, FontWeights.Bold, TextAlignment.Left);
-        AddCell(grid, "Precio", 2, size, FontWeights.Bold, TextAlignment.Right);
-        AddCell(grid, "Importe", 3, size, FontWeights.Bold, TextAlignment.Right);
+        if (compactLayout)
+            AddCell(grid, "Importe", 2, size, FontWeights.Bold, TextAlignment.Right);
+        else
+        {
+            AddCell(grid, "Precio", 2, size, FontWeights.Bold, TextAlignment.Right);
+            AddCell(grid, "Importe", 3, size, FontWeights.Bold, TextAlignment.Right);
+        }
         return grid;
     }
 
-    private static FrameworkElement ProductLine(TicketPdfData ticket, TicketPdfLine line, double size)
+    private static FrameworkElement ProductLine(TicketPdfData ticket, TicketPdfLine line, double size, bool compactLayout)
     {
+        if (compactLayout) return CompactProductLine(ticket, line, size);
+
         var grid = ProductGrid();
         grid.Margin = new Thickness(0, 1, 0, 2);
         AddCell(grid, line.Quantity.ToString("0.###", CultureInfo.InvariantCulture), 0, size, FontWeights.Normal, TextAlignment.Left);
@@ -301,6 +313,30 @@ public static class TicketWindowsPrinter
         var promotion = new Grid { Margin = new Thickness(0, 0, 0, 3) };
         promotion.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.74d, GridUnitType.Star) });
         promotion.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.26d, GridUnitType.Star) });
+        var name = string.IsNullOrWhiteSpace(line.PromotionName) ? "Descuento" : $"Promo: {line.PromotionName}";
+        AddCell(promotion, name, 0, Math.Max(7d, size - 0.5d), FontWeights.Normal, TextAlignment.Left);
+        AddCell(promotion, NegativeMoney(ticket, line.DiscountTotal), 1, Math.Max(7d, size - 0.5d), FontWeights.Normal, TextAlignment.Right);
+        return new StackPanel { Children = { grid, promotion } };
+    }
+
+    private static FrameworkElement CompactProductLine(TicketPdfData ticket, TicketPdfLine line, double size)
+    {
+        var grid = CompactProductGrid();
+        grid.Margin = new Thickness(0, 1, 0, 2);
+        AddCell(grid, line.Quantity.ToString("0.###", CultureInfo.InvariantCulture), 0, size, FontWeights.Normal, TextAlignment.Left);
+
+        var description = new StackPanel();
+        description.Children.Add(Text(line.Description, size, FontWeights.Normal, TextAlignment.Left, new Thickness(2, 0, 0, 0)));
+        description.Children.Add(Text($"{Money(ticket, line.UnitPrice)} c/u", Math.Max(7d, size - 1d), FontWeights.Normal, TextAlignment.Left, new Thickness(2, 0, 0, 0)));
+        Grid.SetColumn(description, 1);
+        grid.Children.Add(description);
+        AddCell(grid, Money(ticket, decimal.Round(line.UnitPrice * line.Quantity, 2, MidpointRounding.AwayFromZero)), 2, size, FontWeights.Normal, TextAlignment.Right);
+
+        if (line.DiscountTotal <= 0m) return grid;
+
+        var promotion = new Grid { Margin = new Thickness(0, 0, 0, 3) };
+        promotion.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.70d, GridUnitType.Star) });
+        promotion.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.30d, GridUnitType.Star) });
         var name = string.IsNullOrWhiteSpace(line.PromotionName) ? "Descuento" : $"Promo: {line.PromotionName}";
         AddCell(promotion, name, 0, Math.Max(7d, size - 0.5d), FontWeights.Normal, TextAlignment.Left);
         AddCell(promotion, NegativeMoney(ticket, line.DiscountTotal), 1, Math.Max(7d, size - 0.5d), FontWeights.Normal, TextAlignment.Right);
@@ -323,6 +359,15 @@ public static class TicketWindowsPrinter
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.43d, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.20d, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.23d, GridUnitType.Star) });
+        return grid;
+    }
+
+    private static Grid CompactProductGrid()
+    {
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.14d, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.54d, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.32d, GridUnitType.Star) });
         return grid;
     }
 
