@@ -64,7 +64,7 @@ public static class TicketWindowsPrinter
         ShiftNumber = 91
     };
 
-    public static FrameworkElement CreateTicketVisual(TicketPdfData ticket, TicketPrintProfile profile)
+    public static FrameworkElement CreateTicketVisual(TicketPdfData ticket, TicketPrintProfile profile, bool showPhysicalPage = true)
     {
         var widthMm = profile.WidthMm == 58 ? 58 : 80;
         var pageWidth = widthMm * DipsPerMillimeter;
@@ -96,7 +96,7 @@ public static class TicketWindowsPrinter
             root.Children.Add(AmountLine(ticket, "TOTAL RETIRADO", ticket.Total, baseSize + 3d, FontWeights.Bold));
             root.Children.Add(Rule());
             AddOptionalCentered(root, string.IsNullOrWhiteSpace(ticket.Footer) ? "Conserve este comprobante" : ticket.Footer, baseSize);
-            return CreateTicketPage(pageWidth, root, padding);
+            return CreateTicketPage(showPhysicalPage ? pageWidth : printableWidth, root, padding);
         }
 
         root.Children.Add(Text(ticket.StoreName.ToUpperInvariant(), baseSize + 4d, FontWeights.Bold, TextAlignment.Center, new Thickness(0, 0, 0, 3)));
@@ -154,7 +154,7 @@ public static class TicketWindowsPrinter
         AddOptionalCentered(root, string.IsNullOrWhiteSpace(ticket.Footer) ? "Gracias por su compra" : ticket.Footer, baseSize);
         root.Children.Add(Text("Conserve este comprobante", Math.Max(7d, baseSize - 1d), FontWeights.Normal, TextAlignment.Center, new Thickness(0, 1, 0, 5)));
 
-        return CreateTicketPage(pageWidth, root, padding);
+        return CreateTicketPage(showPhysicalPage ? pageWidth : printableWidth, root, padding);
     }
 
     public static void Print(string printerName, TicketPdfData ticket, TicketPrintProfile profile, string jobName)

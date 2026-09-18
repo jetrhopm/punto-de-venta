@@ -92,7 +92,7 @@ public partial class TicketSettingsWindow : Window
         var width = SelectedWidth;
         PreviewWidthText.Text = $"{width} mm";
         var profile = CurrentProfile();
-        TicketPreviewHost.Content = TicketWindowsPrinter.CreateTicketVisual(CreatePreviewData(), profile);
+        TicketPreviewHost.Content = TicketWindowsPrinter.CreateTicketVisual(CreatePreviewData(), profile, showPhysicalPage: false);
     }
 
     private TicketPdfData CreatePreviewData()

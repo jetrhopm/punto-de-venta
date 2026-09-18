@@ -94,7 +94,7 @@ public partial class PrinterSettingsWindow : Window
             ShowResult("Impresora no guardada", message, OperationResultKind.Error);
             return;
         }
-        ProfileSummaryText.Text = $"{profile.WidthMm} mm · {profile.FontSize:0.#} pt · Área útil {GetPrintableArea(profile.WidthMm)}";
+        ProfileSummaryText.Text = $"{profile.WidthMm} mm · {profile.FontSize:0.#} pt";
         var status = printingEnabled
             ? $"Configuración guardada para esta caja: {printer}."
             : "La impresión de tickets quedó desactivada para esta caja.";
@@ -131,11 +131,8 @@ public partial class PrinterSettingsWindow : Window
     {
         var profile = ReadProfileForPreview();
         PreviewWidthText.Text = $"{profile.WidthMm} mm";
-        TicketPreviewHost.Content = TicketWindowsPrinter.CreateTicketVisual(TicketWindowsPrinter.CreateSample(profile.WidthMm), profile);
-        ProfileSummaryText.Text = $"{profile.WidthMm} mm · {profile.FontSize:0.#} pt · Área útil {GetPrintableArea(profile.WidthMm)}";
-        PrintableAreaText.Text = profile.WidthMm == 58
-            ? "Papel de 58 mm: JetVenta compone el ticket en 48 mm útiles desde el borde izquierdo."
-            : "Papel de 80 mm: JetVenta compone el ticket en 72 mm útiles desde el borde izquierdo.";
+        TicketPreviewHost.Content = TicketWindowsPrinter.CreateTicketVisual(TicketWindowsPrinter.CreateSample(profile.WidthMm), profile, showPhysicalPage: false);
+        ProfileSummaryText.Text = $"{profile.WidthMm} mm · {profile.FontSize:0.#} pt";
     }
 
     private bool TryReadProfile(out string printer, out TicketPrintProfile profile)
@@ -169,8 +166,6 @@ public partial class PrinterSettingsWindow : Window
         var fontSize = double.TryParse(FontSizeBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var size) && size is >= 6d and <= 24d ? size : ApiClient.PrinterFontSize;
         return new TicketPrintProfile(ApiClient.PrinterFontFamily, fontSize, ApiClient.UseNormalTotals, Width58Button.IsChecked == true ? 58 : 80);
     }
-
-    private static string GetPrintableArea(int widthMm) => widthMm == 58 ? "48 mm" : "72 mm";
 
     private void ShowResult(string title, string message, OperationResultKind kind) => new OperationResultWindow(title, message, kind) { Owner = this }.ShowDialog();
 }
