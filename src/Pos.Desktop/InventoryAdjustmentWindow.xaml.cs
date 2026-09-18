@@ -34,6 +34,13 @@ public partial class InventoryAdjustmentWindow : Window
         {
             await Task.Delay(180, cancellationToken);
             var results = await Client.GetFromJsonAsync<List<ProductResult>>($"/api/products/search?q={Uri.EscapeDataString(query)}", cancellationToken) ?? [];
+            cancellationToken.ThrowIfCancellationRequested();
+            var exact = results.FirstOrDefault(item => string.Equals(item.Code.Trim(), query, StringComparison.OrdinalIgnoreCase));
+            if (exact is not null && string.Equals(SearchTextBox.Text.Trim(), query, StringComparison.OrdinalIgnoreCase))
+            {
+                SelectProduct(new ProductRow(exact));
+                return;
+            }
             ResultsList.ItemsSource = results.Select(item => new ProductRow(item)).ToList();
             ResultsList.Visibility = results.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         }
