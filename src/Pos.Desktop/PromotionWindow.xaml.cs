@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net.Http;
 using System.Net.Http.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -50,7 +51,7 @@ public partial class PromotionWindow : Window
         if (ProductList.SelectedItem is not ProductRow row) return;
         SelectProduct(row);
     }
-    private void OnProductPreviewKeyDown(object sender, KeyEventArgs e)
+    private async void OnProductPreviewKeyDown(object sender, KeyEventArgs e)
     {
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         var rows = ProductList.Items.OfType<ProductRow>().ToArray();
@@ -64,12 +65,30 @@ public partial class PromotionWindow : Window
             return;
         }
         if (key is not Key.Enter and not Key.Return) return;
-        var query = ProductBox.Text.Trim();
-        var row = rows.FirstOrDefault(item => string.Equals(item.Code, query, StringComparison.OrdinalIgnoreCase))
-            ?? ProductList.SelectedItem as ProductRow
-            ?? rows.FirstOrDefault();
-        if (row is not null) SelectProduct(row);
         e.Handled = true;
+        var query = ProductBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(query)) return;
+
+        _productSearchCancellation?.Cancel();
+        try
+        {
+            var matches = await ApiClient.Client.GetFromJsonAsync<List<ProductRow>>($"/api/products/search?q={Uri.EscapeDataString(query)}") ?? [];
+            var exact = matches.FirstOrDefault(item => string.Equals(item.Code, query, StringComparison.OrdinalIgnoreCase));
+            if (exact is not null)
+            {
+                SelectProduct(exact);
+                return;
+            }
+
+            ProductList.ItemsSource = matches;
+            ProductList.DisplayMemberPath = nameof(ProductRow.Display);
+            ProductList.SelectedIndex = matches.Count > 0 ? 0 : -1;
+            ProductList.Visibility = matches.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        }
+        catch (HttpRequestException)
+        {
+            ProductList.Visibility = Visibility.Collapsed;
+        }
     }
     private void OnPromotionSearchPreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -78,6 +97,7 @@ public partial class PromotionWindow : Window
     }
     private void SelectProduct(ProductRow row)
     {
+        _productSearchCancellation?.Cancel();
         _selectedProduct = row;
         ProductBox.TextChanged -= OnProductTextChanged;
         ProductBox.Text = row.Display;
