@@ -180,6 +180,7 @@ public partial class KitWindow : Window
     }
     private async void OnSaveCompositionClick(object sender, RoutedEventArgs e)
     {
+        if (ComponentSearchBox.IsKeyboardFocusWithin) return;
         if (_selected is null || _components.Count == 0) { ShowResult("Falta la composición", "El kit debe incluir al menos un artículo antes de guardarlo."); return; }
         try
         {
