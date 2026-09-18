@@ -48,6 +48,10 @@
                         <RadioButton x:Name="Width80Button" Grid.Column="1" GroupName="PaperWidth" Content="80 mm" Style="{StaticResource SegmentRadioStyle}" Checked="OnPreviewChanged"/>
                     </Grid>
 
+                    <TextBlock Text="Tamaño de letra" FontWeight="SemiBold" Margin="0,17,0,6"/>
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBox x:Name="FontSizeBox" Height="36" VerticalContentAlignment="Center" TextChanged="OnPreviewChanged" ToolTip="Tamaño de letra del ticket en puntos"/><TextBlock Grid.Column="1" Text="puntos" VerticalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" Margin="10,0,0,0"/></Grid>
+                    <TextBlock Text="Este valor también se muestra y se puede cambiar desde Configuración > Diseño de ticket." Foreground="{StaticResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/>
+
                     <TextBlock Text="Ajuste horizontal hacia la izquierda" FontWeight="SemiBold" Margin="0,17,0,6"/>
                     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBox x:Name="HorizontalOffsetBox" Height="36" VerticalContentAlignment="Center" TextChanged="OnPreviewChanged" ToolTip="Número de caracteres que se desplaza todo el ticket hacia la izquierda"/><TextBlock Grid.Column="1" Text="caracteres" VerticalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" Margin="10,0,0,0"/></Grid>
                     <TextBlock Text="Usa 0 normalmente. Aumenta 1, 2 o más si la impresora de 58 mm recorta números del lado derecho." Foreground="{StaticResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/>

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.IO;
+using System.Globalization;
 
 namespace Pos.Desktop;
 
@@ -19,6 +20,7 @@ public partial class PrinterSettingsWindow : Window
         PrintingEnabledCheck.IsChecked = ApiClient.PrintingEnabled;
         Width58Button.IsChecked = ApiClient.PrinterTicketWidthMm == 58;
         Width80Button.IsChecked = ApiClient.PrinterTicketWidthMm != 58;
+        FontSizeBox.Text = ApiClient.PrinterFontSize.ToString("0.#", CultureInfo.CurrentCulture);
         HorizontalOffsetBox.Text = ApiClient.PrinterHorizontalOffsetCharacters.ToString();
         LoadPrinters();
         _loaded = true;
@@ -77,7 +79,7 @@ public partial class PrinterSettingsWindow : Window
         var printingEnabled = PrintingEnabledCheck.IsChecked == true;
         try
         {
-            ApiClient.SetPrinterProfile(printer, ApiClient.PrinterFontFamily, ApiClient.PrinterFontSize, ApiClient.UseNormalTotals, profile.WidthMm, printingEnabled, profile.HorizontalOffsetCharacters);
+            ApiClient.SetPrinterProfile(printer, ApiClient.PrinterFontFamily, profile.FontSize, ApiClient.UseNormalTotals, profile.WidthMm, printingEnabled, profile.HorizontalOffsetCharacters);
         }
         catch (UnauthorizedAccessException)
         {
@@ -93,7 +95,7 @@ public partial class PrinterSettingsWindow : Window
             ShowResult("Impresora no guardada", message, OperationResultKind.Error);
             return;
         }
-        ProfileSummaryText.Text = $"{profile.WidthMm} mm · Izquierda {profile.HorizontalOffsetCharacters}";
+        ProfileSummaryText.Text = $"{profile.WidthMm} mm · {profile.FontSize:0.#} pt · Izquierda {profile.HorizontalOffsetCharacters}";
         var status = printingEnabled
             ? $"Configuración guardada para esta caja: {printer}."
             : "La impresión de tickets quedó desactivada para esta caja.";
@@ -131,12 +133,20 @@ public partial class PrinterSettingsWindow : Window
         var profile = ReadProfileForPreview();
         PreviewWidthText.Text = $"{profile.WidthMm} mm";
         TicketPreviewHost.Content = TicketWindowsPrinter.CreateTicketVisual(TicketWindowsPrinter.CreateSample(profile.WidthMm), profile);
-        ProfileSummaryText.Text = $"{profile.WidthMm} mm · Izquierda {profile.HorizontalOffsetCharacters}";
+        ProfileSummaryText.Text = $"{profile.WidthMm} mm · {profile.FontSize:0.#} pt · Izquierda {profile.HorizontalOffsetCharacters}";
     }
 
     private bool TryReadProfile(out string printer, out TicketPrintProfile profile)
     {
         printer = PrinterBox.SelectedItem as string ?? PrinterBox.Text;
+        if (!double.TryParse(FontSizeBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var fontSize) || fontSize is < 6d or > 24d)
+        {
+            const string message = "El tamaño de letra debe estar entre 6 y 24 puntos.";
+            StatusText.Text = message;
+            ShowResult("Revisa el tamaño de letra", message, OperationResultKind.Warning);
+            profile = default!;
+            return false;
+        }
         if (!int.TryParse(HorizontalOffsetBox.Text, out var offset) || offset is < 0 or > 30)
         {
             const string message = "El ajuste horizontal debe ser un número entero entre 0 y 30 caracteres.";
@@ -145,7 +155,7 @@ public partial class PrinterSettingsWindow : Window
             profile = default!;
             return false;
         }
-        profile = new TicketPrintProfile(ApiClient.PrinterFontFamily, ApiClient.PrinterFontSize, ApiClient.UseNormalTotals, Width58Button.IsChecked == true ? 58 : 80, offset);
+        profile = new TicketPrintProfile(ApiClient.PrinterFontFamily, fontSize, ApiClient.UseNormalTotals, Width58Button.IsChecked == true ? 58 : 80, offset);
         if (PrintingEnabledCheck.IsChecked != true)
         {
             return true;
@@ -163,7 +173,8 @@ public partial class PrinterSettingsWindow : Window
     private TicketPrintProfile ReadProfileForPreview()
     {
         var offset = int.TryParse(HorizontalOffsetBox.Text, out var value) ? Math.Clamp(value, 0, 30) : 0;
-        return new TicketPrintProfile(ApiClient.PrinterFontFamily, ApiClient.PrinterFontSize, ApiClient.UseNormalTotals, Width58Button.IsChecked == true ? 58 : 80, offset);
+        var fontSize = double.TryParse(FontSizeBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var size) && size is >= 6d and <= 24d ? size : ApiClient.PrinterFontSize;
+        return new TicketPrintProfile(ApiClient.PrinterFontFamily, fontSize, ApiClient.UseNormalTotals, Width58Button.IsChecked == true ? 58 : 80, offset);
     }
 
     private void ShowResult(string title, string message, OperationResultKind kind) => new OperationResultWindow(title, message, kind) { Owner = this }.ShowDialog();
