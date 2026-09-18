@@ -34,10 +34,10 @@
         </Grid>
 
         <DockPanel Grid.Row="2" Margin="0,24,0,0">
-            <Button IsCancel="True" MinWidth="110">Cerrar</Button>
+            <Button Style="{StaticResource CancelButtonStyle}" IsCancel="True" MinWidth="110">Cerrar</Button>
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                <Button Click="OnEditClick" MinWidth="130" Margin="0,0,8,0"><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><icons:PackIconMaterial Kind="PencilOutline" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Editar"/></StackPanel></Button>
-                <Button Style="{StaticResource PrimaryButtonStyle}" Click="OnManageCreditClick" MinWidth="172" Margin="0,0,8,0"><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><icons:PackIconMaterial Kind="AccountCashOutline" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Administrar crédito"/></StackPanel></Button>
+                <Button Style="{StaticResource PrimaryButtonStyle}" Click="OnEditClick" MinWidth="130" Margin="0,0,8,0"><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><icons:PackIconMaterial Kind="PencilOutline" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Editar"/></StackPanel></Button>
+                <Button Style="{StaticResource SuccessButtonStyle}" Click="OnManageCreditClick" MinWidth="172" Margin="0,0,8,0"><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><icons:PackIconMaterial Kind="AccountCashOutline" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Administrar crédito"/></StackPanel></Button>
                 <Button x:Name="DeactivateButton" Style="{StaticResource DangerButtonStyle}" Click="OnDeactivateClick" MinWidth="132"><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><icons:PackIconMaterial Kind="AccountOffOutline" Width="18" Height="18" Margin="0,0,6,0"/><TextBlock Text="Desactivar"/></StackPanel></Button>
             </StackPanel>
         </DockPanel>
