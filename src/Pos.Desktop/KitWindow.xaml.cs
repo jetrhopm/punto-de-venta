@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Net.Http;
 using System.Net.Http.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -94,6 +95,36 @@ public partial class KitWindow : Window
             ComponentResults.ItemsSource = rows; ComponentResults.Visibility = rows.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         }
         catch (OperationCanceledException) { }
+    }
+    private async void OnComponentSearchPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is not Key.Enter and not Key.Return) return;
+
+        e.Handled = true;
+        var query = ComponentSearchBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(query)) return;
+
+        _componentSearchCancellation?.Cancel();
+        try
+        {
+            var matches = await ApiClient.Client.GetFromJsonAsync<List<ProductSearchRow>>($"/api/products/search?q={Uri.EscapeDataString(query)}") ?? [];
+            matches = matches.Where(item => !item.IsKit && (_selected is null || item.Id != _selected.Id)).ToList();
+            var exact = matches.FirstOrDefault(item => string.Equals(item.Code, query, StringComparison.OrdinalIgnoreCase));
+            if (exact is not null)
+            {
+                ApplyComponentSelection(exact);
+                return;
+            }
+
+            ComponentResults.ItemsSource = matches;
+            ComponentResults.SelectedIndex = matches.Count > 0 ? 0 : -1;
+            ComponentResults.Visibility = matches.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        }
+        catch (HttpRequestException)
+        {
+            ComponentResults.Visibility = Visibility.Collapsed;
+        }
     }
     private void OnComponentSelected(object sender, MouseButtonEventArgs e)
     {
