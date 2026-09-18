@@ -29,6 +29,7 @@ public partial class KitWindow : Window
         InitializeComponent();
         _departments = departments; _weightUnit = weightUnit; _autoPrice = autoPrice; _defaultProfit = defaultProfit;
         ComponentsGrid.ItemsSource = _components;
+        ComponentSearchBox.AddHandler(Keyboard.KeyDownEvent, new KeyEventHandler(OnComponentSearchKeyDown), true);
         Loaded += async (_, _) => await LoadKitsAsync();
         Closed += (_, _) => { _searchCancellation?.Cancel(); _componentSearchCancellation?.Cancel(); };
     }
@@ -91,7 +92,14 @@ public partial class KitWindow : Window
         {
             await Task.Delay(180, token);
             var rows = await ApiClient.Client.GetFromJsonAsync<List<ProductSearchRow>>($"/api/products/search?q={Uri.EscapeDataString(query)}", token) ?? [];
+            token.ThrowIfCancellationRequested();
             rows = rows.Where(item => !item.IsKit && (_selected is null || item.Id != _selected.Id)).ToList();
+            var exact = rows.FirstOrDefault(item => string.Equals(item.Code, query, StringComparison.OrdinalIgnoreCase));
+            if (exact is not null && string.Equals(ComponentSearchBox.Text.Trim(), query, StringComparison.OrdinalIgnoreCase))
+            {
+                ApplyComponentSelection(exact);
+                return;
+            }
             ComponentResults.ItemsSource = rows; ComponentResults.Visibility = rows.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         }
         catch (OperationCanceledException) { }
@@ -133,6 +141,11 @@ public partial class KitWindow : Window
         {
             ComponentResults.Visibility = Visibility.Collapsed;
         }
+    }
+    private void OnComponentSearchKeyDown(object sender, KeyEventArgs e)
+    {
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.Enter or Key.Return) e.Handled = true;
     }
     private void OnComponentSelected(object sender, MouseButtonEventArgs e)
     {
