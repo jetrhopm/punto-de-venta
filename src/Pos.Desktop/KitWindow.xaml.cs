@@ -106,6 +106,14 @@ public partial class KitWindow : Window
         if (string.IsNullOrWhiteSpace(query)) return;
 
         _componentSearchCancellation?.Cancel();
+        var listedExact = ComponentResults.Items.OfType<ProductSearchRow>()
+            .FirstOrDefault(item => string.Equals(item.Code, query, StringComparison.OrdinalIgnoreCase));
+        if (listedExact is not null)
+        {
+            ApplyComponentSelection(listedExact);
+            return;
+        }
+
         try
         {
             var matches = await ApiClient.Client.GetFromJsonAsync<List<ProductSearchRow>>($"/api/products/search?q={Uri.EscapeDataString(query)}") ?? [];
