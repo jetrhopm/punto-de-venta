@@ -76,7 +76,9 @@ public static class TicketWindowsPrinter
         var root = new StackPanel
         {
             Width = printableWidth - (padding * 2d),
-            HorizontalAlignment = HorizontalAlignment.Center,
+            // Las térmicas inician el área imprimible desde su borde izquierdo.
+            // Centrar el contenido agrega un margen duplicado porque el controlador ya aplica el suyo.
+            HorizontalAlignment = HorizontalAlignment.Left,
             Background = Brushes.White
         };
         TextElement.SetFontFamily(root, family);

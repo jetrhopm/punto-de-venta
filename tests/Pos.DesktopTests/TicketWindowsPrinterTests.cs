@@ -40,7 +40,7 @@ public sealed class TicketWindowsPrinterTests
     }
 
     [Fact]
-    public void CreateTicketVisual_58MmCentersContentInsideSafePrintableWidth()
+    public void CreateTicketVisual_58MmUsesSafePrintableWidth()
     {
         Exception? failure = null;
         double contentWidth = 0d;

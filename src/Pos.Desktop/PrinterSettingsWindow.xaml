@@ -56,7 +56,7 @@
                     <Border Background="{StaticResource SurfaceMutedBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="4" Padding="11,8">
                         <TextBlock x:Name="PrintableAreaText" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
                     </Border>
-                    <TextBlock Text="JetVenta centra el contenido dentro del área útil de la impresora. Esto evita que los importes se recorten aunque el controlador de Windows deje márgenes en el papel térmico." Foreground="{StaticResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                    <TextBlock Text="JetVenta compone el contenido desde el borde izquierdo dentro del área útil de la impresora. Esto evita que los importes se recorten aunque el controlador de Windows deje márgenes en el papel térmico." Foreground="{StaticResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/>
 
                     <Border Background="{StaticResource SurfaceMutedBrush}" CornerRadius="5" Padding="13" Margin="0,22,0,0">
                         <StackPanel><TextBlock Text="Diseño del ticket" FontWeight="SemiBold"/><TextBlock Text="La tipografía y los totales se ajustan desde Configuración &gt; Diseño de ticket. El ancho de papel permanece en esta pantalla porque depende de la impresora de esta caja." Foreground="{StaticResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"/></StackPanel>

@@ -134,8 +134,8 @@ public partial class PrinterSettingsWindow : Window
         TicketPreviewHost.Content = TicketWindowsPrinter.CreateTicketVisual(TicketWindowsPrinter.CreateSample(profile.WidthMm), profile);
         ProfileSummaryText.Text = $"{profile.WidthMm} mm · {profile.FontSize:0.#} pt · Área útil {GetPrintableArea(profile.WidthMm)}";
         PrintableAreaText.Text = profile.WidthMm == 58
-            ? "Papel de 58 mm: JetVenta compone el ticket en 48 mm útiles, centrado."
-            : "Papel de 80 mm: JetVenta compone el ticket en 72 mm útiles, centrado.";
+            ? "Papel de 58 mm: JetVenta compone el ticket en 48 mm útiles desde el borde izquierdo."
+            : "Papel de 80 mm: JetVenta compone el ticket en 72 mm útiles desde el borde izquierdo.";
     }
 
     private bool TryReadProfile(out string printer, out TicketPrintProfile profile)
