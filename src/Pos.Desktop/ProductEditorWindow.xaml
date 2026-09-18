@@ -8,7 +8,7 @@
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,16,0,12">
             <StackPanel>
                 <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <StackPanel Margin="0,0,8,0"><TextBlock Text="Código de barras o código"/><TextBox x:Name="CodeBox" Margin="0,4,0,0"/></StackPanel>
+                    <StackPanel Margin="0,0,8,0"><TextBlock Text="Código de barras o código"/><TextBox x:Name="CodeBox" Tag="CaptureEnter" Margin="0,4,0,0" PreviewKeyDown="OnCodeBoxPreviewKeyDown"/></StackPanel>
                     <StackPanel Grid.Column="1" Margin="8,0,0,0"><TextBlock Text="Descripción"/><TextBox x:Name="DescriptionBox" Margin="0,4,0,0"/></StackPanel>
                 </Grid>
                 <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>

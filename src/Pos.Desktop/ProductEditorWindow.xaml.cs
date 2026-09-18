@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace Pos.Desktop;
@@ -89,6 +90,11 @@ public partial class ProductEditorWindow : Window
     }
 
     private void OnCancelClick(object sender, RoutedEventArgs e) { DialogResult = false; Close(); }
+    private void OnCodeBoxPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.Enter or Key.Return) e.Handled = true;
+    }
     private void OnPricingChanged(object sender, RoutedEventArgs e) { if (!_loading && TryDecimal(CostBox.Text, out var cost) && TryDecimal(ProfitPercentBox.Text, out var profit)) PriceBox.Text = Money(cost * (1m + profit / 100m)); UpdateProfitAmount(); }
     private void OnWholesalePricingChanged(object sender, RoutedEventArgs e) { if (!_loading && TryDecimal(CostBox.Text, out var cost) && TryDecimal(WholesaleProfitPercentBox.Text, out var profit)) WholesalePriceBox.Text = Money(cost * (1m + profit / 100m)); UpdateWholesaleProfitAmount(); }
     private void OnPriceChanged(object sender, TextChangedEventArgs e) => UpdateProfitAmount();
