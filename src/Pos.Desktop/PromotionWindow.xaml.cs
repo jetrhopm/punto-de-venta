@@ -2,8 +2,8 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Data;
 
 namespace Pos.Desktop;
 
@@ -48,8 +48,40 @@ public partial class PromotionWindow : Window
     private void OnProductSelected(object sender, MouseButtonEventArgs e)
     {
         if (ProductList.SelectedItem is not ProductRow row) return;
+        SelectProduct(row);
+    }
+    private void OnProductPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        var rows = ProductList.Items.OfType<ProductRow>().ToArray();
+        if (key is Key.Up or Key.Down)
+        {
+            if (rows.Length == 0) return;
+            var index = ProductList.SelectedIndex;
+            index = key == Key.Down ? Math.Min(index + 1, rows.Length - 1) : Math.Max(index - 1, 0);
+            ProductList.SelectedIndex = index < 0 ? 0 : index;
+            e.Handled = true;
+            return;
+        }
+        if (key is not Key.Enter and not Key.Return) return;
+        var query = ProductBox.Text.Trim();
+        var row = rows.FirstOrDefault(item => string.Equals(item.Code, query, StringComparison.OrdinalIgnoreCase))
+            ?? ProductList.SelectedItem as ProductRow
+            ?? rows.FirstOrDefault();
+        if (row is not null) SelectProduct(row);
+        e.Handled = true;
+    }
+    private void OnPromotionSearchPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.Enter or Key.Return) e.Handled = true;
+    }
+    private void SelectProduct(ProductRow row)
+    {
         _selectedProduct = row;
+        ProductBox.TextChanged -= OnProductTextChanged;
         ProductBox.Text = row.Display;
+        ProductBox.TextChanged += OnProductTextChanged;
         ProductPricingText.Text = $"Costo: {row.Cost:C2} · Precio de venta: {row.Price:C2}";
         ProductList.Visibility = Visibility.Collapsed;
     }
