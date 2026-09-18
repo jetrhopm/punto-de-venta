@@ -45,6 +45,11 @@ public partial class KitWindow : Window
         catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudieron cargar los kits."); }
     }
     private async void OnSearchTextChanged(object sender, TextChangedEventArgs e) { try { await Task.Delay(180); await LoadKitsAsync(); } catch (TaskCanceledException) { } }
+    private void OnKitSearchPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.Enter or Key.Return) e.Handled = true;
+    }
     private async void OnKitSelectionChanged(object sender, SelectionChangedEventArgs e) { if (KitsGrid.SelectedItem is KitRow row) { _selected = row; await LoadComponentsAsync(); } }
     private void OnKitDoubleClick(object sender, MouseButtonEventArgs e) => OnEditDetailsClick(sender, e);
 
