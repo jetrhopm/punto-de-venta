@@ -41,13 +41,16 @@ public sealed class PaymentMethodSettingsService(PosDbContext database)
     private async Task<PaymentSettingsSession?> GetSessionAsync(string token, CancellationToken cancellationToken)
     {
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty)));
-        return await database.Sessions.AsNoTracking()
-            .Where(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow)
-            .Join(database.Users.AsNoTracking(), session => session.UserId, user => user.Id, (session, user) => new { session, user })
-            .Where(item => item.session.RegisterId != null && item.user.IsActive)
-            .Join(database.Registers.AsNoTracking(), item => item.session.RegisterId, register => register.Id, (item, register) => new PaymentSettingsSession(item.user.Id, item.user.IsAdministrator, register))
-            .Where(item => item.Register.IsActive)
-            .SingleOrDefaultAsync(cancellationToken);
+        var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item =>
+            item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow,
+            cancellationToken);
+        if (session?.RegisterId is not Guid registerId) return null;
+
+        var user = await database.Users.AsNoTracking().SingleOrDefaultAsync(item => item.Id == session.UserId && item.IsActive, cancellationToken);
+        if (user is null) return null;
+
+        var register = await database.Registers.AsNoTracking().SingleOrDefaultAsync(item => item.Id == registerId && item.IsActive, cancellationToken);
+        return register is null ? null : new PaymentSettingsSession(user.Id, user.IsAdministrator, register);
     }
 
     private sealed record PaymentSettingsSession(Guid UserId, bool IsAdministrator, RegisterRecord Register);
