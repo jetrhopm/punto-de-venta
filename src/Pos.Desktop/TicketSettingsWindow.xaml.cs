@@ -115,7 +115,7 @@ public partial class TicketSettingsWindow : Window
 
     private TicketPrintProfile CurrentProfile() => TryReadProfile(out var profile)
         ? profile
-        : new TicketPrintProfile(ApiClient.PrinterFontFamily, ApiClient.PrinterFontSize, ApiClient.UseNormalTotals, SelectedWidth);
+        : new TicketPrintProfile(ApiClient.PrinterFontFamily, ApiClient.PrinterFontSize, ApiClient.UseNormalTotals, SelectedWidth, ApiClient.PrinterHorizontalOffsetCharacters);
 
     private bool TryReadProfile(out TicketPrintProfile profile)
     {
@@ -126,7 +126,7 @@ public partial class TicketSettingsWindow : Window
             profile = default!;
             return false;
         }
-        profile = new TicketPrintProfile(family, size, NormalTotalsCheck.IsChecked == true, SelectedWidth);
+        profile = new TicketPrintProfile(family, size, NormalTotalsCheck.IsChecked == true, SelectedWidth, ApiClient.PrinterHorizontalOffsetCharacters);
         return true;
     }
 

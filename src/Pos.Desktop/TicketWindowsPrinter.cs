@@ -10,7 +10,7 @@ using System.Windows.Media;
 
 namespace Pos.Desktop;
 
-public sealed record TicketPrintProfile(string FontFamily, double FontSize, bool UseNormalTotals, int WidthMm);
+public sealed record TicketPrintProfile(string FontFamily, double FontSize, bool UseNormalTotals, int WidthMm, int HorizontalOffsetCharacters = 0);
 
 public static class TicketWindowsPrinter
 {
@@ -20,7 +20,8 @@ public static class TicketWindowsPrinter
         ApiClient.PrinterFontFamily,
         ApiClient.PrinterFontSize,
         ApiClient.UseNormalTotals,
-        ApiClient.PrinterTicketWidthMm);
+        ApiClient.PrinterTicketWidthMm,
+        ApiClient.PrinterHorizontalOffsetCharacters);
 
     public static string[] GetInstalledPrinters()
     {
@@ -69,10 +70,12 @@ public static class TicketWindowsPrinter
         var pageWidth = widthMm * DipsPerMillimeter;
         var padding = widthMm == 58 ? 8d : 11d;
         var baseSize = profile.FontSize * 96d / 72d;
+        var horizontalOffset = Math.Clamp(profile.HorizontalOffsetCharacters, 0, 30) * baseSize * 0.6d;
         var family = new FontFamily(string.IsNullOrWhiteSpace(profile.FontFamily) ? "Consolas" : profile.FontFamily);
         var root = new StackPanel
         {
             Width = pageWidth - (padding * 2d),
+            Margin = new Thickness(-horizontalOffset, 0, 0, 0),
             Background = Brushes.White
         };
         TextElement.SetFontFamily(root, family);

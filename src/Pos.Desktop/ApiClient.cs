@@ -28,6 +28,7 @@ public static class ApiClient
     public static double PrinterFontSize { get; private set; } = 9d;
     public static bool UseNormalTotals { get; private set; }
     public static int PrinterTicketWidthMm { get; private set; } = 80;
+    public static int PrinterHorizontalOffsetCharacters { get; private set; }
     public static BarcodeScannerProfile BarcodeScanner { get; private set; } = BarcodeScannerProfile.Default;
     public static CashDrawerProfile CashDrawer { get; private set; } = CashDrawerProfile.Default;
     public static ScaleProfile Scale { get; private set; } = ScaleProfile.Default;
@@ -89,7 +90,7 @@ public static class ApiClient
         ApplyDeviceIdentity(ClientInstance);
     }
 
-    public static void SetPrinterProfile(string? printerName, string fontFamily, double fontSize, bool useNormalTotals, int widthMm, bool? printingEnabled = null)
+    public static void SetPrinterProfile(string? printerName, string fontFamily, double fontSize, bool useNormalTotals, int widthMm, bool? printingEnabled = null, int? horizontalOffsetCharacters = null)
     {
         PrinterName = string.IsNullOrWhiteSpace(printerName) ? null : printerName.Trim();
         PrintingEnabled = printingEnabled ?? !string.IsNullOrWhiteSpace(PrinterName);
@@ -97,6 +98,7 @@ public static class ApiClient
         PrinterFontSize = fontSize is >= 6d and <= 24d ? fontSize : 9d;
         UseNormalTotals = useNormalTotals;
         PrinterTicketWidthMm = widthMm == 58 ? 58 : 80;
+        PrinterHorizontalOffsetCharacters = Math.Clamp(horizontalOffsetCharacters ?? PrinterHorizontalOffsetCharacters, 0, 30);
         SaveSettings();
     }
 
@@ -131,7 +133,7 @@ public static class ApiClient
             try { currentToken = JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(SettingsPath))?.DeviceTokenProtected; }
             catch (JsonException) { }
         }
-        WriteSettings(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm, BarcodeScanner, PrintingEnabled, 5, CashDrawer, Scale));
+        WriteSettings(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm, BarcodeScanner, PrintingEnabled, 5, CashDrawer, Scale, PrinterHorizontalOffsetCharacters));
     }
 
     private static void Load()
@@ -156,6 +158,7 @@ public static class ApiClient
                 PrinterFontSize = settings.PrinterFontSize is >= 6d and <= 24d ? settings.PrinterFontSize : 9d;
                 UseNormalTotals = settings.UseNormalTotals;
                 PrinterTicketWidthMm = settings.PrinterTicketWidthMm == 58 ? 58 : 80;
+                PrinterHorizontalOffsetCharacters = Math.Clamp(settings.PrinterHorizontalOffsetCharacters, 0, 30);
                 BarcodeScanner = (settings.BarcodeScanner ?? BarcodeScannerProfile.Default).Normalize();
                 CashDrawer = (settings.CashDrawer ?? CashDrawerProfile.Default).Normalize();
                 Scale = (settings.Scale ?? ScaleProfile.Default).Normalize();
@@ -266,7 +269,8 @@ public static class ApiClient
         bool? PrintingEnabled = null,
         int SettingsVersion = 1,
         CashDrawerProfile? CashDrawer = null,
-        ScaleProfile? Scale = null);
+        ScaleProfile? Scale = null,
+        int PrinterHorizontalOffsetCharacters = 0);
 }
 
 public enum BarcodeScannerMode { Keyboard, Serial, Disabled }

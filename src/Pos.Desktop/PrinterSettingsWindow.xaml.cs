@@ -19,6 +19,7 @@ public partial class PrinterSettingsWindow : Window
         PrintingEnabledCheck.IsChecked = ApiClient.PrintingEnabled;
         Width58Button.IsChecked = ApiClient.PrinterTicketWidthMm == 58;
         Width80Button.IsChecked = ApiClient.PrinterTicketWidthMm != 58;
+        HorizontalOffsetBox.Text = ApiClient.PrinterHorizontalOffsetCharacters.ToString();
         LoadPrinters();
         _loaded = true;
         PrinterBox.IsEnabled = PrintingEnabledCheck.IsChecked == true;
@@ -57,6 +58,11 @@ public partial class PrinterSettingsWindow : Window
         if (_loaded) UpdatePreview();
     }
 
+    private void OnPreviewChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_loaded) UpdatePreview();
+    }
+
     private void OnPrintingEnabledChanged(object sender, RoutedEventArgs e)
     {
         if (!_loaded) return;
@@ -71,7 +77,7 @@ public partial class PrinterSettingsWindow : Window
         var printingEnabled = PrintingEnabledCheck.IsChecked == true;
         try
         {
-            ApiClient.SetPrinterProfile(printer, ApiClient.PrinterFontFamily, ApiClient.PrinterFontSize, ApiClient.UseNormalTotals, profile.WidthMm, printingEnabled);
+            ApiClient.SetPrinterProfile(printer, ApiClient.PrinterFontFamily, ApiClient.PrinterFontSize, ApiClient.UseNormalTotals, profile.WidthMm, printingEnabled, profile.HorizontalOffsetCharacters);
         }
         catch (UnauthorizedAccessException)
         {
@@ -87,7 +93,7 @@ public partial class PrinterSettingsWindow : Window
             ShowResult("Impresora no guardada", message, OperationResultKind.Error);
             return;
         }
-        ProfileSummaryText.Text = $"{profile.WidthMm} mm";
+        ProfileSummaryText.Text = $"{profile.WidthMm} mm · Izquierda {profile.HorizontalOffsetCharacters}";
         var status = printingEnabled
             ? $"Configuración guardada para esta caja: {printer}."
             : "La impresión de tickets quedó desactivada para esta caja.";
@@ -125,13 +131,21 @@ public partial class PrinterSettingsWindow : Window
         var profile = ReadProfileForPreview();
         PreviewWidthText.Text = $"{profile.WidthMm} mm";
         TicketPreviewHost.Content = TicketWindowsPrinter.CreateTicketVisual(TicketWindowsPrinter.CreateSample(profile.WidthMm), profile);
-        ProfileSummaryText.Text = $"{profile.WidthMm} mm · {profile.FontFamily} {profile.FontSize:0.#} pt";
+        ProfileSummaryText.Text = $"{profile.WidthMm} mm · Izquierda {profile.HorizontalOffsetCharacters}";
     }
 
     private bool TryReadProfile(out string printer, out TicketPrintProfile profile)
     {
         printer = PrinterBox.SelectedItem as string ?? PrinterBox.Text;
-        profile = ReadProfileForPreview();
+        if (!int.TryParse(HorizontalOffsetBox.Text, out var offset) || offset is < 0 or > 30)
+        {
+            const string message = "El ajuste horizontal debe ser un número entero entre 0 y 30 caracteres.";
+            StatusText.Text = message;
+            ShowResult("Revisa el ajuste horizontal", message, OperationResultKind.Warning);
+            profile = default!;
+            return false;
+        }
+        profile = new TicketPrintProfile(ApiClient.PrinterFontFamily, ApiClient.PrinterFontSize, ApiClient.UseNormalTotals, Width58Button.IsChecked == true ? 58 : 80, offset);
         if (PrintingEnabledCheck.IsChecked != true)
         {
             return true;
@@ -148,7 +162,8 @@ public partial class PrinterSettingsWindow : Window
 
     private TicketPrintProfile ReadProfileForPreview()
     {
-        return new TicketPrintProfile(ApiClient.PrinterFontFamily, ApiClient.PrinterFontSize, ApiClient.UseNormalTotals, Width58Button.IsChecked == true ? 58 : 80);
+        var offset = int.TryParse(HorizontalOffsetBox.Text, out var value) ? Math.Clamp(value, 0, 30) : 0;
+        return new TicketPrintProfile(ApiClient.PrinterFontFamily, ApiClient.PrinterFontSize, ApiClient.UseNormalTotals, Width58Button.IsChecked == true ? 58 : 80, offset);
     }
 
     private void ShowResult(string title, string message, OperationResultKind kind) => new OperationResultWindow(title, message, kind) { Owner = this }.ShowDialog();
