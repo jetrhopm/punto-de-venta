@@ -41,13 +41,17 @@ public partial class InventoryAdjustmentWindow : Window
         catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableRetry; }
     }
 
-    private void OnSearchKeyDown(object sender, KeyEventArgs e)
+    private async void OnSearchKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Enter || string.IsNullOrWhiteSpace(SearchTextBox.Text)) return;
-        _ = SelectExactBarcodeAsync(e);
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is not Key.Enter and not Key.Return || string.IsNullOrWhiteSpace(SearchTextBox.Text)) return;
+
+        e.Handled = true;
+        _searchCancellation?.Cancel();
+        await SelectExactBarcodeAsync();
     }
 
-    private async Task SelectExactBarcodeAsync(KeyEventArgs e)
+    private async Task SelectExactBarcodeAsync()
     {
         try
         {
@@ -61,7 +65,6 @@ public partial class InventoryAdjustmentWindow : Window
             }
 
             SelectProduct(new ProductRow(exact));
-            e.Handled = true;
         }
         catch (HttpRequestException) { MessageText.Text = ConnectionHelp.ApiUnavailableRetry; }
         catch (OperationCanceledException) { }
@@ -83,6 +86,7 @@ public partial class InventoryAdjustmentWindow : Window
 
     private async void OnAdjustClick(object sender, RoutedEventArgs e)
     {
+        if (SearchTextBox.IsKeyboardFocusWithin) return;
         var reason = ReasonTextBox.Text.Trim();
         if (_selected is null || !TryParseDecimal(QuantityTextBox.Text, out var quantity) || quantity == 0m || reason.Length == 0)
         {
