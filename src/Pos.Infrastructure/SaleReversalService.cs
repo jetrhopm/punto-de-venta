@@ -34,15 +34,15 @@ public sealed class SaleReversalService
         var user = authorization.User;
         var existing = await database.SaleReversals.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new CancelSaleResult(existing.SaleId, existing.OperationId, 0m, true);
-        var sale = await database.Sales.SingleOrDefaultAsync(item => item.Id == command.SaleId &&
-            database.Shifts.Any(shift => shift.Id == item.ShiftId && shift.RegisterId == authorization.RegisterId), cancellationToken) ?? throw new KeyNotFoundException("Venta no encontrada en esta caja.");
+        var saleContext = await FindSaleAsync(command.SaleId, authorization, cancellationToken) ?? throw new KeyNotFoundException("Venta no encontrada en esta tienda.");
+        var sale = saleContext.Sale;
         if (sale.Status != "Completed") throw new InvalidOperationException("La venta ya no esta activa.");
         if (await database.SaleReversals.AnyAsync(item => item.SaleId == sale.Id, cancellationToken)) throw new InvalidOperationException("La venta ya fue cancelada.");
         // La operación local se hace sólo cuando Point confirma su reembolso. Usar el
         // mismo OperationId permite reintentar tras una caída de red sin duplicarlo.
         if (mercadoPago is null && await database.MercadoPagoOrders.AnyAsync(item => item.SaleOperationId == sale.OperationId && item.Status == "Approved", cancellationToken))
             throw new InvalidOperationException("El servicio de reembolsos Point no está disponible.");
-        if (mercadoPago is not null) await mercadoPago.EnsureSalePointRefundedAsync(sale.Id, sale.OperationId, authorization.RegisterId, command.OperationId, null, cancellationToken);
+        if (mercadoPago is not null) await mercadoPago.EnsureSalePointRefundedAsync(sale.Id, sale.OperationId, saleContext.SourceRegisterId, command.OperationId, null, cancellationToken);
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         var shift = await database.Shifts.SingleOrDefaultAsync(item => item.UserId == user.Id && item.RegisterId == authorization.RegisterId && item.Status == "Open", cancellationToken) ?? throw new InvalidOperationException("El usuario no tiene un turno abierto en esta caja.");
         var lines = await database.SaleLines.Where(item => item.SaleId == sale.Id).ToListAsync(cancellationToken);
@@ -73,7 +73,7 @@ public sealed class SaleReversalService
             database.CreditTransactions.Add(new CreditTransactionRecord { Id = Guid.NewGuid(), CustomerId = sale.CustomerId.Value, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Type = "SaleCancellation", Amount = -sale.Total, BalanceBefore = balance, BalanceAfter = balance - sale.Total, Reason = command.Reason.Trim(), CreatedAtUtc = DateTimeOffset.UtcNow });
         }
         sale.Status = "Cancelled";
-        database.SaleReversals.Add(new SaleReversalRecord { Id = Guid.NewGuid(), SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Reason = command.Reason.Trim(), CreatedAtUtc = DateTimeOffset.UtcNow });
+        database.SaleReversals.Add(new SaleReversalRecord { Id = Guid.NewGuid(), SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, ProcessedRegisterId = authorization.RegisterId, Reason = command.Reason.Trim(), CreatedAtUtc = DateTimeOffset.UtcNow });
         await database.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
         return new CancelSaleResult(sale.Id, command.OperationId, sale.Total, false);
     }
@@ -89,6 +89,21 @@ public sealed class SaleReversalService
             : null;
     }
 
+    private async Task<SaleAtRegister?> FindSaleAsync(Guid saleId, RegisterAuthorization authorization, CancellationToken cancellationToken)
+    {
+        var result = await (from sale in database.Sales
+                            join saleShift in database.Shifts on sale.ShiftId equals saleShift.Id
+                            join sourceRegister in database.Registers on saleShift.RegisterId equals sourceRegister.Id
+                            join currentRegister in database.Registers on authorization.RegisterId equals currentRegister.Id
+                            where sale.Id == saleId && sourceRegister.StoreId == currentRegister.StoreId
+                            select new { Sale = sale, SourceRegisterId = sourceRegister.Id }).SingleOrDefaultAsync(cancellationToken);
+        if (result is null) return null;
+        if (result.SourceRegisterId != authorization.RegisterId && !authorization.User.IsAdministrator)
+            throw new InvalidOperationException("Sólo un administrador puede cancelar ventas de otra caja.");
+        return new SaleAtRegister(result.Sale, result.SourceRegisterId);
+    }
+
     private sealed record RegisterAuthorization(UserRecord User, Guid RegisterId);
+    private sealed record SaleAtRegister(SaleRecord Sale, Guid SourceRegisterId);
     private sealed record InventoryReplenishment(Guid SoldProductId, Guid ProductId, decimal Quantity);
 }

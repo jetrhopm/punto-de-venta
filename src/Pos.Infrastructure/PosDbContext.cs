@@ -139,7 +139,10 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
         {
             entity.ToTable("mercado_pago_refund"); entity.HasKey(item => item.Id); entity.HasIndex(item => item.OperationId).IsUnique(); entity.HasIndex(item => item.MercadoPagoOrderId); entity.HasIndex(item => item.SaleId);
             entity.Property(item => item.ProviderRefundId).HasMaxLength(80); entity.Property(item => item.Status).HasMaxLength(30).IsRequired(); entity.Property(item => item.StatusDetail).HasMaxLength(240); entity.Property(item => item.Amount).HasPrecision(18, 2); entity.Property(item => item.CreatedAtUtc).HasColumnType("timestamp with time zone"); entity.Property(item => item.UpdatedAtUtc).HasColumnType("timestamp with time zone");
-            entity.HasOne<MercadoPagoOrderRecord>().WithMany().HasForeignKey(item => item.MercadoPagoOrderId).OnDelete(DeleteBehavior.Restrict); entity.HasOne<SaleRecord>().WithMany().HasForeignKey(item => item.SaleId).OnDelete(DeleteBehavior.Restrict);
+            // Algunos respaldos históricos no conservan claves físicas en sale.
+            // SaleId se conserva como referencia de auditoría, sin FK que impida
+            // instalar o restaurar la actualización.
+            entity.HasOne<MercadoPagoOrderRecord>().WithMany().HasForeignKey(item => item.MercadoPagoOrderId).OnDelete(DeleteBehavior.Restrict);
         });
         modelBuilder.Entity<MercadoPagoWebhookRecord>(entity =>
         {
@@ -338,11 +341,11 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
         });
         modelBuilder.Entity<SaleReversalRecord>(entity =>
         {
-            entity.ToTable("sale_reversal"); entity.HasKey(item => item.Id); entity.Property(item => item.Reason).HasMaxLength(200).IsRequired(); entity.Property(item => item.CreatedAtUtc).HasColumnType("timestamp with time zone"); entity.HasIndex(item => item.OperationId).IsUnique(); entity.HasIndex(item => item.SaleId).IsUnique(); entity.HasOne<SaleRecord>().WithMany().HasForeignKey(item => item.SaleId).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable("sale_reversal"); entity.HasKey(item => item.Id); entity.Property(item => item.Reason).HasMaxLength(200).IsRequired(); entity.Property(item => item.CreatedAtUtc).HasColumnType("timestamp with time zone"); entity.HasIndex(item => item.OperationId).IsUnique(); entity.HasIndex(item => item.SaleId).IsUnique(); entity.HasIndex(item => item.ProcessedRegisterId); entity.HasOne<SaleRecord>().WithMany().HasForeignKey(item => item.SaleId).OnDelete(DeleteBehavior.Restrict); entity.HasOne<RegisterRecord>().WithMany().HasForeignKey(item => item.ProcessedRegisterId).OnDelete(DeleteBehavior.Restrict);
         });
         modelBuilder.Entity<ReturnRecord>(entity =>
         {
-            entity.ToTable("sale_return"); entity.HasKey(item => item.Id); entity.Property(item => item.Reason).HasMaxLength(200).IsRequired(); entity.Property(item => item.Amount).HasPrecision(18, 2); entity.Property(item => item.CreatedAtUtc).HasColumnType("timestamp with time zone"); entity.HasIndex(item => item.OperationId).IsUnique(); entity.HasOne<SaleRecord>().WithMany().HasForeignKey(item => item.SaleId).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable("sale_return"); entity.HasKey(item => item.Id); entity.Property(item => item.Reason).HasMaxLength(200).IsRequired(); entity.Property(item => item.Amount).HasPrecision(18, 2); entity.Property(item => item.CreatedAtUtc).HasColumnType("timestamp with time zone"); entity.HasIndex(item => item.OperationId).IsUnique(); entity.HasIndex(item => item.ProcessedRegisterId); entity.HasOne<SaleRecord>().WithMany().HasForeignKey(item => item.SaleId).OnDelete(DeleteBehavior.Restrict); entity.HasOne<RegisterRecord>().WithMany().HasForeignKey(item => item.ProcessedRegisterId).OnDelete(DeleteBehavior.Restrict);
         });
         modelBuilder.Entity<ReturnLineRecord>(entity =>
         {
@@ -384,6 +387,6 @@ public sealed class PurchaseRecord { public Guid Id { get; set; } public Guid Op
 public sealed class PurchaseLineRecord { public Guid Id { get; set; } public Guid PurchaseId { get; set; } public Guid ProductId { get; set; } public decimal Quantity { get; set; } public decimal UnitCost { get; set; } public decimal LineTotal { get; set; } }
 public sealed class PurchaseOrderRecord { public Guid Id { get; set; } public Guid OperationId { get; set; } public Guid? SupplierId { get; set; } public Guid UserId { get; set; } public string Status { get; set; } = "Open"; public string? Notes { get; set; } public decimal Total { get; set; } public DateTimeOffset CreatedAtUtc { get; set; } public DateTimeOffset? ClosedAtUtc { get; set; } }
 public sealed class PurchaseOrderLineRecord { public Guid Id { get; set; } public Guid PurchaseOrderId { get; set; } public Guid ProductId { get; set; } public decimal Quantity { get; set; } public decimal UnitCost { get; set; } public decimal LineTotal { get; set; } }
-public sealed class SaleReversalRecord { public Guid Id { get; set; } public Guid SaleId { get; set; } public Guid UserId { get; set; } public Guid OperationId { get; set; } public string Reason { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } }
-public sealed class ReturnRecord { public Guid Id { get; set; } public Guid SaleId { get; set; } public Guid UserId { get; set; } public Guid OperationId { get; set; } public decimal Amount { get; set; } public string Reason { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } }
+public sealed class SaleReversalRecord { public Guid Id { get; set; } public Guid SaleId { get; set; } public Guid UserId { get; set; } public Guid OperationId { get; set; } public Guid? ProcessedRegisterId { get; set; } public string Reason { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } }
+public sealed class ReturnRecord { public Guid Id { get; set; } public Guid SaleId { get; set; } public Guid UserId { get; set; } public Guid OperationId { get; set; } public Guid? ProcessedRegisterId { get; set; } public decimal Amount { get; set; } public string Reason { get; set; } = string.Empty; public DateTimeOffset CreatedAtUtc { get; set; } }
 public sealed class ReturnLineRecord { public Guid Id { get; set; } public Guid ReturnId { get; set; } public Guid ProductId { get; set; } public decimal Quantity { get; set; } public decimal UnitPrice { get; set; } public decimal Amount { get; set; } }

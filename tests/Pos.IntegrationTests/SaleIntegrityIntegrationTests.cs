@@ -123,6 +123,41 @@ public sealed class SaleIntegrityIntegrationTests
         finally { await context.DisposeAsync(); }
     }
 
+    [Fact]
+    public async Task AdministratorCanCancelAnotherRegistersSaleAndRecordsProcessingRegister()
+    {
+        var context = await SaleContext.CreateAsync();
+        var secondRegister = new RegisterRecord { Id = Guid.NewGuid(), StoreId = context.StoreId, Name = "Caja secundaria " + Guid.NewGuid().ToString("N"), IsActive = true };
+        var secondUser = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "ADMIN_SEC_" + Guid.NewGuid().ToString("N"), DisplayName = "Administrador segunda caja", PasswordHash = "test", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var secondToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var secondSession = new SessionRecord { Id = Guid.NewGuid(), UserId = secondUser.Id, RegisterId = secondRegister.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(secondToken))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        try
+        {
+            var sale = await context.Sales.CompleteAsync(context.Token, new CompleteSaleCommand(Guid.NewGuid(), [new SaleLineCommand(context.Product.Id, 1m)], 10m), CancellationToken.None);
+            context.Database.AddRange(secondRegister, secondUser, secondSession);
+            await context.Database.SaveChangesAsync();
+            var secondShift = await new ShiftService(context.Database).OpenAsync(secondToken, new OpenShiftCommand(0m), CancellationToken.None);
+
+            var result = await new SaleReversalService(context.Database, new KitService(context.Database)).CancelAsync(secondToken, new CancelSaleCommand(Guid.NewGuid(), sale!.SaleId, "Atención en segunda caja"), CancellationToken.None);
+
+            Assert.NotNull(result);
+            Assert.Equal(secondRegister.Id, await context.Database.SaleReversals.Where(item => item.SaleId == sale.SaleId).Select(item => item.ProcessedRegisterId).SingleAsync());
+            Assert.Equal(10m, await context.Database.CashMovements.Where(item => item.ShiftId == secondShift!.ShiftId).Select(item => item.Amount).SingleAsync());
+        }
+        finally
+        {
+            var secondShiftIds = await context.Database.Shifts.Where(item => item.RegisterId == secondRegister.Id).Select(item => item.Id).ToListAsync();
+            var secondSaleIds = await context.Database.Sales.Where(item => secondShiftIds.Contains(item.ShiftId)).Select(item => item.Id).ToListAsync();
+            await context.Database.CashMovements.Where(item => secondShiftIds.Contains(item.ShiftId)).ExecuteDeleteAsync();
+            await context.Database.SaleReversals.Where(item => item.ProcessedRegisterId == secondRegister.Id || secondSaleIds.Contains(item.SaleId)).ExecuteDeleteAsync();
+            await context.Database.Shifts.Where(item => secondShiftIds.Contains(item.Id)).ExecuteDeleteAsync();
+            await context.Database.Sessions.Where(item => item.Id == secondSession.Id).ExecuteDeleteAsync();
+            await context.Database.Registers.Where(item => item.Id == secondRegister.Id).ExecuteDeleteAsync();
+            await context.Database.Users.Where(item => item.Id == secondUser.Id).ExecuteDeleteAsync();
+            await context.DisposeAsync();
+        }
+    }
+
     private sealed class SaleContext : IAsyncDisposable
     {
         private SaleContext(PosDbContext database, string token, ProductRecord product, Guid shiftId, Guid userId, Guid registerId, Guid storeId)

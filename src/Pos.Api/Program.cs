@@ -952,8 +952,12 @@ app.MapGet("/api/sales/latest-ticket", async (HttpRequest request, TicketService
 });
 app.MapGet("/api/sales/{saleId:guid}/return-lines", async (Guid saleId, HttpRequest request, SaleReturnService returns, CancellationToken cancellationToken) =>
 {
-    var result = await returns.LinesAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), saleId, cancellationToken);
-    return result is null ? Results.Unauthorized() : Results.Ok(result);
+    try
+    {
+        var result = await returns.LinesAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), saleId, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 app.MapGet("/api/reports/sales", async (DateTimeOffset from, DateTimeOffset to, HttpRequest request, ReportService reports, CancellationToken cancellationToken) =>
 {

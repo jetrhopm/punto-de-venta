@@ -12,8 +12,8 @@ using Pos.Infrastructure;
 namespace Pos.Infrastructure.Migrations
 {
     [DbContext(typeof(PosDbContext))]
-    [Migration("20260925072809_RegistraReembolsosMercadoPagoPoint")]
-    partial class RegistraReembolsosMercadoPagoPoint
+    [Migration("20260925075135_RegistraCajaProcesadoraEnDevoluciones")]
+    partial class RegistraCajaProcesadoraEnDevoluciones
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1173,6 +1173,9 @@ namespace Pos.Infrastructure.Migrations
                     b.Property<Guid>("OperationId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ProcessedRegisterId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -1188,6 +1191,8 @@ namespace Pos.Infrastructure.Migrations
 
                     b.HasIndex("OperationId")
                         .IsUnique();
+
+                    b.HasIndex("ProcessedRegisterId");
 
                     b.HasIndex("SaleId");
 
@@ -1394,6 +1399,9 @@ namespace Pos.Infrastructure.Migrations
                     b.Property<Guid>("OperationId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ProcessedRegisterId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -1409,6 +1417,8 @@ namespace Pos.Infrastructure.Migrations
 
                     b.HasIndex("OperationId")
                         .IsUnique();
+
+                    b.HasIndex("ProcessedRegisterId");
 
                     b.HasIndex("SaleId")
                         .IsUnique();
@@ -2096,6 +2106,11 @@ namespace Pos.Infrastructure.Migrations
 
             modelBuilder.Entity("Pos.Infrastructure.ReturnRecord", b =>
                 {
+                    b.HasOne("Pos.Infrastructure.RegisterRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProcessedRegisterId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Pos.Infrastructure.SaleRecord", null)
                         .WithMany()
                         .HasForeignKey("SaleId")
@@ -2152,6 +2167,11 @@ namespace Pos.Infrastructure.Migrations
 
             modelBuilder.Entity("Pos.Infrastructure.SaleReversalRecord", b =>
                 {
+                    b.HasOne("Pos.Infrastructure.RegisterRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProcessedRegisterId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Pos.Infrastructure.SaleRecord", null)
                         .WithMany()
                         .HasForeignKey("SaleId")

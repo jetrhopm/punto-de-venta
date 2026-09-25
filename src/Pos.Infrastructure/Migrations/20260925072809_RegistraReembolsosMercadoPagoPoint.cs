@@ -37,13 +37,6 @@ namespace Pos.Infrastructure.Migrations
                         principalTable: "mercado_pago_order",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_mercado_pago_refund_sale_SaleId",
-                        column: x => x.SaleId,
-                        principalSchema: "pos",
-                        principalTable: "sale",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateIndex(
