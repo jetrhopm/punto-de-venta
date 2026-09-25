@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Windows;
 
 namespace Pos.Desktop;
@@ -62,8 +63,22 @@ public partial class MercadoPagoPaymentWindow : Window
     private static string StatusMessage(OrderResult state) => state.Status switch { "Rejected" => "Mercado Pago rechazó el pago. Puedes intentar otra tarjeta.", "Canceled" => "El cobro fue cancelado. Puedes intentar otra tarjeta.", "Expired" => "El cobro expiró. Puedes intentar otra tarjeta.", "AmountMismatch" => "El importe aprobado no coincide con el solicitado. La venta no fue registrada; requiere conciliación.", "CreationFailed" => "No se pudo crear el cobro. Puedes volver a intentarlo.", "CreationPending" => "JetVenta no pudo confirmar la creación. Vuelve a pulsar cobrar para retomarlo con la misma operación.", _ => $"El cobro terminó con estado {state.Status}. La venta no fue registrada." };
     private static string ReadableError(string content)
     {
-        const string prefix = "{\"message\":\"";
-        return content.StartsWith(prefix, StringComparison.Ordinal) ? content[prefix.Length..].TrimEnd('}', '"') : content;
+        try
+        {
+            using var document = JsonDocument.Parse(content);
+            var root = document.RootElement;
+            foreach (var field in new[] { "message", "detail", "title" })
+            {
+                if (root.TryGetProperty(field, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString())) return value.GetString()!;
+            }
+            if (root.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Object)
+            {
+                var first = errors.EnumerateObject().SelectMany(item => item.Value.ValueKind == JsonValueKind.Array ? item.Value.EnumerateArray() : []).FirstOrDefault(item => item.ValueKind == JsonValueKind.String);
+                if (first.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(first.GetString())) return first.GetString()!;
+            }
+        }
+        catch (JsonException) { }
+        return "JetVenta no pudo completar la operación con Mercado Pago. Intenta nuevamente o revisa la terminal.";
     }
     private Task FailAsync(string message) { _finished = true; StatusText.Text = message; CancelButton.Content = "Cerrar"; return Task.CompletedTask; }
 
