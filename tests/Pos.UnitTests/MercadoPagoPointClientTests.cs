@@ -43,6 +43,40 @@ public sealed class MercadoPagoPointClientTests
     }
 
     [Fact]
+    public async Task PartialRefundUsesPaymentTransactionAndIdempotency()
+    {
+        var refundId = Guid.Parse("22d10896-026c-47f0-a2b4-d75e7dcd913d");
+        var handler = new RecordingHandler("""
+            {"id":"ORD-125","status":"processed","status_detail":"partially_refunded","transactions":{"payments":[{"id":"PAY-11","amount":"125.50","paid_amount":"125.50"}],"refunds":[{"id":"REF-1","transaction_id":"PAY-11","amount":"25.50","status":"processed"}]}}
+            """);
+        var client = CreateClient(handler);
+
+        var result = await client.RefundOrderAsync("TEST-token", "ORD-125", "PAY-11", 25.5m, 125.5m, refundId, CancellationToken.None);
+
+        Assert.Equal(HttpMethod.Post, handler.Request!.Method);
+        Assert.Equal("https://api.mercadopago.com/v1/orders/ORD-125/refund", handler.Request.RequestUri!.ToString());
+        Assert.Equal(refundId.ToString(), handler.Request.Headers.GetValues("X-Idempotency-Key").Single());
+        Assert.Contains("\"id\":\"PAY-11\"", handler.Body);
+        Assert.Contains("\"amount\":\"25.50\"", handler.Body);
+        var refund = Assert.Single(result.Refunds);
+        Assert.Equal("REF-1", refund.Id);
+        Assert.Equal(25.5m, refund.Amount);
+    }
+
+    [Fact]
+    public async Task TotalRefundSendsAnEmptyBody()
+    {
+        var handler = new RecordingHandler("""
+            {"id":"ORD-126","status":"refunded","status_detail":"refunded","transactions":{"refunds":[{"id":"REF-2","transaction_id":"PAY-12","amount":"50.00","status":"processing"}]}}
+            """);
+        var client = CreateClient(handler);
+
+        await client.RefundOrderAsync("TEST-token", "ORD-126", "PAY-12", 50m, 50m, Guid.NewGuid(), CancellationToken.None);
+
+        Assert.True(string.IsNullOrEmpty(handler.Body));
+    }
+
+    [Fact]
     public async Task ListTerminalsReturnsOperatingMode()
     {
         var handler = new RecordingHandler("""

@@ -8,23 +8,42 @@ namespace Pos.Infrastructure;
 public sealed record CancelSaleCommand(Guid OperationId, Guid SaleId, string Reason);
 public sealed record CancelSaleResult(Guid SaleId, Guid OperationId, decimal Amount, bool Existing);
 
-public sealed class SaleReversalService(PosDbContext database, KitService kits)
+public sealed class SaleReversalService
 {
+    private readonly PosDbContext database;
+    private readonly KitService kits;
+    private readonly MercadoPagoPointService? mercadoPago;
+
+    public SaleReversalService(PosDbContext database, KitService kits, MercadoPagoPointService mercadoPago)
+    {
+        this.database = database; this.kits = kits; this.mercadoPago = mercadoPago;
+    }
+
+    // Conserva la construcción usada por utilidades y pruebas antiguas. En ejecución
+    // normal DI siempre entrega MercadoPagoPointService.
+    public SaleReversalService(PosDbContext database, KitService kits)
+    {
+        this.database = database; this.kits = kits;
+    }
+
     public async Task<CancelSaleResult?> CancelAsync(string token, CancelSaleCommand command, CancellationToken cancellationToken)
     {
         if (command.OperationId == Guid.Empty || command.SaleId == Guid.Empty || string.IsNullOrWhiteSpace(command.Reason)) throw new ArgumentException("La cancelacion requiere operacion, venta y motivo.");
         var authorization = await GetAuthorizationAsync(token, cancellationToken);
         if (authorization is null) return null;
         var user = authorization.User;
-        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         var existing = await database.SaleReversals.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new CancelSaleResult(existing.SaleId, existing.OperationId, 0m, true);
         var sale = await database.Sales.SingleOrDefaultAsync(item => item.Id == command.SaleId &&
             database.Shifts.Any(shift => shift.Id == item.ShiftId && shift.RegisterId == authorization.RegisterId), cancellationToken) ?? throw new KeyNotFoundException("Venta no encontrada en esta caja.");
         if (sale.Status != "Completed") throw new InvalidOperationException("La venta ya no esta activa.");
         if (await database.SaleReversals.AnyAsync(item => item.SaleId == sale.Id, cancellationToken)) throw new InvalidOperationException("La venta ya fue cancelada.");
-        if (await database.MercadoPagoOrders.AnyAsync(item => item.SaleOperationId == sale.OperationId && item.Status == "Approved", cancellationToken))
-            throw new InvalidOperationException("Esta venta fue cobrada con Mercado Pago Point. JetVenta no la cancelará hasta confirmar el reembolso con la terminal o el proveedor; así se evita dejar un cargo activo al cliente.");
+        // La operación local se hace sólo cuando Point confirma su reembolso. Usar el
+        // mismo OperationId permite reintentar tras una caída de red sin duplicarlo.
+        if (mercadoPago is null && await database.MercadoPagoOrders.AnyAsync(item => item.SaleOperationId == sale.OperationId && item.Status == "Approved", cancellationToken))
+            throw new InvalidOperationException("El servicio de reembolsos Point no está disponible.");
+        if (mercadoPago is not null) await mercadoPago.EnsureSalePointRefundedAsync(sale.Id, sale.OperationId, authorization.RegisterId, command.OperationId, null, cancellationToken);
+        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         var shift = await database.Shifts.SingleOrDefaultAsync(item => item.UserId == user.Id && item.RegisterId == authorization.RegisterId && item.Status == "Open", cancellationToken) ?? throw new InvalidOperationException("El usuario no tiene un turno abierto en esta caja.");
         var lines = await database.SaleLines.Where(item => item.SaleId == sale.Id).ToListAsync(cancellationToken);
         var replenishments = new List<InventoryReplenishment>();

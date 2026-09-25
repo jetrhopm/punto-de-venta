@@ -16,6 +16,7 @@ public sealed record CreateMercadoPagoOrderCommand(Guid SaleOperationId, Guid At
 public sealed record MercadoPagoOrderResult(Guid OperationId, string OrderId, string Status, string StatusDetail, decimal Amount, bool Approved, bool Finished);
 public sealed record MercadoPagoCheckoutStatus(bool Enabled, string RegisterName);
 public sealed record MercadoPagoWebhookReceipt(bool Accepted, string Message);
+public sealed record MercadoPagoRefundResult(Guid OperationId, decimal Amount, string Status, string StatusDetail, bool Confirmed);
 
 public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPointClient client, IConfiguration configuration)
 {
@@ -216,10 +217,72 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         if (!string.IsNullOrWhiteSpace(record.ProviderOrderId) && !IsFinished(record.Status))
         {
             var store = await database.Stores.SingleAsync(item => item.Id == record.StoreId, cancellationToken);
-            Apply(record, await client.GetOrderAsync(await GetAccessTokenAsync(store, cancellationToken), record.ProviderOrderId!, cancellationToken));
+            var order = await client.GetOrderAsync(await GetAccessTokenAsync(store, cancellationToken), record.ProviderOrderId!, cancellationToken);
+            Apply(record, order);
+            await ReconcileRefundsAsync(record, order, cancellationToken);
             await database.SaveChangesAsync(cancellationToken);
         }
         return ToResult(record);
+    }
+
+    // Se invoca desde cancelaciones y devoluciones antes de alterar inventario o caja.
+    // Un reembolso pendiente nunca autoriza el movimiento local: evita devolver dinero
+    // dos veces cuando la conexión con Point falla a mitad de la operación.
+    public async Task<MercadoPagoRefundResult?> EnsureSalePointRefundedAsync(Guid saleId, Guid saleOperationId, Guid registerId, Guid operationId, decimal? amount, CancellationToken cancellationToken)
+    {
+        if (amount is <= 0m) return null;
+        var orders = await database.MercadoPagoOrders
+            .Where(item => item.SaleOperationId == saleOperationId && item.RegisterId == registerId && item.Status == "Approved")
+            .ToListAsync(cancellationToken);
+        if (orders.Count == 0) return null;
+        if (orders.Count != 1) throw new InvalidOperationException("La venta tiene más de un cobro Point aprobado. Revisa la conciliación antes de solicitar un reembolso.");
+
+        var order = orders[0];
+        if (string.IsNullOrWhiteSpace(order.ProviderOrderId)) throw new InvalidOperationException("El cobro Point no conserva su identificador de Mercado Pago. No es seguro reembolsarlo automáticamente.");
+        var nonCashPaid = await database.Payments.Where(item => item.SaleId == saleId && item.Method != "Cash").SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+        if (decimal.Round(nonCashPaid, 2) != decimal.Round(order.Amount, 2)) throw new InvalidOperationException("La venta combina Mercado Pago Point con otra forma de pago distinta de efectivo. Revisa el reembolso manualmente para no devolver un importe equivocado.");
+        var requestedAmount = decimal.Round(amount ?? order.Amount, 2);
+        var existing = await database.MercadoPagoRefunds.SingleOrDefaultAsync(item => item.OperationId == operationId, cancellationToken);
+        if (existing is not null)
+        {
+            if (existing.SaleId != saleId || existing.MercadoPagoOrderId != order.Id || existing.Amount != requestedAmount) throw new InvalidOperationException("La operación de reembolso ya está asociada a otro importe.");
+            if (!IsRefundConfirmed(existing.Status))
+                await RefreshRefundAsync(existing, order, cancellationToken);
+            if (!IsRefundConfirmed(existing.Status)) throw new InvalidOperationException("Mercado Pago está procesando el reembolso. Espera la confirmación antes de registrar la devolución o cancelación.");
+            return ToRefundResult(existing);
+        }
+
+        var confirmedAmount = await database.MercadoPagoRefunds
+            .Where(item => item.MercadoPagoOrderId == order.Id && item.Status == "Confirmed")
+            .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+        var remaining = decimal.Round(order.Amount - confirmedAmount, 2);
+        if (remaining <= 0m || requestedAmount > remaining) throw new InvalidOperationException("El importe solicitado supera el saldo disponible para reembolso en Mercado Pago.");
+
+        var refund = new MercadoPagoRefundRecord
+        {
+            Id = Guid.NewGuid(), MercadoPagoOrderId = order.Id, SaleId = saleId, OperationId = operationId,
+            Amount = requestedAmount, Status = "Pending", CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow
+        };
+        database.MercadoPagoRefunds.Add(refund);
+        await database.SaveChangesAsync(cancellationToken);
+        try
+        {
+            var store = await database.Stores.SingleAsync(item => item.Id == order.StoreId, cancellationToken);
+            var providerOrder = await client.RefundOrderAsync(await GetAccessTokenAsync(store, cancellationToken), order.ProviderOrderId, order.ProviderPaymentId ?? string.Empty, refund.Amount, remaining, refund.OperationId, cancellationToken);
+            await ApplyRefundAsync(refund, order, providerOrder, cancellationToken);
+            await database.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception exception) when (exception is MercadoPagoPointException or HttpRequestException or TaskCanceledException)
+        {
+            refund.Status = "RetryPending";
+            refund.StatusDetail = exception.Message[..Math.Min(exception.Message.Length, 240)];
+            refund.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            await database.SaveChangesAsync(cancellationToken);
+            throw;
+        }
+
+        if (!IsRefundConfirmed(refund.Status)) throw new InvalidOperationException("Mercado Pago recibió el reembolso pero aún no lo confirma. Espera unos minutos y vuelve a intentar la operación; JetVenta no modificó la venta.");
+        return ToRefundResult(refund);
     }
 
     public async Task<MercadoPagoOrderResult?> CancelOrderAsync(string token, Guid operationId, CancellationToken cancellationToken)
@@ -294,7 +357,9 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
                 else
                 {
                     var store = await database.Stores.SingleAsync(item => item.Id == order.StoreId, cancellationToken);
-                    Apply(order, await client.GetOrderAsync(await GetAccessTokenAsync(store, cancellationToken), webhook.ProviderOrderId, cancellationToken));
+                    var providerOrder = await client.GetOrderAsync(await GetAccessTokenAsync(store, cancellationToken), webhook.ProviderOrderId, cancellationToken);
+                    Apply(order, providerOrder);
+                    await ReconcileRefundsAsync(order, providerOrder, cancellationToken);
                     webhook.Status = "Reconciled";
                     webhook.ProcessedAtUtc = now;
                     webhook.LastError = string.Empty;
@@ -324,6 +389,48 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         }
         record.UpdatedAtUtc = DateTimeOffset.UtcNow;
     }
+    private async Task RefreshRefundAsync(MercadoPagoRefundRecord refund, MercadoPagoOrderRecord order, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(order.ProviderOrderId)) return;
+        var store = await database.Stores.SingleAsync(item => item.Id == order.StoreId, cancellationToken);
+        var providerOrder = await client.GetOrderAsync(await GetAccessTokenAsync(store, cancellationToken), order.ProviderOrderId, cancellationToken);
+        Apply(order, providerOrder);
+        await ApplyRefundAsync(refund, order, providerOrder, cancellationToken);
+        await database.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task ReconcileRefundsAsync(MercadoPagoOrderRecord order, MercadoPagoOrder providerOrder, CancellationToken cancellationToken)
+    {
+        var refunds = await database.MercadoPagoRefunds.Where(item => item.MercadoPagoOrderId == order.Id && !IsRefundConfirmed(item.Status)).ToListAsync(cancellationToken);
+        foreach (var refund in refunds) await ApplyRefundAsync(refund, order, providerOrder, cancellationToken);
+    }
+
+    private async Task ApplyRefundAsync(MercadoPagoRefundRecord refund, MercadoPagoOrderRecord order, MercadoPagoOrder providerOrder, CancellationToken cancellationToken)
+    {
+        var usedIds = await database.MercadoPagoRefunds
+            .Where(item => item.MercadoPagoOrderId == order.Id && item.Id != refund.Id && item.ProviderRefundId != null)
+            .Select(item => item.ProviderRefundId!)
+            .ToArrayAsync(cancellationToken);
+        var providerRefund = !string.IsNullOrWhiteSpace(refund.ProviderRefundId)
+            ? providerOrder.Refunds.SingleOrDefault(item => item.Id == refund.ProviderRefundId)
+            : providerOrder.Refunds.FirstOrDefault(item => item.Amount == refund.Amount && string.Equals(item.TransactionId, order.ProviderPaymentId, StringComparison.Ordinal) && !usedIds.Contains(item.Id, StringComparer.Ordinal));
+        if (providerRefund is not null)
+        {
+            refund.ProviderRefundId = providerRefund.Id;
+            refund.StatusDetail = providerRefund.Status;
+            refund.Status = IsProviderRefundConfirmed(providerRefund.Status) || string.Equals(providerOrder.Status, "refunded", StringComparison.OrdinalIgnoreCase) ? "Confirmed" : "PendingConfirmation";
+        }
+        else
+        {
+            refund.Status = string.Equals(providerOrder.Status, "refunded", StringComparison.OrdinalIgnoreCase) ? "Confirmed" : "PendingConfirmation";
+            refund.StatusDetail = string.IsNullOrWhiteSpace(providerOrder.StatusDetail) ? providerOrder.Status : providerOrder.StatusDetail;
+        }
+        refund.UpdatedAtUtc = DateTimeOffset.UtcNow;
+    }
+
+    private static bool IsProviderRefundConfirmed(string status) => status.Equals("processed", StringComparison.OrdinalIgnoreCase) || status.Equals("approved", StringComparison.OrdinalIgnoreCase) || status.Equals("refunded", StringComparison.OrdinalIgnoreCase);
+    private static bool IsRefundConfirmed(string status) => status == "Confirmed";
+    private static MercadoPagoRefundResult ToRefundResult(MercadoPagoRefundRecord item) => new(item.OperationId, item.Amount, item.Status, item.StatusDetail, IsRefundConfirmed(item.Status));
     private static string MapStatus(string status) => status switch { "created" => "Created", "at_terminal" => "AtTerminal", "processed" => "Approved", "failed" => "Rejected", "canceled" => "Canceled", "expired" => "Expired", "refunded" => "Refunded", "action_required" => "ActionRequired", _ => "PendingReview" };
     private static bool IsFinished(string status) => status is "Approved" or "Rejected" or "Canceled" or "Expired" or "Refunded" or "AmountMismatch" or "CreationFailed";
     private static MercadoPagoOrderResult ToResult(MercadoPagoOrderRecord item) => new(item.OperationId, item.ProviderOrderId ?? string.Empty, item.Status, item.StatusDetail, item.Amount, item.Status == "Approved", IsFinished(item.Status));

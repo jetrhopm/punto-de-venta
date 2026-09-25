@@ -7,7 +7,8 @@ using System.Text.Json.Serialization;
 namespace Pos.Integrations.MercadoPago;
 
 public sealed record MercadoPagoTerminal(string Id, string PosId, string StoreId, string ExternalPosId, string OperatingMode);
-public sealed record MercadoPagoOrder(string Id, string Status, string StatusDetail, string? PaymentId, decimal Amount, decimal? PaidAmount);
+public sealed record MercadoPagoRefund(string Id, string? TransactionId, decimal Amount, string Status);
+public sealed record MercadoPagoOrder(string Id, string Status, string StatusDetail, string? PaymentId, decimal Amount, decimal? PaidAmount, IReadOnlyList<MercadoPagoRefund> Refunds);
 
 public sealed class MercadoPagoPointException(string message, int statusCode, string? providerCode = null) : Exception(message)
 {
@@ -87,6 +88,22 @@ public sealed class MercadoPagoPointClient(HttpClient client)
         return ParseOrder(body);
     }
 
+    public async Task<MercadoPagoOrder> RefundOrderAsync(string accessToken, string orderId, string paymentId, decimal amount, decimal remainingAmount, Guid refundId, CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Post, $"v1/orders/{Uri.EscapeDataString(orderId)}/refund", accessToken);
+        request.Headers.Add("X-Idempotency-Key", refundId.ToString());
+        // Mercado Pago exige body vacío para el total y la transacción para un parcial.
+        if (decimal.Round(amount, 2) < decimal.Round(remainingAmount, 2))
+        {
+            if (string.IsNullOrWhiteSpace(paymentId)) throw new InvalidOperationException("Mercado Pago no devolvió el identificador del pago necesario para el reembolso parcial.");
+            request.Content = JsonContent.Create(new { transactions = new[] { new { id = paymentId, amount = decimal.Round(amount, 2).ToString("0.00", CultureInfo.InvariantCulture) } } }, options: JsonOptions);
+        }
+        using var response = await client.SendAsync(request, cancellationToken);
+        var body = await ReadBodyAsync(response, cancellationToken);
+        EnsureSuccess(response, body);
+        return ParseOrder(body);
+    }
+
     public async Task<OAuthTokenResult> ExchangeAuthorizationCodeAsync(string clientId, string clientSecret, string code, string redirectUri, string codeVerifier, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "oauth/token")
@@ -139,7 +156,12 @@ public sealed class MercadoPagoPointClient(HttpClient client)
         var payment = result.Transactions?.Payments?.FirstOrDefault();
         _ = decimal.TryParse(payment?.Amount, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount);
         decimal? paidAmount = decimal.TryParse(payment?.PaidAmount, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedPaidAmount) ? parsedPaidAmount : null;
-        return new MercadoPagoOrder(result.Id ?? string.Empty, result.Status ?? "unknown", result.StatusDetail ?? string.Empty, payment?.Id, amount, paidAmount);
+        var refunds = result.Transactions?.Refunds?.Select(item =>
+        {
+            _ = decimal.TryParse(item.Amount, NumberStyles.Number, CultureInfo.InvariantCulture, out var refundAmount);
+            return new MercadoPagoRefund(item.Id ?? string.Empty, item.TransactionId, refundAmount, item.Status ?? "unknown");
+        }).ToArray() ?? [];
+        return new MercadoPagoOrder(result.Id ?? string.Empty, result.Status ?? "unknown", result.StatusDetail ?? string.Empty, payment?.Id, amount, paidAmount, refunds);
     }
 
     private static async Task<string> ReadBodyAsync(HttpResponseMessage response, CancellationToken cancellationToken) => await response.Content.ReadAsStringAsync(cancellationToken);
@@ -174,8 +196,9 @@ public sealed class MercadoPagoPointClient(HttpClient client)
     // Mercado Pago puede devolver identificadores como texto o como número según la cuenta.
     private sealed record TerminalResponse(JsonElement Id, [property: JsonPropertyName("pos_id")] JsonElement PosId, [property: JsonPropertyName("store_id")] JsonElement StoreId, [property: JsonPropertyName("external_pos_id")] JsonElement ExternalPosId, [property: JsonPropertyName("operating_mode")] JsonElement OperatingMode);
     private sealed record OrderResponse(string? Id, string? Status, [property: JsonPropertyName("status_detail")] string? StatusDetail, OrderTransactions? Transactions);
-    private sealed record OrderTransactions(IReadOnlyList<OrderPayment>? Payments);
+    private sealed record OrderTransactions(IReadOnlyList<OrderPayment>? Payments, IReadOnlyList<OrderRefund>? Refunds);
     private sealed record OrderPayment(string? Id, string? Amount, [property: JsonPropertyName("paid_amount")] string? PaidAmount);
+    private sealed record OrderRefund(string? Id, [property: JsonPropertyName("transaction_id")] string? TransactionId, string? Amount, string? Status);
 }
 
 public sealed record OAuthTokenResult(

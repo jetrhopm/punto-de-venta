@@ -10,7 +10,7 @@ public sealed record ReturnSaleCommand(Guid OperationId, Guid SaleId, IReadOnlyL
 public sealed record ReturnSaleResult(Guid ReturnId, Guid SaleId, decimal Amount, bool Existing);
 public sealed record SaleLineForReturn(Guid ProductId, string Description, decimal SoldQuantity, decimal ReturnedQuantity, decimal UnitPrice);
 
-public sealed class SaleReturnService(PosDbContext database, KitService kits)
+public sealed class SaleReturnService(PosDbContext database, KitService kits, MercadoPagoPointService mercadoPago)
 {
     public async Task<ReturnSaleResult?> ReturnAsync(string token, ReturnSaleCommand command, CancellationToken cancellationToken)
     {
@@ -18,23 +18,43 @@ public sealed class SaleReturnService(PosDbContext database, KitService kits)
         var authorization = await AuthorizedAsync(token, cancellationToken);
         if (authorization is null) return null;
         var user = authorization.User;
-        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         var existing = await database.Returns.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new ReturnSaleResult(existing.Id, existing.SaleId, existing.Amount, true);
-        var sale = await database.Sales.SingleOrDefaultAsync(item => item.Id == command.SaleId && item.Status == "Completed" &&
+        var sale = await database.Sales.SingleOrDefaultAsync(item => item.Id == command.SaleId && (item.Status == "Completed" || item.Status == "PartiallyReturned") &&
             database.Shifts.Any(shift => shift.Id == item.ShiftId && shift.RegisterId == authorization.RegisterId), cancellationToken) ?? throw new InvalidOperationException("La venta no está activa para devolución en esta caja.");
-        if (await database.MercadoPagoOrders.AnyAsync(item => item.SaleOperationId == sale.OperationId && item.Status == "Approved", cancellationToken))
-            throw new InvalidOperationException("Esta venta fue cobrada con Mercado Pago Point. JetVenta no registrará la devolución hasta confirmar el reembolso con la terminal o el proveedor; así se evita dejar un cargo activo al cliente.");
+        // Se calcula antes de la modificación local. Con ello, una devolución parcial
+        // manda sólo la parte pendiente a Point y no duplica efectivo ni reembolsos.
+        var preflightSold = await database.SaleLines.Where(item => item.SaleId == sale.Id).ToDictionaryAsync(item => item.ProductId, cancellationToken);
+        var preflightReturned = await database.ReturnLines.Where(item => item.ReturnId != Guid.Empty && database.Returns.Any(ret => ret.Id == item.ReturnId && ret.SaleId == sale.Id)).GroupBy(item => item.ProductId).Select(group => new { ProductId = group.Key, Quantity = group.Sum(item => item.Quantity), Amount = group.Sum(item => item.Amount) }).ToDictionaryAsync(item => item.ProductId, cancellationToken);
+        var requestedAmount = 0m;
+        foreach (var commandLine in command.Lines)
+        {
+            if (commandLine.Quantity <= 0m || !preflightSold.TryGetValue(commandLine.ProductId, out var soldLine)) throw new ArgumentException("La partida de devolucion no es valida.");
+            var previous = preflightReturned.GetValueOrDefault(commandLine.ProductId);
+            if (previous?.Quantity + commandLine.Quantity > soldLine.Quantity) throw new InvalidOperationException("La cantidad devuelta no puede superar la cantidad vendida.");
+            requestedAmount += CalculateReturnAmount(soldLine, previous?.Quantity ?? 0m, previous?.Amount ?? 0m, commandLine.Quantity);
+        }
+        var previousReturnAmount = await database.Returns.Where(item => item.SaleId == sale.Id).SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+        var cashPaidForSale = await database.Payments.Where(item => item.SaleId == sale.Id && item.Method == "Cash").SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+        var pointOrder = await database.MercadoPagoOrders.SingleOrDefaultAsync(item => item.SaleOperationId == sale.OperationId && item.RegisterId == authorization.RegisterId && item.Status == "Approved", cancellationToken);
+        if (pointOrder is not null)
+        {
+            var confirmedPointRefunds = await database.MercadoPagoRefunds.Where(item => item.MercadoPagoOrderId == pointOrder.Id && item.Status == "Confirmed").SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+            var targetPointRefund = Math.Min(pointOrder.Amount, Math.Max(0m, previousReturnAmount + decimal.Round(requestedAmount, 2) - cashPaidForSale));
+            var pointRefundDue = decimal.Round(targetPointRefund - confirmedPointRefunds, 2);
+            if (pointRefundDue > 0m) await mercadoPago.EnsureSalePointRefundedAsync(sale.Id, sale.OperationId, authorization.RegisterId, command.OperationId, pointRefundDue, cancellationToken);
+        }
+        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         var shift = await database.Shifts.SingleOrDefaultAsync(item => item.UserId == user.Id && item.RegisterId == authorization.RegisterId && item.Status == "Open", cancellationToken) ?? throw new InvalidOperationException("El usuario no tiene un turno abierto en esta caja.");
         var sold = await database.SaleLines.Where(item => item.SaleId == sale.Id).ToDictionaryAsync(item => item.ProductId, cancellationToken);
-        var returned = await database.ReturnLines.Where(item => item.ReturnId != Guid.Empty && database.Returns.Any(ret => ret.Id == item.ReturnId && ret.SaleId == sale.Id)).GroupBy(item => item.ProductId).Select(group => new { ProductId = group.Key, Quantity = group.Sum(item => item.Quantity) }).ToDictionaryAsync(item => item.ProductId, item => item.Quantity, cancellationToken);
+        var returned = await database.ReturnLines.Where(item => item.ReturnId != Guid.Empty && database.Returns.Any(ret => ret.Id == item.ReturnId && ret.SaleId == sale.Id)).GroupBy(item => item.ProductId).Select(group => new { ProductId = group.Key, Quantity = group.Sum(item => item.Quantity), Amount = group.Sum(item => item.Amount) }).ToDictionaryAsync(item => item.ProductId, cancellationToken);
         var lines = new List<ReturnLineRecord>(); var amount = 0m;
         foreach (var commandLine in command.Lines)
         {
             if (commandLine.Quantity <= 0m || !sold.TryGetValue(commandLine.ProductId, out var soldLine)) throw new ArgumentException("La partida de devolucion no es valida.");
             var alreadyReturned = returned.GetValueOrDefault(commandLine.ProductId);
-            if (alreadyReturned + commandLine.Quantity > soldLine.Quantity) throw new InvalidOperationException("La cantidad devuelta no puede superar la cantidad vendida.");
-            var lineAmount = decimal.Round(commandLine.Quantity * soldLine.UnitPrice, 2, MidpointRounding.AwayFromZero); amount += lineAmount;
+            if (alreadyReturned?.Quantity + commandLine.Quantity > soldLine.Quantity) throw new InvalidOperationException("La cantidad devuelta no puede superar la cantidad vendida.");
+            var lineAmount = CalculateReturnAmount(soldLine, alreadyReturned?.Quantity ?? 0m, alreadyReturned?.Amount ?? 0m, commandLine.Quantity); amount += lineAmount;
             lines.Add(new ReturnLineRecord { Id = Guid.NewGuid(), ProductId = commandLine.ProductId, Quantity = commandLine.Quantity, UnitPrice = soldLine.UnitPrice, Amount = lineAmount });
         }
         var record = new ReturnRecord { Id = Guid.NewGuid(), SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Amount = decimal.Round(amount, 2), Reason = command.Reason.Trim(), CreatedAtUtc = DateTimeOffset.UtcNow };
@@ -71,7 +91,7 @@ public sealed class SaleReturnService(PosDbContext database, KitService kits)
             database.CreditTransactions.Add(new CreditTransactionRecord { Id = Guid.NewGuid(), CustomerId = sale.CustomerId.Value, SaleId = sale.Id, UserId = user.Id, OperationId = command.OperationId, Type = "SaleReturn", Amount = -record.Amount, BalanceBefore = balance, BalanceAfter = balance - record.Amount, Reason = command.Reason.Trim(), CreatedAtUtc = record.CreatedAtUtc });
         }
         database.Returns.Add(record); database.ReturnLines.AddRange(lines);
-        var totalReturned = returned.Values.Sum() + lines.Sum(item => item.Quantity); if (totalReturned >= sold.Values.Sum(item => item.Quantity)) sale.Status = "Returned"; else sale.Status = "PartiallyReturned";
+        var totalReturned = returned.Values.Sum(item => item.Quantity) + lines.Sum(item => item.Quantity); if (totalReturned >= sold.Values.Sum(item => item.Quantity)) sale.Status = "Returned"; else sale.Status = "PartiallyReturned";
         await database.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken); return new ReturnSaleResult(record.Id, sale.Id, record.Amount, false);
     }
 
@@ -95,6 +115,14 @@ public sealed class SaleReturnService(PosDbContext database, KitService kits)
         return user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "ProcessReturns", cancellationToken)
             ? new RegisterAuthorization(user, registerId)
             : null;
+    }
+
+    private static decimal CalculateReturnAmount(SaleLineRecord soldLine, decimal previouslyReturnedQuantity, decimal previouslyReturnedAmount, decimal quantity)
+    {
+        var totalQuantity = soldLine.Quantity;
+        if (previouslyReturnedQuantity + quantity >= totalQuantity)
+            return decimal.Round(soldLine.LineTotal - previouslyReturnedAmount, 2, MidpointRounding.AwayFromZero);
+        return decimal.Round(soldLine.LineTotal * quantity / totalQuantity, 2, MidpointRounding.AwayFromZero);
     }
 
     private sealed record RegisterAuthorization(UserRecord User, Guid RegisterId);
