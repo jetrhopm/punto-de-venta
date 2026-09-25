@@ -188,7 +188,13 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
             return ToResult(approved);
         }
         var unresolved = await database.MercadoPagoOrders.SingleOrDefaultAsync(item => item.SaleOperationId == command.SaleOperationId && item.RegisterId == register.Id && item.Status != "Approved" && item.Status != "Rejected" && item.Status != "Canceled" && item.Status != "Expired" && item.Status != "Refunded" && item.Status != "AmountMismatch" && item.Status != "CreationFailed", cancellationToken);
-        if (unresolved is not null && unresolved.OperationId != command.AttemptId) throw new InvalidOperationException("Ya hay un cobro Point pendiente para este ticket. Confírmalo o cancélalo antes de iniciar otro intento.");
+        if (unresolved is not null && unresolved.OperationId != command.AttemptId)
+        {
+            if (unresolved.Amount != decimal.Round(command.Amount, 2)) throw new InvalidOperationException("Ya hay un cobro Point pendiente con un importe distinto. Confírmalo o cancélalo antes de modificar el ticket o iniciar otro cobro.");
+            // La ventana pudo cerrarse por una caída de red. Se entrega la misma orden
+            // para que el cliente continúe consultándola, sin duplicar el cargo.
+            return ToResult(unresolved);
+        }
         existing ??= new MercadoPagoOrderRecord { Id = Guid.NewGuid(), StoreId = store.Id, RegisterId = register.Id, OperationId = command.AttemptId, SaleOperationId = command.SaleOperationId, Amount = decimal.Round(command.Amount, 2), Status = "Pending", CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow };
         if (database.Entry(existing).State == EntityState.Detached) { database.MercadoPagoOrders.Add(existing); await database.SaveChangesAsync(cancellationToken); }
         try

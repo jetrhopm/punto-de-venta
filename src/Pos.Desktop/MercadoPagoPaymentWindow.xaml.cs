@@ -8,7 +8,7 @@ namespace Pos.Desktop;
 public partial class MercadoPagoPaymentWindow : Window
 {
     private readonly Guid _operationId;
-    private readonly Guid _attemptId;
+    private Guid _attemptId;
     private readonly decimal _amount;
     private readonly CancellationTokenSource _polling = new();
     private bool _finished;
@@ -26,6 +26,10 @@ public partial class MercadoPagoPaymentWindow : Window
             using var create = await ApiClient.Client.PostAsJsonAsync("api/integrations/mercado-pago/orders", new { saleOperationId = _operationId, attemptId = _attemptId, amount = _amount, description = "Venta JetVenta" }, _polling.Token);
             if (!create.IsSuccessStatusCode) { await FailAsync(await create.Content.ReadAsStringAsync()); return; }
             var state = await create.Content.ReadFromJsonAsync<OrderResult>(cancellationToken: _polling.Token);
+            if (state is null) { await FailAsync("JetVenta no recibió el estado del cobro Point. No se confirmó la venta."); return; }
+            var resumed = state.OperationId != _attemptId;
+            _attemptId = state.OperationId;
+            if (resumed) StatusText.Text = "Se retomó un cobro Point pendiente de este ticket. Consultando la terminal...";
             while (state is not null && !state.Finished)
             {
                 ShowStatus(state.Status);
