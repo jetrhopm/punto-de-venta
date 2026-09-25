@@ -24,7 +24,7 @@ public partial class MercadoPagoPaymentWindow : Window
         try
         {
             using var create = await ApiClient.Client.PostAsJsonAsync("api/integrations/mercado-pago/orders", new { saleOperationId = _operationId, attemptId = _attemptId, amount = _amount, description = "Venta JetVenta" }, _polling.Token);
-            if (!create.IsSuccessStatusCode) { await FailAsync(await create.Content.ReadAsStringAsync()); return; }
+            if (!create.IsSuccessStatusCode) { await FailAsync(ReadableError(await create.Content.ReadAsStringAsync())); return; }
             var state = await create.Content.ReadFromJsonAsync<OrderResult>(cancellationToken: _polling.Token);
             if (state is null) { await FailAsync("JetVenta no recibió el estado del cobro Point. No se confirmó la venta."); return; }
             var resumed = state.OperationId != _attemptId;
@@ -59,7 +59,12 @@ public partial class MercadoPagoPaymentWindow : Window
     }
 
     private void ShowStatus(string status) => StatusText.Text = status switch { "AtTerminal" => "La terminal recibió el cobro. Pide al cliente insertar, acercar o deslizar su tarjeta.", "Created" => "Cobro enviado. Esperando que la terminal lo reciba...", _ => "Consultando el resultado autorizado de Mercado Pago..." };
-    private static string StatusMessage(OrderResult state) => state.Status switch { "Rejected" => "Mercado Pago rechazó el pago. Puedes intentar otra tarjeta.", "Canceled" => "El cobro fue cancelado. Puedes intentar otra tarjeta.", "Expired" => "El cobro expiró. Puedes intentar otra tarjeta.", "AmountMismatch" => "El importe aprobado no coincide con el solicitado. La venta no fue registrada; requiere conciliación.", "CreationFailed" => "No se pudo crear el cobro. Puedes volver a intentarlo.", _ => $"El cobro terminó con estado {state.Status}. La venta no fue registrada." };
+    private static string StatusMessage(OrderResult state) => state.Status switch { "Rejected" => "Mercado Pago rechazó el pago. Puedes intentar otra tarjeta.", "Canceled" => "El cobro fue cancelado. Puedes intentar otra tarjeta.", "Expired" => "El cobro expiró. Puedes intentar otra tarjeta.", "AmountMismatch" => "El importe aprobado no coincide con el solicitado. La venta no fue registrada; requiere conciliación.", "CreationFailed" => "No se pudo crear el cobro. Puedes volver a intentarlo.", "CreationPending" => "JetVenta no pudo confirmar la creación. Vuelve a pulsar cobrar para retomarlo con la misma operación.", _ => $"El cobro terminó con estado {state.Status}. La venta no fue registrada." };
+    private static string ReadableError(string content)
+    {
+        const string prefix = "{\"message\":\"";
+        return content.StartsWith(prefix, StringComparison.Ordinal) ? content[prefix.Length..].TrimEnd('}', '"') : content;
+    }
     private Task FailAsync(string message) { _finished = true; StatusText.Text = message; CancelButton.Content = "Cerrar"; return Task.CompletedTask; }
 
     private async void OnCancelClick(object sender, RoutedEventArgs e)

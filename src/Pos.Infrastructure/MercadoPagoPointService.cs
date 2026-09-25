@@ -191,20 +191,37 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         if (unresolved is not null && unresolved.OperationId != command.AttemptId)
         {
             if (unresolved.Amount != decimal.Round(command.Amount, 2)) throw new InvalidOperationException("Ya hay un cobro Point pendiente con un importe distinto. Confírmalo o cancélalo antes de modificar el ticket o iniciar otro cobro.");
+            if (string.IsNullOrWhiteSpace(unresolved.ProviderOrderId))
+            {
+                // La primera solicitud pudo llegar a Mercado Pago aunque la respuesta
+                // se haya perdido. Reintentar con la misma llave evita un segundo cargo.
+                existing = unresolved;
+            }
+            else
+            {
             // La ventana pudo cerrarse por una caída de red. Se entrega la misma orden
             // para que el cliente continúe consultándola, sin duplicar el cargo.
-            return ToResult(unresolved);
+                return ToResult(unresolved);
+            }
         }
         existing ??= new MercadoPagoOrderRecord { Id = Guid.NewGuid(), StoreId = store.Id, RegisterId = register.Id, OperationId = command.AttemptId, SaleOperationId = command.SaleOperationId, Amount = decimal.Round(command.Amount, 2), Status = "Pending", CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow };
         if (database.Entry(existing).State == EntityState.Detached) { database.MercadoPagoOrders.Add(existing); await database.SaveChangesAsync(cancellationToken); }
         try
         {
-            var order = await client.CreateOrderAsync(await GetAccessTokenAsync(store, cancellationToken), register.MercadoPagoTerminalId, command.AttemptId, existing.Amount, command.Description, cancellationToken);
+            var order = await client.CreateOrderAsync(await GetAccessTokenAsync(store, cancellationToken), register.MercadoPagoTerminalId, existing.OperationId, existing.Amount, command.Description, cancellationToken);
             Apply(existing, order);
             await database.SaveChangesAsync(cancellationToken);
             return ToResult(existing);
         }
-        catch (Exception exception) when (exception is MercadoPagoPointException or HttpRequestException or TaskCanceledException)
+        catch (Exception exception) when (IsAmbiguousCreationFailure(exception))
+        {
+            existing.Status = "CreationPending";
+            existing.StatusDetail = exception.Message[..Math.Min(exception.Message.Length, 120)];
+            existing.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            await database.SaveChangesAsync(CancellationToken.None);
+            throw new InvalidOperationException("No se pudo confirmar si Mercado Pago recibió el cobro. JetVenta conservó el intento; vuelve a pulsar cobrar para retomarlo sin generar otro cargo.", exception);
+        }
+        catch (MercadoPagoPointException exception)
         {
             existing.Status = "CreationFailed";
             existing.StatusDetail = exception.Message[..Math.Min(exception.Message.Length, 120)];
@@ -300,6 +317,7 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         if (IsFinished(record.Status)) return ToResult(record);
         if (string.IsNullOrWhiteSpace(record.ProviderOrderId))
         {
+            if (record.Status == "CreationPending") throw new InvalidOperationException("No se puede cancelar localmente un cobro cuya creación no fue confirmada. Vuelve a pulsar cobrar para reconciliarlo con la misma operación.");
             record.Status = "Canceled"; record.StatusDetail = "canceled_by_api"; record.UpdatedAtUtc = DateTimeOffset.UtcNow;
             await database.SaveChangesAsync(cancellationToken);
             return ToResult(record);
@@ -445,6 +463,7 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
     }
 
     private static bool IsProviderRefundConfirmed(string status) => status.Equals("processed", StringComparison.OrdinalIgnoreCase) || status.Equals("approved", StringComparison.OrdinalIgnoreCase) || status.Equals("refunded", StringComparison.OrdinalIgnoreCase);
+    private static bool IsAmbiguousCreationFailure(Exception exception) => exception is HttpRequestException or TaskCanceledException or MercadoPagoPointException { StatusCode: >= 500 };
     private static bool IsRefundConfirmed(string status) => status == "Confirmed";
     private static MercadoPagoRefundResult ToRefundResult(MercadoPagoRefundRecord item) => new(item.OperationId, item.Amount, item.Status, item.StatusDetail, IsRefundConfirmed(item.Status));
     private static string MapStatus(string status) => status switch { "created" => "Created", "at_terminal" => "AtTerminal", "processed" => "Approved", "failed" => "Rejected", "canceled" => "Canceled", "expired" => "Expired", "refunded" => "Refunded", "action_required" => "ActionRequired", _ => "PendingReview" };
