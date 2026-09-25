@@ -187,7 +187,7 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
             if (approved.Amount != decimal.Round(command.Amount, 2)) throw new InvalidOperationException("Este ticket ya tiene un cobro Point aprobado por un importe distinto. No generes otro cobro; primero concilia o devuelve el pago anterior.");
             return ToResult(approved);
         }
-        var unresolved = await database.MercadoPagoOrders.SingleOrDefaultAsync(item => item.SaleOperationId == command.SaleOperationId && item.RegisterId == register.Id && !IsFinished(item.Status), cancellationToken);
+        var unresolved = await database.MercadoPagoOrders.SingleOrDefaultAsync(item => item.SaleOperationId == command.SaleOperationId && item.RegisterId == register.Id && item.Status != "Approved" && item.Status != "Rejected" && item.Status != "Canceled" && item.Status != "Expired" && item.Status != "Refunded" && item.Status != "AmountMismatch" && item.Status != "CreationFailed", cancellationToken);
         if (unresolved is not null && unresolved.OperationId != command.AttemptId) throw new InvalidOperationException("Ya hay un cobro Point pendiente para este ticket. Confírmalo o cancélalo antes de iniciar otro intento.");
         existing ??= new MercadoPagoOrderRecord { Id = Guid.NewGuid(), StoreId = store.Id, RegisterId = register.Id, OperationId = command.AttemptId, SaleOperationId = command.SaleOperationId, Amount = decimal.Round(command.Amount, 2), Status = "Pending", CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow };
         if (database.Entry(existing).State == EntityState.Detached) { database.MercadoPagoOrders.Add(existing); await database.SaveChangesAsync(cancellationToken); }
@@ -382,10 +382,20 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         record.ProviderPaymentId = order.PaymentId ?? string.Empty;
         record.Status = MapStatus(order.Status);
         record.StatusDetail = order.StatusDetail;
-        if (record.Status == "Approved" && (order.PaidAmount is null || decimal.Round(order.PaidAmount.Value, 2) != record.Amount))
+        if (record.Status == "Approved")
         {
-            record.Status = "AmountMismatch";
-            record.StatusDetail = "El importe aprobado por Mercado Pago no coincide con el importe solicitado.";
+            if (order.PaidAmount is not decimal paidAmount)
+            {
+                // No se acepta un cobro sin monto confirmado. Point puede entregar una
+                // respuesta inicial incompleta; se volverá a consultar la orden.
+                record.Status = "PendingVerification";
+                record.StatusDetail = "Mercado Pago procesó la orden, pero aún no informó el importe cobrado.";
+            }
+            else if (decimal.Round(paidAmount, 2) != record.Amount)
+            {
+                record.Status = "AmountMismatch";
+                record.StatusDetail = "El importe aprobado por Mercado Pago no coincide con el importe solicitado.";
+            }
         }
         record.UpdatedAtUtc = DateTimeOffset.UtcNow;
     }
@@ -401,7 +411,7 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
 
     private async Task ReconcileRefundsAsync(MercadoPagoOrderRecord order, MercadoPagoOrder providerOrder, CancellationToken cancellationToken)
     {
-        var refunds = await database.MercadoPagoRefunds.Where(item => item.MercadoPagoOrderId == order.Id && !IsRefundConfirmed(item.Status)).ToListAsync(cancellationToken);
+        var refunds = await database.MercadoPagoRefunds.Where(item => item.MercadoPagoOrderId == order.Id && item.Status != "Confirmed").ToListAsync(cancellationToken);
         foreach (var refund in refunds) await ApplyRefundAsync(refund, order, providerOrder, cancellationToken);
     }
 

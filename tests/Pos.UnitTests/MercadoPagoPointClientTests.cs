@@ -43,6 +43,20 @@ public sealed class MercadoPagoPointClientTests
     }
 
     [Fact]
+    public async Task ProcessedOrderCanArriveBeforePaidAmountIsAvailable()
+    {
+        var handler = new RecordingHandler("""
+            {"id":"ORD-124B","status":"processed","status_detail":"accredited","transactions":{"payments":[{"id":"PAY-10B","amount":"125.50"}]}}
+            """);
+        var client = CreateClient(handler);
+
+        var result = await client.GetOrderAsync("TEST-token", "ORD-124B", CancellationToken.None);
+
+        Assert.Equal("processed", result.Status);
+        Assert.Null(result.PaidAmount);
+    }
+
+    [Fact]
     public async Task PartialRefundUsesPaymentTransactionAndIdempotency()
     {
         var refundId = Guid.Parse("22d10896-026c-47f0-a2b4-d75e7dcd913d");
