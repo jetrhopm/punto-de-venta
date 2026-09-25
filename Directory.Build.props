@@ -1,9 +1,9 @@
 <Project>
   <PropertyGroup>
-    <Version>3.3.52</Version>
-    <AssemblyVersion>3.3.52.0</AssemblyVersion>
-    <FileVersion>3.3.52.0</FileVersion>
-    <InformationalVersion>3.3.52</InformationalVersion>
+    <Version>3.3.53</Version>
+    <AssemblyVersion>3.3.53.0</AssemblyVersion>
+    <FileVersion>3.3.53.0</FileVersion>
+    <InformationalVersion>3.3.53</InformationalVersion>
     <Authors>Jetrho Pérez M.</Authors>
     <Company>Jetrho Pérez M.</Company>
     <Copyright>Copyright © 2026 Jetrho Pérez M.</Copyright>

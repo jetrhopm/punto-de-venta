@@ -49,7 +49,12 @@ public partial class MercadoPagoPaymentWindow : Window
         Exception? lastError = null;
         for (var attempt = 1; attempt <= 3; attempt++)
         {
-            try { return await ApiClient.Client.GetFromJsonAsync<OrderResult>($"api/integrations/mercado-pago/orders/{_attemptId}", _polling.Token); }
+            try
+            {
+                using var response = await ApiClient.Client.GetAsync($"api/integrations/mercado-pago/orders/{_attemptId}", _polling.Token);
+                if (!response.IsSuccessStatusCode) throw new InvalidOperationException(ReadableError(await response.Content.ReadAsStringAsync(_polling.Token)));
+                return await response.Content.ReadFromJsonAsync<OrderResult>(cancellationToken: _polling.Token);
+            }
             catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
             {
                 lastError = exception;
@@ -67,15 +72,14 @@ public partial class MercadoPagoPaymentWindow : Window
         {
             using var document = JsonDocument.Parse(content);
             var root = document.RootElement;
-            foreach (var field in new[] { "message", "detail", "title" })
-            {
-                if (root.TryGetProperty(field, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString())) return value.GetString()!;
-            }
+            if (root.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(message.GetString())) return message.GetString()!;
+            if (root.TryGetProperty("detail", out var detail) && detail.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(detail.GetString())) return detail.GetString()!;
             if (root.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Object)
             {
                 var first = errors.EnumerateObject().SelectMany(item => item.Value.ValueKind == JsonValueKind.Array ? item.Value.EnumerateArray() : []).FirstOrDefault(item => item.ValueKind == JsonValueKind.String);
                 if (first.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(first.GetString())) return first.GetString()!;
             }
+            if (root.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(title.GetString())) return title.GetString()!;
         }
         catch (JsonException) { }
         return "JetVenta no pudo completar la operación con Mercado Pago. Intenta nuevamente o revisa la terminal.";
