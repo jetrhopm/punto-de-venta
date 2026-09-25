@@ -23,6 +23,8 @@ public sealed class SaleReturnService(PosDbContext database, KitService kits)
         if (existing is not null) return new ReturnSaleResult(existing.Id, existing.SaleId, existing.Amount, true);
         var sale = await database.Sales.SingleOrDefaultAsync(item => item.Id == command.SaleId && item.Status == "Completed" &&
             database.Shifts.Any(shift => shift.Id == item.ShiftId && shift.RegisterId == authorization.RegisterId), cancellationToken) ?? throw new InvalidOperationException("La venta no está activa para devolución en esta caja.");
+        if (await database.MercadoPagoOrders.AnyAsync(item => item.SaleOperationId == sale.OperationId && item.Status == "Approved", cancellationToken))
+            throw new InvalidOperationException("Esta venta fue cobrada con Mercado Pago Point. JetVenta no registrará la devolución hasta confirmar el reembolso con la terminal o el proveedor; así se evita dejar un cargo activo al cliente.");
         var shift = await database.Shifts.SingleOrDefaultAsync(item => item.UserId == user.Id && item.RegisterId == authorization.RegisterId && item.Status == "Open", cancellationToken) ?? throw new InvalidOperationException("El usuario no tiene un turno abierto en esta caja.");
         var sold = await database.SaleLines.Where(item => item.SaleId == sale.Id).ToDictionaryAsync(item => item.ProductId, cancellationToken);
         var returned = await database.ReturnLines.Where(item => item.ReturnId != Guid.Empty && database.Returns.Any(ret => ret.Id == item.ReturnId && ret.SaleId == sale.Id)).GroupBy(item => item.ProductId).Select(group => new { ProductId = group.Key, Quantity = group.Sum(item => item.Quantity) }).ToDictionaryAsync(item => item.ProductId, item => item.Quantity, cancellationToken);

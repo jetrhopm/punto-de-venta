@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 namespace Pos.Integrations.MercadoPago;
 
 public sealed record MercadoPagoTerminal(string Id, string PosId, string StoreId, string ExternalPosId, string OperatingMode);
-public sealed record MercadoPagoOrder(string Id, string Status, string StatusDetail, string? PaymentId, decimal Amount);
+public sealed record MercadoPagoOrder(string Id, string Status, string StatusDetail, string? PaymentId, decimal Amount, decimal? PaidAmount);
 
 public sealed class MercadoPagoPointException(string message, int statusCode, string? providerCode = null) : Exception(message)
 {
@@ -56,11 +56,9 @@ public sealed class MercadoPagoPointClient(HttpClient client)
             external_reference = $"jetventa_{operationId:N}",
             expiration_time = "PT10M",
             transactions = new { payments = new[] { new { amount = decimal.Round(amount, 2).ToString("0.00", CultureInfo.InvariantCulture) } } },
-            config = new
-            {
-                point = new { terminal_id = terminalId, print_on_terminal = "no_ticket" },
-                payment_method = new { default_type = "credit_card" }
-            },
+            // Sin default_type la terminal permite los medios configurados para ella,
+            // incluidos débito. Forzar crédito excluía tarjetas de débito.
+            config = new { point = new { terminal_id = terminalId, print_on_terminal = "no_ticket" } },
             description = string.IsNullOrWhiteSpace(description) ? "Venta JetVenta" : description[..Math.Min(description.Length, 150)]
         }, options: JsonOptions);
         using var response = await client.SendAsync(request, cancellationToken);
@@ -78,7 +76,7 @@ public sealed class MercadoPagoPointClient(HttpClient client)
         return ParseOrder(body);
     }
 
-    public async Task CancelOrderAsync(string accessToken, string orderId, Guid cancellationId, CancellationToken cancellationToken)
+    public async Task<MercadoPagoOrder> CancelOrderAsync(string accessToken, string orderId, Guid cancellationId, CancellationToken cancellationToken)
     {
         using var request = CreateRequest(HttpMethod.Post, $"v1/orders/{Uri.EscapeDataString(orderId)}/cancel", accessToken);
         request.Headers.Add("X-Idempotency-Key", cancellationId.ToString());
@@ -86,6 +84,7 @@ public sealed class MercadoPagoPointClient(HttpClient client)
         using var response = await client.SendAsync(request, cancellationToken);
         var body = await ReadBodyAsync(response, cancellationToken);
         EnsureSuccess(response, body);
+        return ParseOrder(body);
     }
 
     public async Task<OAuthTokenResult> ExchangeAuthorizationCodeAsync(string clientId, string clientSecret, string code, string redirectUri, string codeVerifier, CancellationToken cancellationToken)
@@ -138,8 +137,9 @@ public sealed class MercadoPagoPointClient(HttpClient client)
     {
         var result = JsonSerializer.Deserialize<OrderResponse>(body, JsonOptions) ?? throw new MercadoPagoPointException("Mercado Pago devolvió una order vacía.", 502);
         var payment = result.Transactions?.Payments?.FirstOrDefault();
-        _ = decimal.TryParse(payment?.PaidAmount ?? payment?.Amount, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount);
-        return new MercadoPagoOrder(result.Id ?? string.Empty, result.Status ?? "unknown", result.StatusDetail ?? string.Empty, payment?.Id, amount);
+        _ = decimal.TryParse(payment?.Amount, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount);
+        decimal? paidAmount = decimal.TryParse(payment?.PaidAmount, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedPaidAmount) ? parsedPaidAmount : null;
+        return new MercadoPagoOrder(result.Id ?? string.Empty, result.Status ?? "unknown", result.StatusDetail ?? string.Empty, payment?.Id, amount, paidAmount);
     }
 
     private static async Task<string> ReadBodyAsync(HttpResponseMessage response, CancellationToken cancellationToken) => await response.Content.ReadAsStringAsync(cancellationToken);

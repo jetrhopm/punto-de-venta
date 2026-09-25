@@ -23,8 +23,23 @@ public sealed class MercadoPagoPointClientTests
         Assert.Contains("\"amount\":\"125.50\"", handler.Body);
         Assert.Contains("\"terminal_id\":\"PAX_A910__123\"", handler.Body);
         Assert.Contains("\"print_on_terminal\":\"no_ticket\"", handler.Body);
+        Assert.DoesNotContain("default_type", handler.Body);
         Assert.Equal("ORD-123", result.Id);
         Assert.Equal(125.5m, result.Amount);
+    }
+
+    [Fact]
+    public async Task ParsesPaidAmountSeparatelyFromRequestedAmount()
+    {
+        var handler = new RecordingHandler("""
+            {"id":"ORD-124","status":"processed","status_detail":"accredited","transactions":{"payments":[{"id":"PAY-10","amount":"125.50","paid_amount":"120.00"}]}}
+            """);
+        var client = CreateClient(handler);
+
+        var result = await client.GetOrderAsync("TEST-token", "ORD-124", CancellationToken.None);
+
+        Assert.Equal(125.5m, result.Amount);
+        Assert.Equal(120m, result.PaidAmount);
     }
 
     [Fact]

@@ -23,6 +23,8 @@ public sealed class SaleReversalService(PosDbContext database, KitService kits)
             database.Shifts.Any(shift => shift.Id == item.ShiftId && shift.RegisterId == authorization.RegisterId), cancellationToken) ?? throw new KeyNotFoundException("Venta no encontrada en esta caja.");
         if (sale.Status != "Completed") throw new InvalidOperationException("La venta ya no esta activa.");
         if (await database.SaleReversals.AnyAsync(item => item.SaleId == sale.Id, cancellationToken)) throw new InvalidOperationException("La venta ya fue cancelada.");
+        if (await database.MercadoPagoOrders.AnyAsync(item => item.SaleOperationId == sale.OperationId && item.Status == "Approved", cancellationToken))
+            throw new InvalidOperationException("Esta venta fue cobrada con Mercado Pago Point. JetVenta no la cancelará hasta confirmar el reembolso con la terminal o el proveedor; así se evita dejar un cargo activo al cliente.");
         var shift = await database.Shifts.SingleOrDefaultAsync(item => item.UserId == user.Id && item.RegisterId == authorization.RegisterId && item.Status == "Open", cancellationToken) ?? throw new InvalidOperationException("El usuario no tiene un turno abierto en esta caja.");
         var lines = await database.SaleLines.Where(item => item.SaleId == sale.Id).ToListAsync(cancellationToken);
         var replenishments = new List<InventoryReplenishment>();

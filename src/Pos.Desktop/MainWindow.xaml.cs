@@ -1295,7 +1295,7 @@ public partial class MainWindow : Window
     private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
     private sealed record CutSettingsResponse(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, bool BlockSalesWhenCashLimitReached, decimal CashLimit, string CashLimitMessage);
     private sealed record CashCutResponse(decimal InitialCash, decimal TotalSales, int SalesCount, decimal CashSales, decimal CardSales, decimal TransferSales, decimal CreditSales, decimal CashIn, decimal CashOut, decimal CashReturns, decimal Profit, decimal ExpectedCash);
-    private sealed record MercadoPagoStatus(bool Enabled);
+    private sealed record MercadoPagoCheckoutStatus(bool Enabled, string RegisterName);
     private sealed record CurrentShiftResponse(Guid ShiftId, Guid RegisterId, Guid UserId, decimal InitialCash, DateTimeOffset OpenedAtUtc);
     private sealed record OpenShiftConflictResponse(string? Code, string? Message, string? OpenedBy, DateTimeOffset OpenedAtUtc);
     private sealed record LatestTicketResponse(Guid SaleId);
@@ -1527,7 +1527,7 @@ public partial class MainWindow : Window
             var pointAmount = cashWindow.PaymentMethod == "Card" ? ticketTotal : cashWindow.PaymentMethod == "Mixed" ? cashWindow.CardAmount : 0m;
             if (pointAmount > 0m && await IsMercadoPagoEnabledAsync())
             {
-                var point = new MercadoPagoPaymentWindow(ticket.OperationId, pointAmount) { Owner = this };
+                var point = new MercadoPagoPaymentWindow(ticket.OperationId, Guid.NewGuid(), pointAmount) { Owner = this };
                 if (point.ShowDialog() != true || !point.Approved) { StatusText.Text = "La venta sigue abierta porque el cobro con Mercado Pago no fue aprobado."; return; }
             }
             var cashReceived = cashWindow.CreditRequested || cashWindow.PaymentMethod is not ("Cash" or "Mixed") ? 0m : cashWindow.Received.Value;
@@ -1563,8 +1563,9 @@ public partial class MainWindow : Window
 
     private static async Task<bool> IsMercadoPagoEnabledAsync()
     {
-        try { return (await Client.GetFromJsonAsync<MercadoPagoStatus>("/api/integrations/mercado-pago/settings"))?.Enabled == true; }
-        catch { return false; }
+        using var response = await Client.GetAsync("/api/integrations/mercado-pago/checkout-status");
+        if (!response.IsSuccessStatusCode) throw new HttpRequestException("No fue posible consultar la configuración Point de esta caja.");
+        return (await response.Content.ReadFromJsonAsync<MercadoPagoCheckoutStatus>())?.Enabled == true;
     }
 
     private async void OnCancelLastSaleClick(object sender, RoutedEventArgs e)

@@ -102,10 +102,12 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
                 throw new InvalidOperationException("La venta en efectivo está bloqueada porque se alcanzó el límite de efectivo en caja. Registra un retiro autorizado (F8) antes de continuar.");
         }
         var mercadoPagoAmount = command.PaymentMethod == "Card" ? totalSale : command.PaymentMethod == "Mixed" ? command.CardAmount : 0m;
-        if (store.MercadoPagoEnabled && mercadoPagoAmount > 0m)
+        // Point se configura por caja. Si está activo, la API nunca acepta una
+        // venta de tarjeta sin una autorización aprobada para este mismo ticket.
+        if (register.MercadoPagoEnabled && mercadoPagoAmount > 0m)
         {
-            var pointPayment = await database.MercadoPagoOrders.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
-            if (pointPayment is null || pointPayment.Status != "Approved" || pointPayment.Amount != mercadoPagoAmount)
+            var pointPayment = await database.MercadoPagoOrders.AsNoTracking().SingleOrDefaultAsync(item => item.SaleOperationId == command.OperationId && item.RegisterId == register.Id && item.Status == "Approved", cancellationToken);
+            if (pointPayment is null || pointPayment.Amount != decimal.Round(mercadoPagoAmount, 2))
                 throw new InvalidOperationException("El cobro con Mercado Pago todavía no está aprobado o no coincide con el total de la venta.");
         }
         CustomerRecord? customer = null;
