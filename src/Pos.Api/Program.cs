@@ -60,6 +60,13 @@ builder.Services.AddHttpClient<FacturamaSettingsService>(client => client.Timeou
 builder.Services.AddScoped<SystemDiagnosticsService>();
 builder.Services.AddScoped<MercadoPagoPointService>();
 builder.Services.AddHostedService<MercadoPagoWebhookHostedService>();
+builder.Services.AddHttpClient<Pos.Integrations.MercadoPago.JetVentaBrokerClient>(client =>
+{
+    // Intermediario OAuth central (services/mp-broker). Sólo se acepta HTTPS.
+    if (Uri.TryCreate(builder.Configuration["MercadoPago:BrokerUrl"], UriKind.Absolute, out var brokerUrl) && brokerUrl.Scheme == Uri.UriSchemeHttps)
+        client.BaseAddress = new Uri(brokerUrl.AbsoluteUri.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(20);
+});
 builder.Services.AddHttpClient<Pos.Integrations.MercadoPago.MercadoPagoPointClient>(client =>
 {
     client.BaseAddress = new Uri("https://api.mercadopago.com/");
@@ -134,8 +141,7 @@ WriteStartupLog("Migraciones aplicadas. API lista para recibir solicitudes.");
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path;
-    var isMercadoPagoWebhook = path.StartsWithSegments("/api/integrations/mercado-pago/webhook");
-    var bypassMaintenance = path.StartsWithSegments("/health") || path.StartsWithSegments("/api/maintenance/status") || path.StartsWithSegments("/api/maintenance/restore-session") || isMercadoPagoWebhook;
+    var bypassMaintenance = path.StartsWithSegments("/health") || path.StartsWithSegments("/api/maintenance/status") || path.StartsWithSegments("/api/maintenance/restore-session");
     var maintenance = context.RequestServices.GetRequiredService<MaintenanceModeService>().GetStatus();
     if (!bypassMaintenance && maintenance.IsActive)
     {
@@ -147,7 +153,6 @@ app.Use(async (context, next) =>
         path.StartsWithSegments("/api/setup") ||
         path.StartsWithSegments("/api/auth") ||
         path.StartsWithSegments("/api/license") ||
-        isMercadoPagoWebhook ||
         path.StartsWithSegments("/api/maintenance/backups") ||
         path.StartsWithSegments("/api/maintenance/status") ||
         path.StartsWithSegments("/api/lan/info");
@@ -216,9 +221,7 @@ app.MapGet("/api/license/status", async (HttpRequest request, LicenseService lic
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path;
-    var isOAuthCallback = path.StartsWithSegments("/api/integrations/mercado-pago/oauth/callback");
-    var isMercadoPagoWebhook = path.StartsWithSegments("/api/integrations/mercado-pago/webhook");
-    if (!isOAuthCallback && !isMercadoPagoWebhook && !LanNetworkPolicy.IsLocalOrPrivate(context.Connection.RemoteIpAddress))
+    if (!LanNetworkPolicy.IsLocalOrPrivate(context.Connection.RemoteIpAddress))
     {
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         await context.Response.WriteAsJsonAsync(new { code = "lan_only", message = "JetVenta sólo acepta conexiones desde localhost o una red privada." });
@@ -234,11 +237,11 @@ app.Use(async (context, next) =>
         path.StartsWithSegments("/api/auth/login") ||
         path.StartsWithSegments("/api/auth/active-users") ||
         path.StartsWithSegments("/api/license/startup-status") ||
+        path.StartsWithSegments("/api/license/activation-status") ||
+        path.StartsWithSegments("/api/license/activation-import") ||
         path.StartsWithSegments("/api/lan/info") ||
         path.StartsWithSegments("/api/lan/pair") ||
-        path.StartsWithSegments("/api/maintenance/status") ||
-        isOAuthCallback ||
-        isMercadoPagoWebhook;
+        path.StartsWithSegments("/api/maintenance/status");
     var requiresProtocol = path.StartsWithSegments("/api/auth/login") || path.StartsWithSegments("/api/lan/pair") || (!allowsAnonymous && path.StartsWithSegments("/api"));
     if (requiresProtocol && context.Request.Headers["X-JetVenta-Lan-Protocol"].ToString() != LanNetworkPolicy.ProtocolVersion.ToString())
     {
@@ -267,6 +270,16 @@ app.Use(async (context, next) =>
     await next();
 });
 app.MapGet("/api/license/startup-status", (LicenseService licenses) => Results.Ok(licenses.GetStartupStatus()));
+app.MapGet("/api/license/activation-status", (LicenseService licenses) => Results.Ok(licenses.GetRuntimeStatus()));
+app.MapPost("/api/license/activation-import", async (ActivateLicenseCommand command, LicenseService licenses, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await licenses.ActivateAsync(command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["license"] = [exception.Message] }); }
+}).RequireRateLimiting("lan-auth");
 app.MapPost("/api/license/import", async (HttpRequest request, ImportLicenseCommand command, LicenseService licenses, CancellationToken cancellationToken) =>
 {
     try
@@ -310,7 +323,7 @@ app.MapGet("/api/lan/info", () => Results.Ok(new
 {
     service = "Pos.Api",
     protocolVersion = LanNetworkPolicy.ProtocolVersion,
-    apiVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0",
+    apiVersion = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
     machine = Environment.MachineName
 }));
 app.MapPost("/api/lan/pairing-codes", async (HttpRequest request, LanPairingService pairing, CancellationToken cancellationToken) =>
@@ -401,32 +414,8 @@ app.MapPut("/api/integrations/mercado-pago/terminal", async (HttpRequest request
 app.MapPost("/api/integrations/mercado-pago/terminal/pdv", async (HttpRequest request, ActivateMercadoPagoTerminalCommand command, MercadoPagoPointService service, CancellationToken cancellationToken) => { try { var result = await service.ActivateTerminalAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(); } catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["terminal"] = [exception.Message] }); } catch (Pos.Integrations.MercadoPago.MercadoPagoPointException exception) { return Results.Problem(exception.Message, statusCode: StatusCodes.Status502BadGateway); } catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); } });
 app.MapPut("/api/integrations/mercado-pago/enabled", async (HttpRequest request, SetMercadoPagoEnabledCommand command, MercadoPagoPointService service, CancellationToken cancellationToken) => { try { var result = await service.SetEnabledAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(); } catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); } });
 app.MapPost("/api/integrations/mercado-pago/disconnect", async (HttpRequest request, MercadoPagoPointService service, CancellationToken cancellationToken) => { var result = await service.DisconnectAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(); });
-app.MapPost("/api/integrations/mercado-pago/oauth/start", async (HttpRequest request, MercadoPagoPointService service, CancellationToken cancellationToken) => { try { var url = await service.BeginOAuthAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return url is null ? Results.Unauthorized() : Results.Ok(new { url }); } catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); } });
-app.MapGet("/api/integrations/mercado-pago/oauth/callback", async (string code, string state, MercadoPagoPointService service, CancellationToken cancellationToken) => { try { await service.CompleteOAuthAsync(code, state, cancellationToken); return Results.Content("<html><body style='font-family:Segoe UI;padding:40px'><h1>Cuenta autorizada</h1><p>Regresa a JetVenta para seleccionar tu terminal Point.</p></body></html>", "text/html"); } catch (Exception exception) { return Results.Problem(exception.Message, statusCode: StatusCodes.Status400BadRequest); } });
-app.MapPost("/api/integrations/mercado-pago/webhook", async (HttpRequest request, MercadoPagoPointService service, IConfiguration configuration, CancellationToken cancellationToken) =>
-{
-    var providerOrderId = request.Query["data.id"].ToString();
-    var requestId = request.Headers["x-request-id"].ToString();
-    var signature = request.Headers["x-signature"].ToString();
-    var secret = configuration["MercadoPago:WebhookSecret"];
-    var validation = Pos.Integrations.MercadoPago.MercadoPagoWebhookSignature.Validate(signature, requestId, providerOrderId, secret, DateTimeOffset.UtcNow);
-    if (!validation.IsValid) return string.IsNullOrWhiteSpace(secret) ? Results.Problem(validation.Error, statusCode: StatusCodes.Status503ServiceUnavailable) : Results.Unauthorized();
-
-    var action = "order.updated";
-    var type = "order";
-    try
-    {
-        using var body = await System.Text.Json.JsonDocument.ParseAsync(request.Body, cancellationToken: cancellationToken);
-        if (body.RootElement.TryGetProperty("action", out var actionElement)) action = actionElement.GetString() ?? action;
-        if (body.RootElement.TryGetProperty("type", out var typeElement)) type = typeElement.GetString() ?? string.Empty;
-    }
-    catch (System.Text.Json.JsonException) { }
-
-    if (!string.Equals(type, "order", StringComparison.OrdinalIgnoreCase)) return Results.Ok(new { accepted = true, message = "El evento no corresponde a una orden Point." });
-
-    var receipt = await service.ReceiveWebhookAsync(providerOrderId, requestId, action, signature, cancellationToken);
-    return receipt.Accepted ? Results.Ok(receipt) : Results.BadRequest(new { message = receipt.Message });
-});
+app.MapPost("/api/integrations/mercado-pago/oauth/start", async (HttpRequest request, MercadoPagoPointService service, CancellationToken cancellationToken) => { try { var url = await service.BeginOAuthAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return url is null ? Results.Unauthorized() : Results.Ok(new { url }); } catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); } catch (Pos.Integrations.MercadoPago.MercadoPagoPointException exception) { return Results.Problem(exception.Message, statusCode: StatusCodes.Status502BadGateway); } });
+app.MapGet("/api/integrations/mercado-pago/oauth/status", async (HttpRequest request, MercadoPagoPointService service, CancellationToken cancellationToken) => { try { var result = await service.GetOAuthStatusAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); } catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); } catch (Pos.Integrations.MercadoPago.MercadoPagoPointException exception) { return Results.Problem(exception.Message, statusCode: StatusCodes.Status502BadGateway); } });
 app.MapPost("/api/integrations/mercado-pago/orders", async (HttpRequest request, CreateMercadoPagoOrderCommand command, MercadoPagoPointService service, CancellationToken cancellationToken) => { try { var result = await service.CreateOrderAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); } catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["order"] = [exception.Message] }); } catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); } catch (Pos.Integrations.MercadoPago.MercadoPagoPointException exception) { return Results.Problem(exception.Message, statusCode: StatusCodes.Status502BadGateway); } });
 app.MapGet("/api/integrations/mercado-pago/orders/{operationId:guid}", async (Guid operationId, HttpRequest request, MercadoPagoPointService service, CancellationToken cancellationToken) => { try { var result = await service.RefreshOrderAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), operationId, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); } catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); } catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); } catch (Pos.Integrations.MercadoPago.MercadoPagoPointException exception) { return Results.Problem(exception.Message, statusCode: StatusCodes.Status502BadGateway); } });
 app.MapPost("/api/integrations/mercado-pago/orders/{operationId:guid}/cancel", async (Guid operationId, HttpRequest request, MercadoPagoPointService service, CancellationToken cancellationToken) => { try { var result = await service.CancelOrderAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), operationId, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); } catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); } catch (Pos.Integrations.MercadoPago.MercadoPagoPointException exception) { return Results.Problem(exception.Message, statusCode: StatusCodes.Status502BadGateway); } });
@@ -658,6 +647,27 @@ app.MapPost("/api/purchases/receive", async (HttpRequest request, ReceivePurchas
     try { var result = await purchases.ReceiveAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["purchase"] = [exception.Message] }); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+app.MapGet("/api/purchases", async (HttpRequest request, DateTimeOffset? from, DateTimeOffset? to, Guid? userId, Guid? supplierId, bool? paidFromCash, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
+{
+    var result = await purchases.HistoryAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), from, to, userId, supplierId, paidFromCash, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapGet("/api/purchases/cashiers", async (HttpRequest request, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
+{
+    var result = await purchases.HistoryCashiersAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapGet("/api/purchases/pricing-defaults", async (HttpRequest request, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
+{
+    var result = await purchases.PricingDefaultsAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapGet("/api/purchases/{purchaseId:guid}", async (HttpRequest request, Guid purchaseId, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
+{
+    try { var result = await purchases.HistoryDetailAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), purchaseId, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
 
 app.MapGet("/api/products/search", async (string? q, PosDbContext database, CancellationToken cancellationToken) =>
@@ -671,6 +681,17 @@ app.MapGet("/api/products/search", async (string? q, PosDbContext database, Canc
         .Select(product => new { product.Id, product.Code, product.Description, product.Category, product.Price, product.Cost, product.ProfitPercent, product.WholesalePrice, product.WholesaleMinimumQuantity, product.Stock, product.MinimumStock, product.MaximumStock, product.IsKit, product.UnitOfMeasure, product.IsActive })
         .ToListAsync(cancellationToken);
     return Results.Ok(products);
+});
+
+app.MapGet("/api/products/by-code", async (string? code, PosDbContext database, CancellationToken cancellationToken) =>
+{
+    var normalized = ProductCatalogService.NormalizeCode(code ?? string.Empty);
+    if (string.IsNullOrWhiteSpace(normalized)) return Results.NotFound();
+    var product = await database.Products.AsNoTracking()
+        .Where(item => item.IsActive && !item.IsTemporary && item.NormalizedCode == normalized)
+        .Select(item => new { item.Id, item.Code, item.Description, item.Price, item.Stock, item.UnitOfMeasure, item.IsCommonProduct, item.WholesalePrice, item.WholesaleMinimumQuantity })
+        .SingleOrDefaultAsync(cancellationToken);
+    return product is null ? Results.NotFound() : Results.Ok(product);
 });
 
 app.MapGet("/api/products/catalog", async (string? q, Guid? departmentId, decimal? minimumPrice, decimal? maximumPrice, decimal? minimumProfit, bool? includeInactive, string? sort, bool descending, int? page, ProductCatalogService catalog, HttpRequest request, CancellationToken cancellationToken) =>
@@ -1069,6 +1090,13 @@ app.MapPost("/api/shifts/close", async (HttpRequest request, CloseShiftCommand c
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 
+app.MapPost("/api/shifts/handoff", async (HttpRequest request, HandoffShiftCommand command, CashRegisterService cash, CancellationToken cancellationToken) =>
+{
+    try { var result = await cash.HandoffAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["cash"] = [exception.Message] }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+
 app.MapGet("/api/shifts/summary", async (HttpRequest request, CashRegisterService cash, CancellationToken cancellationToken) =>
 {
     var result = await cash.CurrentSummaryAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
@@ -1093,6 +1121,13 @@ app.MapGet("/api/shifts/cut/day", async (HttpRequest request, string date, Guid?
     if (!DateOnly.TryParseExact(date, "yyyy-MM-dd", out var selectedDate)) return Results.BadRequest(new { message = "La fecha debe tener formato AAAA-MM-DD." });
     var result = await cash.CutForDayAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), selectedDate, cashierId, cancellationToken);
     return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+app.MapGet("/api/shifts/cut/day/handoffs", async (HttpRequest request, string date, Guid? cashierId, CashRegisterService cash, CancellationToken cancellationToken) =>
+{
+    if (!DateOnly.TryParseExact(date, "yyyy-MM-dd", out var selectedDate)) return Results.BadRequest(new { message = "La fecha debe tener formato AAAA-MM-DD." });
+    var result = await cash.HandoffsForDayAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), selectedDate, cashierId, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
 
 app.MapPost("/api/setup/initial", async (InitialSetupCommand command, InitialSetupService setup, CancellationToken cancellationToken) =>
@@ -1187,6 +1222,21 @@ app.MapPost("/api/shifts/open", async (HttpRequest request, OpenShiftCommand com
             openedAtUtc = exception.Conflict.OpenedAtUtc
         });
     }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+
+app.MapGet("/api/shifts/handoff/pending", async (HttpRequest request, ShiftService shifts, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    var result = await shifts.PendingHandoffAsync(token, cancellationToken);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+app.MapPost("/api/shifts/handoff/receive", async (HttpRequest request, ReceiveShiftHandoffCommand command, ShiftService shifts, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    try { var result = await shifts.ReceiveHandoffAsync(token, command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["cash"] = [exception.Message] }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
 });
 

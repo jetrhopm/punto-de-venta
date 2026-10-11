@@ -116,8 +116,9 @@ public sealed class InventoryService(PosDbContext database)
     public async Task<InventoryAdjustmentResult?> AdjustAsync(string token, InventoryAdjustmentCommand command, CancellationToken cancellationToken)
     {
         var reason = command.Reason?.Trim() ?? string.Empty;
-        if (command.OperationId == Guid.Empty || command.ProductId == Guid.Empty || command.Quantity == 0m || reason.Length == 0) throw new ArgumentException("El ajuste requiere operación, producto, cantidad distinta de cero y motivo.");
+        if (command.OperationId == Guid.Empty || command.ProductId == Guid.Empty || command.Quantity == 0m) throw new ArgumentException("El ajuste requiere operación, producto y una cantidad distinta de cero.");
         if (reason.Length > 80) throw new ArgumentException("El motivo del ajuste no puede superar 80 caracteres.");
+        if (reason.Length == 0) reason = "Ajuste manual";
         var userId = await GetAuthorizedUserAsync(token, "AdjustInventory", cancellationToken);
         if (userId is null) return null;
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);

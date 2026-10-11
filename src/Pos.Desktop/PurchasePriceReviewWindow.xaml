@@ -1,0 +1,71 @@
+<Window x:Class="Pos.Desktop.PurchasePriceReviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
+        Title="Revisar precios de venta" Width="900" Height="640" MinWidth="760" MinHeight="460"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource AppBackgroundBrush}" PreviewKeyDown="OnPreviewKeyDown">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+    </Window.Resources>
+    <Grid Margin="22">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel Orientation="Horizontal">
+            <Border Width="46" Height="46" Background="#FFF4DE" CornerRadius="6"><icons:PackIconMaterial Kind="TagEditOutline" Width="26" Height="26" Foreground="#A96300" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+            <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                <TextBlock Text="Revisar precios de venta" FontSize="22" FontWeight="SemiBold" Foreground="#17324D"/>
+                <TextBlock x:Name="SummaryText" Foreground="#637589"/>
+            </StackPanel>
+        </StackPanel>
+        <Border Grid.Row="1" Background="#EAF3F8" BorderBrush="#C9DCE8" BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="0,14,0,10">
+            <TextBlock TextWrapping="Wrap" Foreground="#31566D" Text="El costo se promedia con lo que ya tienes en existencia. Decide si el precio de venta se ajusta con el % de ganancia o se sigue vendiendo al mismo precio. El precio de venta nunca puede quedar por debajo del precio del proveedor."/>
+        </Border>
+        <ListBox Grid.Row="2" x:Name="RowsList" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled" BorderBrush="{StaticResource LineBrush}" Background="White" KeyboardNavigation.TabNavigation="Continue">
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                    <Setter Property="Focusable" Value="False"/>
+                    <Setter Property="Padding" Value="0"/>
+                </Style>
+            </ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Border BorderBrush="#E4EBF0" BorderThickness="0,0,0,1" Padding="12,10">
+                        <StackPanel>
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding Code}" Foreground="#637589" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding Description}" FontWeight="SemiBold" FontSize="15" Foreground="#17324D" TextTrimming="CharacterEllipsis"/>
+                            </DockPanel>
+                            <TextBlock Text="{Binding CostSummary}" Foreground="#526577" Margin="0,3,0,0"/>
+                            <TextBlock Text="{Binding Reason}" Foreground="#A96300" TextWrapping="Wrap" Margin="0,3,0,6"/>
+                            <WrapPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,22,4">
+                                    <RadioButton GroupName="{Binding GroupName}" IsChecked="{Binding IsApplyPercent, Mode=TwoWay}" VerticalAlignment="Center" Content="Actualizar con"/>
+                                    <TextBox Text="{Binding PercentText, UpdateSourceTrigger=PropertyChanged}" Width="62" Height="30" Margin="6,0,4,0" VerticalContentAlignment="Center" ToolTip="% de ganancia sobre el costo promedio nuevo"/>
+                                    <TextBlock Text="%" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding SuggestedPriceText}" VerticalAlignment="Center" Margin="8,0,0,0" FontWeight="SemiBold" Foreground="#156EA8"/>
+                                </StackPanel>
+                                <RadioButton GroupName="{Binding GroupName}" IsChecked="{Binding IsKeepPrice, Mode=TwoWay}" IsEnabled="{Binding CanKeep}" VerticalAlignment="Center" Margin="0,0,22,4" Content="{Binding KeepText}"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <RadioButton GroupName="{Binding GroupName}" IsChecked="{Binding IsManualPrice, Mode=TwoWay}" VerticalAlignment="Center" Content="Otro precio $"/>
+                                    <TextBox Text="{Binding ManualPriceText, UpdateSourceTrigger=PropertyChanged}" Width="90" Height="30" Margin="6,0,0,0" VerticalContentAlignment="Center"/>
+                                </StackPanel>
+                            </WrapPanel>
+                            <TextBlock Text="{Binding ValidationText}" Foreground="#B42318" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding ResultText}" Foreground="#16834A" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock Grid.Row="3" x:Name="MessageText" Foreground="#B42318" TextWrapping="Wrap" Margin="0,8,0,0"/>
+        <DockPanel Grid.Row="4" Margin="0,12,0,0" LastChildFill="False">
+            <Button DockPanel.Dock="Left" Style="{StaticResource PrimaryButtonStyle}" Height="38" Padding="14,0" Click="OnApplyAllClick" ToolTip="Calcula el precio de todos con su % de ganancia">
+                <StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="Percent" Width="16" Height="16" Margin="0,0,6,0"/><TextBlock Text="Actualizar todos con %"/></StackPanel>
+            </Button>
+            <Button DockPanel.Dock="Left" Height="38" Padding="14,0" Margin="8,0,0,0" Click="OnKeepAllClick" ToolTip="Sigue vendiendo todos al mismo precio cuando sea posible">
+                <StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="TagCheckOutline" Width="16" Height="16" Margin="0,0,6,0"/><TextBlock Text="Conservar todos"/></StackPanel>
+            </Button>
+            <Button DockPanel.Dock="Right" Width="150" Height="38" Style="{StaticResource ConfirmButtonStyle}" Click="OnConfirmClick">Confirmar precios</Button>
+            <Button DockPanel.Dock="Right" Width="112" Height="38" Margin="0,0,8,0" Style="{StaticResource CancelButtonStyle}" Click="OnCancelClick">Cancelar</Button>
+        </DockPanel>
+    </Grid>
+</Window>

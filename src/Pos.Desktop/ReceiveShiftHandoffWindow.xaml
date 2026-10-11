@@ -1,0 +1,14 @@
+<Window x:Class="Pos.Desktop.ReceiveShiftHandoffWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Recibir turno" Width="500" Height="420" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <Grid Margin="24"><StackPanel>
+        <TextBlock Text="Recibir turno" FontSize="22" FontWeight="SemiBold" Foreground="#17324D"/>
+        <TextBlock x:Name="DescriptionText" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#526577"/>
+        <TextBlock Text="Efectivo reportado por el cajero anterior" Margin="0,16,0,2" Foreground="#526577"/>
+        <TextBlock x:Name="DeliveredCashText" FontSize="24" FontWeight="Bold" Foreground="#146CB0"/>
+        <TextBlock Text="Efectivo que recibiste y contaste" Margin="0,16,0,4"/>
+        <TextBox x:Name="ReceivedCashTextBox" Height="36" FontSize="18"/>
+        <TextBlock Text="Diferencia contra la entrega" Margin="0,12,0,2" Foreground="#526577"/>
+        <TextBlock x:Name="DifferenceText" FontSize="18" FontWeight="SemiBold"/>
+        <Button Margin="0,18,0,0" Height="38" Background="#146CB0" Foreground="White" FontWeight="Bold" Click="OnConfirmClick">Confirmar recepción y abrir turno</Button>
+        <TextBlock x:Name="MessageText" Margin="0,12,0,0" Foreground="#B42318" TextWrapping="Wrap"/>
+    </StackPanel></Grid>
+</Window>

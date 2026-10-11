@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.IO.Ports;
-using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -8,7 +7,6 @@ namespace Pos.Desktop;
 
 public partial class ScaleSettingsWindow : Window
 {
-    private static readonly Regex WeightPattern = new(@"(?<!\d)[+-]?\d+(?:[.,]\d+)?", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private bool _loaded;
 
     public ScaleSettingsWindow()
@@ -22,7 +20,7 @@ public partial class ScaleSettingsWindow : Window
         var settings = ApiClient.Scale;
         LoadPorts(settings.Port);
         EnabledCheck.IsChecked = settings.Enabled;
-        SelectText(BaudRateBox, settings.BaudRate.ToString(CultureInfo.InvariantCulture)); SelectText(ParityBox, settings.Parity); SelectText(DataBitsBox, settings.DataBits.ToString(CultureInfo.InvariantCulture)); SelectText(StopBitsBox, settings.StopBits); SelectText(TerminatorBox, settings.Terminator); SelectText(UnitBox, settings.Unit); TimeoutBox.Text = settings.ReadTimeoutMs.ToString(CultureInfo.InvariantCulture);
+        SelectModel(settings.Model); SelectText(BaudRateBox, settings.BaudRate.ToString(CultureInfo.InvariantCulture)); SelectText(ParityBox, settings.Parity); SelectText(DataBitsBox, settings.DataBits.ToString(CultureInfo.InvariantCulture)); SelectText(StopBitsBox, settings.StopBits); SelectText(TerminatorBox, settings.Terminator); SelectText(UnitBox, settings.Unit); TimeoutBox.Text = settings.ReadTimeoutMs.ToString(CultureInfo.InvariantCulture);
         StatusText.Text = "Selecciona el puerto y prueba una lectura antes de guardar. La configuración se conserva sólo en esta computadora.";
         _loaded = true; UpdateEnabledState();
     }
@@ -59,7 +57,7 @@ public partial class ScaleSettingsWindow : Window
         if (!TryRead(out var command)) return;
         try
         {
-            ApiClient.SetScaleProfile(new ScaleProfile(command.Enabled, command.Port, command.BaudRate, command.Parity, command.DataBits, command.StopBits, command.Terminator, command.Unit, command.ReadTimeoutMs));
+            ApiClient.SetScaleProfile(command.ToProfile());
             StatusText.Text = command.Enabled ? $"Báscula guardada en {command.Port} para esta computadora." : "Báscula desactivada en esta computadora.";
             ConfigurationFeedback.ShowSavedAndClose(this, "Báscula", StatusText.Text);
         }
@@ -81,7 +79,7 @@ public partial class ScaleSettingsWindow : Window
         }
         try
         {
-            var reading = await Task.Run(() => ReadSerial(command));
+            var reading = await Task.Run(() => ScaleReadingService.Read(command.ToProfile()));
             RawReadingText.Text = $"Texto recibido: {reading.Raw}";
             ParsedReadingText.Text = $"Peso: {reading.Weight:0.###} {command.Unit.ToLowerInvariant()}";
             StatusText.Text = "Lectura recibida. La estabilidad depende del indicador y protocolo de cada modelo.";
@@ -96,21 +94,9 @@ public partial class ScaleSettingsWindow : Window
         }
     }
 
-    private static ScaleReading ReadSerial(ScaleCommand command)
-    {
-        using var port = new SerialPort(command.Port, command.BaudRate, ParseParity(command.Parity), command.DataBits, ParseStopBits(command.StopBits)) { NewLine = Terminator(command.Terminator), ReadTimeout = command.ReadTimeoutMs, Handshake = Handshake.None, DtrEnable = false, RtsEnable = false };
-        port.Open(); port.DiscardInBuffer(); port.DiscardOutBuffer();
-        var raw = port.ReadLine().Trim();
-        var match = WeightPattern.Match(raw);
-        if (!match.Success) throw new InvalidOperationException("La báscula respondió, pero no se encontró un número de peso en la lectura.");
-        var number = match.Value.Contains(',') && !match.Value.Contains('.') ? match.Value.Replace(',', '.') : match.Value.Replace(",", "");
-        if (!decimal.TryParse(number, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var weight) || weight < 0m) throw new InvalidOperationException("La lectura de peso no es válida.");
-        return new ScaleReading(raw, weight);
-    }
-
     private bool TryRead(out ScaleCommand command)
     {
-        command = new ScaleCommand(EnabledCheck.IsChecked == true, PortBox.SelectedItem as string ?? PortBox.Text.Trim(), ParseInt(BaudRateBox.Text, 9600), TextOf(ParityBox, "None"), ParseInt(TextOf(DataBitsBox, "8"), 8), TextOf(StopBitsBox, "One"), TextOf(TerminatorBox, "CRLF"), TextOf(UnitBox, "Kilogramo"), ParseInt(TimeoutBox.Text, 1500));
+        command = new ScaleCommand(EnabledCheck.IsChecked == true, PortBox.SelectedItem as string ?? PortBox.Text.Trim(), ParseInt(BaudRateBox.Text, 9600), TextOf(ParityBox, "None"), ParseInt(TextOf(DataBitsBox, "8"), 8), TextOf(StopBitsBox, "One"), TextOf(TerminatorBox, "CRLF"), TextOf(UnitBox, "Kilogramo"), ParseInt(TimeoutBox.Text, 1500), ModelOf());
         if (command.Enabled && string.IsNullOrWhiteSpace(command.Port))
         {
             StatusText.Text = "Selecciona el puerto COM de la báscula.";
@@ -142,9 +128,24 @@ public partial class ScaleSettingsWindow : Window
         if (text is not null) { box.SelectedItem = text; return; }
         box.Text = value;
     }
-    private static Parity ParseParity(string value) => Enum.TryParse<Parity>(value, true, out var parsed) ? parsed : Parity.None;
-    private static StopBits ParseStopBits(string value) => Enum.TryParse<StopBits>(value, true, out var parsed) ? parsed : StopBits.One;
-    private static string Terminator(string value) => value switch { "CR" => "\r", "LF" => "\n", _ => "\r\n" };
-    private sealed record ScaleCommand(bool Enabled, string Port, int BaudRate, string Parity, int DataBits, string StopBits, string Terminator, string Unit, int ReadTimeoutMs);
-    private sealed record ScaleReading(string Raw, decimal Weight);
+    private string ModelOf() => (ModelBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() switch { "TorreyPcr40" => "TorreyPcr40", "RhinoBar6X" => "RhinoBar6X", _ => "Generic" };
+    private void SelectModel(string model) => ModelBox.SelectedIndex = model switch { "TorreyPcr40" => 1, "RhinoBar6X" => 2, _ => 0 };
+    private void OnModelChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_loaded) return;
+        if (ModelOf() == "TorreyPcr40")
+        {
+            SelectText(BaudRateBox, "115200"); SelectText(ParityBox, "None"); SelectText(DataBitsBox, "8"); SelectText(StopBitsBox, "One"); SelectText(TerminatorBox, "CR"); SelectText(UnitBox, "Kilogramo");
+            StatusText.Text = "Perfil Torrey PCR-40 aplicado: 115200, 8N1, CR. Confirma el puerto COM detectado por Windows y prueba la lectura.";
+        }
+        else if (ModelOf() == "RhinoBar6X")
+        {
+            SelectText(BaudRateBox, "9600"); SelectText(ParityBox, "None"); SelectText(DataBitsBox, "8"); SelectText(StopBitsBox, "One"); SelectText(TerminatorBox, "CRLF"); SelectText(UnitBox, "Kilogramo");
+            StatusText.Text = "Perfil Rhino BAR-6X aplicado: 9600, 8N1. JetVenta solicita el peso con el comando P.";
+        }
+    }
+    private sealed record ScaleCommand(bool Enabled, string Port, int BaudRate, string Parity, int DataBits, string StopBits, string Terminator, string Unit, int ReadTimeoutMs, string Model)
+    {
+        public ScaleProfile ToProfile() => new(Enabled, Port, BaudRate, Parity, DataBits, StopBits, Terminator, Unit, ReadTimeoutMs, Model);
+    }
 }

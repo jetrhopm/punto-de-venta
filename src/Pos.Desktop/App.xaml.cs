@@ -31,6 +31,8 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        UiDisplayProfileManager.Apply(ApiClient.DisplayProfile);
+
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;

@@ -1,8 +1,34 @@
 <Application x:Class="Pos.Desktop.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:Pos.Desktop">
+             xmlns:local="clr-namespace:Pos.Desktop"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib">
     <Application.Resources>
+        <!-- Métricas visuales locales. El perfil Predeterminado conserva el diseño de 1920 x 1080. -->
+        <sys:Double x:Key="UiWindowFontSize">14</sys:Double>
+        <sys:Double x:Key="UiButtonMinHeight">36</sys:Double>
+        <sys:Double x:Key="UiInputMinHeight">34</sys:Double>
+        <sys:Double x:Key="UiDataGridRowHeight">36</sys:Double>
+        <Thickness x:Key="UiButtonPadding">14,8</Thickness>
+        <Thickness x:Key="UiDataGridHeaderPadding">10,9</Thickness>
+        <sys:Double x:Key="UiTileWidth">155</sys:Double>
+        <sys:Double x:Key="UiTileHeight">90</sys:Double>
+        <sys:Double x:Key="UiNavigationHeight">54</sys:Double>
+        <sys:Double x:Key="UiToolbarHeight">42</sys:Double>
+        <sys:Double x:Key="UiRailButtonHeight">72</sys:Double>
+        <sys:Double x:Key="UiPaymentButtonHeight">64</sys:Double>
+        <GridLength x:Key="UiMainHeaderHeight">76</GridLength>
+        <GridLength x:Key="UiBrandColumnWidth">210</GridLength>
+        <sys:Double x:Key="UiTopNavMinWidth">86</sys:Double>
+        <sys:Double x:Key="UiTopNavFontSize">11</sys:Double>
+        <GridLength x:Key="UiSalesRailWidth">122</GridLength>
+        <GridLength x:Key="UiSalesPaymentWidth">310</GridLength>
+        <Thickness x:Key="UiMainContentMargin">14,12</Thickness>
+        <GridLength x:Key="UiProductEditorWidth">390</GridLength>
+        <GridLength x:Key="UiHistoryDetailWidth">420</GridLength>
+        <GridLength x:Key="UiCutHandoffHeight">190</GridLength>
+        <sys:Double x:Key="UiModuleActionHeight">38</sys:Double>
+        <Thickness x:Key="UiModulePageMargin">22</Thickness>
         <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F3F7FA"/>
         <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF"/>
         <SolidColorBrush x:Key="SurfaceMutedBrush" Color="#EAF3F8"/>
@@ -22,15 +48,15 @@
 
         <Style TargetType="Window">
             <Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontSize" Value="{DynamicResource UiWindowFontSize}"/>
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
             <Setter Property="Background" Value="{StaticResource AppBackgroundBrush}"/>
             <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
         </Style>
 
         <Style TargetType="Button">
-            <Setter Property="MinHeight" Value="36"/>
-            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="MinHeight" Value="{DynamicResource UiButtonMinHeight}"/>
+            <Setter Property="Padding" Value="{DynamicResource UiButtonPadding}"/>
             <Setter Property="Margin" Value="3"/>
             <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
@@ -128,7 +154,7 @@
         </Style>
 
         <Style TargetType="TextBox">
-            <Setter Property="MinHeight" Value="34"/>
+            <Setter Property="MinHeight" Value="{DynamicResource UiInputMinHeight}"/>
             <Setter Property="Padding" Value="9,5"/>
             <Setter Property="Background" Value="White"/>
             <Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/>
@@ -136,14 +162,14 @@
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
         <Style TargetType="PasswordBox">
-            <Setter Property="MinHeight" Value="34"/>
+            <Setter Property="MinHeight" Value="{DynamicResource UiInputMinHeight}"/>
             <Setter Property="Padding" Value="9,5"/>
             <Setter Property="Background" Value="White"/>
             <Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
-        <Style TargetType="ComboBox"><Setter Property="MinHeight" Value="34"/><Setter Property="Padding" Value="8,4"/><Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/></Style>
+        <Style TargetType="ComboBox"><Setter Property="MinHeight" Value="{DynamicResource UiInputMinHeight}"/><Setter Property="Padding" Value="8,4"/><Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/></Style>
         <Style x:Key="SegmentRadioStyle" TargetType="RadioButton">
             <Setter Property="Background" Value="White"/>
             <Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/>
@@ -168,8 +194,8 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <Style TargetType="DataGrid"><Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/><Setter Property="GridLinesVisibility" Value="Horizontal"/><Setter Property="HorizontalGridLinesBrush" Value="#E4EBF0"/><Setter Property="RowHeight" Value="36"/><Setter Property="HeadersVisibility" Value="Column"/><Setter Property="AlternatingRowBackground" Value="#F7FAFC"/></Style>
-        <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#E9F1F6"/><Setter Property="Foreground" Value="{StaticResource TextBrush}"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Padding" Value="10,9"/><Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/><Setter Property="BorderThickness" Value="0,0,0,1"/></Style>
+        <Style TargetType="DataGrid"><Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/><Setter Property="GridLinesVisibility" Value="Horizontal"/><Setter Property="HorizontalGridLinesBrush" Value="#E4EBF0"/><Setter Property="RowHeight" Value="{DynamicResource UiDataGridRowHeight}"/><Setter Property="HeadersVisibility" Value="Column"/><Setter Property="AlternatingRowBackground" Value="#F7FAFC"/></Style>
+        <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#E9F1F6"/><Setter Property="Foreground" Value="{StaticResource TextBrush}"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Padding" Value="{DynamicResource UiDataGridHeaderPadding}"/><Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/><Setter Property="BorderThickness" Value="0,0,0,1"/></Style>
         <Style TargetType="ListBoxItem"><Setter Property="Padding" Value="8,6"/></Style>
         <Style TargetType="ListViewItem"><Setter Property="Padding" Value="8,7"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/></Style>
     </Application.Resources>

@@ -28,7 +28,10 @@ public static class ApiClient
     public static double PrinterFontSize { get; private set; } = 9d;
     public static bool UseNormalTotals { get; private set; }
     public static int PrinterTicketWidthMm { get; private set; } = 80;
+    // Por caja, igual que la impresora: decide si al cerrar turno se imprime el comprobante de corte.
+    public static bool PrintShiftCloseTicket { get; private set; } = true;
     public static int PrinterHorizontalOffsetCharacters { get; private set; }
+    public static DisplayProfile DisplayProfile { get; private set; } = global::Pos.Desktop.DisplayProfile.Standard;
     public static BarcodeScannerProfile BarcodeScanner { get; private set; } = BarcodeScannerProfile.Default;
     public static CashDrawerProfile CashDrawer { get; private set; } = CashDrawerProfile.Default;
     public static ScaleProfile Scale { get; private set; } = ScaleProfile.Default;
@@ -102,6 +105,18 @@ public static class ApiClient
         SaveSettings();
     }
 
+    public static void SetPrintShiftCloseTicket(bool enabled)
+    {
+        PrintShiftCloseTicket = enabled;
+        SaveSettings();
+    }
+
+    public static void SetDisplayProfile(DisplayProfile profile)
+    {
+        DisplayProfile = Enum.IsDefined(profile) ? profile : global::Pos.Desktop.DisplayProfile.Standard;
+        SaveSettings();
+    }
+
     public static void SetPrinter(string? printerName) => SetPrinterProfile(printerName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm);
 
     public static void SetPrinterTicketWidth(int widthMm) => SetPrinterProfile(PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, widthMm);
@@ -133,7 +148,7 @@ public static class ApiClient
             try { currentToken = JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(SettingsPath))?.DeviceTokenProtected; }
             catch (JsonException) { }
         }
-        WriteSettings(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm, BarcodeScanner, PrintingEnabled, 5, CashDrawer, Scale, PrinterHorizontalOffsetCharacters));
+        WriteSettings(new ClientSettings(BaseUrl, DeviceId, StoreId, RegisterId, currentToken, PrinterName, PrinterFontFamily, PrinterFontSize, UseNormalTotals, PrinterTicketWidthMm, BarcodeScanner, PrintingEnabled, 5, CashDrawer, Scale, PrinterHorizontalOffsetCharacters, PrintShiftCloseTicket, DisplayProfile));
     }
 
     private static void Load()
@@ -159,6 +174,9 @@ public static class ApiClient
                 UseNormalTotals = settings.UseNormalTotals;
                 PrinterTicketWidthMm = settings.PrinterTicketWidthMm == 58 ? 58 : 80;
                 PrinterHorizontalOffsetCharacters = Math.Clamp(settings.PrinterHorizontalOffsetCharacters, 0, 30);
+                // Configuraciones anteriores no tienen el dato: se conserva el comportamiento previo (imprimir).
+                PrintShiftCloseTicket = settings.PrintShiftCloseTicket ?? true;
+                DisplayProfile = Enum.IsDefined(settings.DisplayProfile) ? settings.DisplayProfile : global::Pos.Desktop.DisplayProfile.Standard;
                 BarcodeScanner = (settings.BarcodeScanner ?? BarcodeScannerProfile.Default).Normalize();
                 CashDrawer = (settings.CashDrawer ?? CashDrawerProfile.Default).Normalize();
                 Scale = (settings.Scale ?? ScaleProfile.Default).Normalize();
@@ -270,8 +288,12 @@ public static class ApiClient
         int SettingsVersion = 1,
         CashDrawerProfile? CashDrawer = null,
         ScaleProfile? Scale = null,
-        int PrinterHorizontalOffsetCharacters = 0);
+        int PrinterHorizontalOffsetCharacters = 0,
+        bool? PrintShiftCloseTicket = null,
+        DisplayProfile DisplayProfile = global::Pos.Desktop.DisplayProfile.Standard);
 }
+
+public enum DisplayProfile { Standard, Compact, Reduced }
 
 public enum BarcodeScannerMode { Keyboard, Serial, Disabled }
 
@@ -300,7 +322,7 @@ public sealed record CashDrawerProfile(bool Enabled, string? PrinterName, string
         Port is "USB" or "LPT1" or "LPT2" or "LPT3" or "COM1" or "COM2" or "COM3" or "COM4" ? Port : "USB");
 }
 
-public sealed record ScaleProfile(bool Enabled, string? Port, int BaudRate, string Parity, int DataBits, string StopBits, string Terminator, string Unit, int ReadTimeoutMs)
+public sealed record ScaleProfile(bool Enabled, string? Port, int BaudRate, string Parity, int DataBits, string StopBits, string Terminator, string Unit, int ReadTimeoutMs, string Model = "Generic")
 {
     public static ScaleProfile Default { get; } = new(false, null, 9600, "None", 8, "One", "CRLF", "Kilogramo", 1500);
 
@@ -313,5 +335,6 @@ public sealed record ScaleProfile(bool Enabled, string? Port, int BaudRate, stri
         StopBits is "One" or "Two" ? StopBits : "One",
         Terminator is "CR" or "LF" or "CRLF" ? Terminator : "CRLF",
         Unit is "Kilogramo" or "Gramo" or "Libra" ? Unit : "Kilogramo",
-        ReadTimeoutMs is >= 200 and <= 5000 ? ReadTimeoutMs : 1500);
+        ReadTimeoutMs is >= 200 and <= 5000 ? ReadTimeoutMs : 1500,
+        Model is "TorreyPcr40" or "RhinoBar6X" ? Model : "Generic");
 }

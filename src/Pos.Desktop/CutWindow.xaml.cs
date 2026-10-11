@@ -89,9 +89,13 @@ public partial class CutWindow : UserControl
             CreditSalesText.Text = $"Crédito: {result.CreditSales.ToString("C2", culture)}";
             CashInText.Text = $"Entradas de efectivo: +{result.CashIn.ToString("C2", culture)}";
             CashOutText.Text = $"Salidas de efectivo: -{result.CashOut.ToString("C2", culture)}";
+            SupplierPaymentsText.Text = $"incluye pagos a proveedores: -{result.SupplierPayments.ToString("C2", culture)}";
+            SupplierPaymentsText.Visibility = result.SupplierPayments > 0m ? Visibility.Visible : Visibility.Collapsed;
             CashReturnsText.Text = $"Devoluciones en efectivo: -{result.CashReturns.ToString("C2", culture)}";
             ExpectedCashDetailText.Text = result.ExpectedCash.ToString("C2", culture);
             ProfitDetailText.Text = result.Profit.ToString("C2", culture);
+            var handoffs = await Client.GetFromJsonAsync<List<ShiftHandoffRow>>($"/api/shifts/cut/day/handoffs?date={date:yyyy-MM-dd}{suffix}") ?? [];
+            HandoffGrid.ItemsSource = handoffs.Select(item => new ShiftHandoffRowDisplay(item, culture)).ToList();
             var message = cashierMode
                 ? $"Se actualizó la consulta del cajero para {date:dd/MM/yyyy}. No se cerró ningún turno ni se registró movimiento de efectivo."
                 : $"Se actualizó el corte consolidado para {date:dd/MM/yyyy}. No se cerró ningún turno ni se registró movimiento de efectivo.";
@@ -111,6 +115,27 @@ public partial class CutWindow : UserControl
     }
 
     private sealed record CashierOption(Guid? Id, string Name);
-    private sealed record CutResult(decimal InitialCash, decimal TotalSales, int SalesCount, decimal CashSales, decimal CardSales, decimal TransferSales, decimal CreditSales, decimal CashIn, decimal CashOut, decimal CashReturns, decimal Profit, decimal ExpectedCash);
+    private sealed record CutResult(decimal InitialCash, decimal TotalSales, int SalesCount, decimal CashSales, decimal CardSales, decimal TransferSales, decimal CreditSales, decimal CashIn, decimal CashOut, decimal CashReturns, decimal Profit, decimal ExpectedCash, decimal SupplierPayments = 0m);
+    private sealed record ShiftHandoffRow(string Cashier, DateTimeOffset OpenedAtUtc, DateTimeOffset? ClosedAtUtc, decimal InitialCash, decimal? ExpectedCash, decimal? DeliveredCash, decimal? Difference, string CloseReason, decimal? ReceivedCash, string? ReceivedBy, DateTimeOffset? ReceivedAtUtc);
+    private sealed class ShiftHandoffRowDisplay
+    {
+        public ShiftHandoffRowDisplay(ShiftHandoffRow row, CultureInfo culture)
+        {
+            Cashier = row.Cashier;
+            InitialCashDisplay = row.InitialCash.ToString("C2", culture);
+            ExpectedCashDisplay = row.ExpectedCash?.ToString("C2", culture) ?? "Turno abierto";
+            DeliveredCashDisplay = row.DeliveredCash?.ToString("C2", culture) ?? "-";
+            DifferenceDisplay = row.Difference is null ? "-" : row.Difference.Value == 0m ? "$0.00" : row.Difference.Value > 0m ? $"Sobrante {row.Difference.Value.ToString("C2", culture)}" : $"Faltante {Math.Abs(row.Difference.Value).ToString("C2", culture)}";
+            ReceivedCashDisplay = row.ReceivedCash?.ToString("C2", culture) ?? "Pendiente";
+            StatusDisplay = row.CloseReason == "Handoff" ? row.ReceivedCash.HasValue ? $"Entregado a {row.ReceivedBy}" : "Esperando recepción" : row.ClosedAtUtc.HasValue ? "Corte cerrado" : "Turno abierto";
+        }
+        public string Cashier { get; }
+        public string InitialCashDisplay { get; }
+        public string ExpectedCashDisplay { get; }
+        public string DeliveredCashDisplay { get; }
+        public string DifferenceDisplay { get; }
+        public string ReceivedCashDisplay { get; }
+        public string StatusDisplay { get; }
+    }
     private sealed record CutLoadResult(string Message, OperationResultKind Kind);
 }

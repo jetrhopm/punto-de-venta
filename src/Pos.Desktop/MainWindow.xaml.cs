@@ -18,6 +18,8 @@ public partial class MainWindow : Window
 {
     private static HttpClient Client => ApiClient.Client;
     private CancellationTokenSource? _searchCancellation;
+    private long _productSearchRevision;
+    private string _productResultsQuery = string.Empty;
     private Guid? _lastSaleId;
     private readonly ObservableCollection<TicketTabView> _tickets = [];
     private readonly ObservableCollection<CartLineView> _emptyCart = [];
@@ -272,15 +274,83 @@ public partial class MainWindow : Window
             await OpenCommonProductAsync();
             e.Handled = true;
         }
-        else if (e.Key == Key.Delete)
+        else if (e.Key == Key.O && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
         {
+            await OpenProductLabelsAsync();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Delete && SalesWorkspace.Visibility == Visibility.Visible)
+        {
+            // Sólo en Ventas: en módulos (Compras, Productos...) Supr debe llegar a sus propios controles.
             DeleteSelectedCartLine();
+            e.Handled = true;
+        }
+        else if (key is Key.Up or Key.Down && Keyboard.Modifiers == ModifierKeys.None && TryMoveCartSelection(key == Key.Down))
+        {
             e.Handled = true;
         }
     }
 
+    /// <summary>
+    /// Permite recorrer las partidas de la venta con las flechas sin usar el mouse.
+    /// El foco permanece en la caja de búsqueda para que el lector y la captura
+    /// sigan funcionando; Supr elimina y Enter (con la búsqueda vacía) edita.
+    /// </summary>
+    private bool TryMoveCartSelection(bool moveDown)
+    {
+        if (SalesWorkspace.Visibility != Visibility.Visible) return false;
+
+        // Si hay resultados de búsqueda visibles, las flechas navegan esos resultados.
+        if (ProductResultsList.Visibility == Visibility.Visible && ProductResultsList.Items.Count > 0) return false;
+
+        // Si el foco ya está en la lista de la venta, WPF ya mueve la selección.
+        if (Keyboard.FocusedElement is DependencyObject focused && IsWithin(focused, CartList)) return false;
+
+        // No interferir con otros controles que usan flechas (otras cajas de texto, combos, etc.).
+        if (Keyboard.FocusedElement is TextBox textBox && !ReferenceEquals(textBox, ProductSearchTextBox)) return false;
+        if (Keyboard.FocusedElement is System.Windows.Controls.Primitives.Selector selector && !ReferenceEquals(selector, CartList)) return false;
+
+        var count = CartList.Items.Count;
+        if (count == 0)
+        {
+            StatusText.Text = "No hay partidas en la venta.";
+            return true;
+        }
+
+        var current = CartList.SelectedIndex;
+        var next = current < 0
+            ? (moveDown ? 0 : count - 1)
+            : Math.Clamp(current + (moveDown ? 1 : -1), 0, count - 1);
+
+        CartList.SelectedIndex = next;
+        CartList.ScrollIntoView(CartList.SelectedItem);
+        if (CartList.SelectedItem is CartLineView line)
+        {
+            StatusText.Text = $"Partida {next + 1} de {count}: {line.Description}. Supr: eliminar · Enter: editar cantidad.";
+        }
+
+        if (!ReferenceEquals(Keyboard.FocusedElement, ProductSearchTextBox)) FocusProductInput();
+        return true;
+    }
+
+    private static bool IsWithin(DependencyObject element, DependencyObject container)
+    {
+        for (var current = element; current is not null; current = current is System.Windows.Media.Visual ? System.Windows.Media.VisualTreeHelper.GetParent(current) ?? LogicalTreeHelper.GetParent(current) : LogicalTreeHelper.GetParent(current))
+        {
+            if (ReferenceEquals(current, container)) return true;
+        }
+        return false;
+    }
+
     private void OnSalesActionClick(object sender, RoutedEventArgs e) =>
         ShowPendingFeature("Accion de ventas");
+
+    private async Task OpenProductLabelsAsync()
+    {
+        await using var authorization = await PermissionAuthorization.RequestAsync(this, "ViewProducts", "Imprimir etiquetas requiere permiso para consultar productos.");
+        if (authorization is null) return;
+        new ProductLabelWindow { Owner = this }.ShowDialog();
+    }
 
     private async void OnFindCustomerClick(object sender, RoutedEventArgs e) => await SelectCustomerForActiveTicketAsync();
     private async void OnSelectCustomerClick(object sender, RoutedEventArgs e) => await SelectCustomerForActiveTicketAsync();
@@ -473,6 +543,21 @@ public partial class MainWindow : Window
 
     private async Task<bool> OpenShiftFromDialogAsync()
     {
+        var pendingHandoff = await GetPendingHandoffAsync();
+        if (pendingHandoff is not null)
+        {
+            var receiveWindow = new ReceiveShiftHandoffWindow(pendingHandoff.FromUser, pendingHandoff.ExpectedCash, pendingHandoff.DeliveredCash, pendingHandoff.Difference, pendingHandoff.DeliveredAtUtc) { Owner = this };
+            if (receiveWindow.ShowDialog() != true || receiveWindow.ReceivedCash is null) return false;
+            try
+            {
+                using var receiveResponse = await Client.PostAsJsonAsync("/api/shifts/handoff/receive", new { handoffId = pendingHandoff.HandoffId, receivedCash = receiveWindow.ReceivedCash.Value });
+                if (!receiveResponse.IsSuccessStatusCode) { StatusText.Text = await ReadApiMessageAsync(receiveResponse); return false; }
+                StatusText.Text = "Turno recibido y abierto correctamente.";
+                return true;
+            }
+            catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; return false; }
+        }
+
         var window = new ShiftWindow { Owner = this };
         if (window.ShowDialog() != true || window.InitialCash is null) return false;
         try
@@ -622,7 +707,7 @@ public partial class MainWindow : Window
             var result = await response.Content.ReadFromJsonAsync<ShiftSummaryResponse>();
             if (result is null) { StatusText.Text = "Turno cerrado."; return true; }
             StatusText.Text = $"Turno cerrado. Diferencia: ${result.Difference:0.00}";
-            if (currentCut is not null && ApiClient.IsTicketPrintingAvailable)
+            if (currentCut is not null && ApiClient.IsTicketPrintingAvailable && ApiClient.PrintShiftCloseTicket)
             {
                 try
                 {
@@ -631,6 +716,7 @@ public partial class MainWindow : Window
                 }
                 catch (Exception exception) { StatusText.Text += $" El turno se cerró, pero no se pudo imprimir el comprobante: {exception.Message}"; }
             }
+            else if (ApiClient.IsTicketPrintingAvailable && !ApiClient.PrintShiftCloseTicket) StatusText.Text += " La impresión del corte está desactivada en Opciones habilitadas; el comprobante no se imprimió.";
             else StatusText.Text += " No hay impresora activa; el comprobante de corte no se imprimió.";
             new ShiftCloseSummaryWindow(result.ExpectedCash, result.CountedCash, result.Difference) { Owner = this }.ShowDialog();
             if (openNewShift)
@@ -706,12 +792,27 @@ public partial class MainWindow : Window
         _searchCancellation = new CancellationTokenSource();
         var token = _searchCancellation.Token;
         var query = ProductSearchTextBox.Text.Trim();
-        if (query.Length == 0) { ProductResultsList.Visibility = Visibility.Collapsed; return; }
+        _productSearchRevision++;
+        var revision = _productSearchRevision;
+
+        // A product selected for the previous search must never be reused for a
+        // new barcode. Keyboard scanners finish with Enter and can otherwise add
+        // that stale row before the new lookup has completed.
+        ProductResultsList.SelectedItem = null;
+        _productResultsQuery = string.Empty;
+        if (query.Length == 0)
+        {
+            ProductResultsList.ItemsSource = null;
+            ProductResultsList.Visibility = Visibility.Collapsed;
+            return;
+        }
         try
         {
             await Task.Delay(180, token);
             var results = await Client.GetFromJsonAsync<List<ProductSearchResult>>($"/api/products/search?q={Uri.EscapeDataString(query)}", token) ?? [];
+            if (token.IsCancellationRequested || revision != _productSearchRevision || !string.Equals(query, ProductSearchTextBox.Text.Trim(), StringComparison.Ordinal)) return;
             ProductResultsList.ItemsSource = results.Select(item => new ProductSearchRow(item)).ToList();
+            _productResultsQuery = query;
             ProductResultsList.Visibility = results.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
             StatusText.Text = results.Count == 0 ? "No se encontraron productos." : $"{results.Count} producto(s) encontrado(s).";
         }
@@ -736,16 +837,27 @@ public partial class MainWindow : Window
         }
         else if (e.Key == Key.Enter)
         {
-            if (ProductResultsList.SelectedItem is ProductSearchRow) await AddSelectedProductAsync();
-            else await HandleProductEntryAsync(ProductSearchTextBox.Text.Trim());
+            var query = ProductSearchTextBox.Text.Trim();
+            if (query.Length == 0 && CartList.SelectedItem is CartLineView)
+            {
+                // Búsqueda vacía + partida seleccionada con flechas: editar cantidad.
+                e.Handled = true;
+                await EditSelectedCartLineAsync();
+                return;
+            }
+            var selected = ProductResultsList.SelectedItem is ProductSearchRow row && string.Equals(_productResultsQuery, query, StringComparison.Ordinal)
+                ? row.Product
+                : null;
+            await HandleProductEntryAsync(query, selected);
             e.Handled = true;
         }
     }
 
     private async void OnSearchButtonClick(object sender, RoutedEventArgs e)
     {
-        if (ProductResultsList.Items.Count == 1) { ProductResultsList.SelectedIndex = 0; await AddSelectedProductAsync(); }
-        else if (ProductResultsList.Items.Count == 0 && !string.IsNullOrWhiteSpace(ProductSearchTextBox.Text)) await HandleProductEntryAsync(ProductSearchTextBox.Text.Trim());
+        var query = ProductSearchTextBox.Text.Trim();
+        if (ProductResultsList.Items.Count == 1 && string.Equals(_productResultsQuery, query, StringComparison.Ordinal)) { ProductResultsList.SelectedIndex = 0; await AddSelectedProductAsync(); }
+        else if (!string.IsNullOrWhiteSpace(query)) await HandleProductEntryAsync(query);
         else StatusText.Text = "Selecciona un producto de la lista.";
         FocusProductInput();
     }
@@ -761,7 +873,7 @@ public partial class MainWindow : Window
         await AddProductToCartAsync(row.Product);
     }
 
-    private async Task HandleProductEntryAsync(string query)
+    private async Task HandleProductEntryAsync(string query, ProductSearchResult? selectedResult = null)
     {
         if (string.IsNullOrWhiteSpace(query))
         {
@@ -771,13 +883,27 @@ public partial class MainWindow : Window
 
         try
         {
-            var results = await Client.GetFromJsonAsync<List<ProductSearchResult>>($"/api/products/search?q={Uri.EscapeDataString(query)}") ?? [];
-            var exact = results.FirstOrDefault(item => string.Equals(item.Code, query, StringComparison.OrdinalIgnoreCase));
-            if (exact is not null)
+            // El código es único. Se resuelve directamente antes de usar la lista
+            // parcial, para que códigos cortos como "0", "00" o "a" no queden
+            // ocultos entre coincidencias que sólo los contienen.
+            using var exactResponse = await Client.GetAsync($"/api/products/by-code?code={Uri.EscapeDataString(query)}");
+            if (exactResponse.IsSuccessStatusCode)
             {
-                await AddProductToCartAsync(exact);
+                var exactProduct = await exactResponse.Content.ReadFromJsonAsync<ProductSearchResult>();
+                if (exactProduct is not null)
+                {
+                    await AddProductToCartAsync(exactProduct);
+                    return;
+                }
+            }
+
+            if (selectedResult is not null)
+            {
+                await AddProductToCartAsync(selectedResult);
                 return;
             }
+
+            var results = await Client.GetFromJsonAsync<List<ProductSearchResult>>($"/api/products/search?q={Uri.EscapeDataString(query)}") ?? [];
 
             if (results.Count == 1 && !LooksLikeBarcode(query))
             {
@@ -788,6 +914,8 @@ public partial class MainWindow : Window
             if (results.Count > 0)
             {
                 ProductResultsList.ItemsSource = results.Select(item => new ProductSearchRow(item)).ToList();
+                ProductResultsList.SelectedItem = null;
+                _productResultsQuery = query;
                 ProductResultsList.Visibility = Visibility.Visible;
                 StatusText.Text = "Selecciona el producto correcto de la lista.";
                 FocusProductInput();
@@ -810,8 +938,7 @@ public partial class MainWindow : Window
         var window = new MissingProductWindow(scannedCode) { Owner = this };
         if (window.ShowDialog() != true || window.Decision == MissingProductDecision.Cancel)
         {
-            ProductSearchTextBox.Clear();
-            ProductResultsList.Visibility = Visibility.Collapsed;
+            ResetProductSearch();
             FocusProductInput();
             return;
         }
@@ -859,6 +986,37 @@ public partial class MainWindow : Window
         if (window.ShowDialog() != true) { FocusProductInput(); return; }
 
         await AddCommonProductAsync(window.ProductCode, window.ProductDescription, window.Price, window.UnitOfMeasure, window.Quantity);
+    }
+
+    private async Task<PendingHandoffResponse?> GetPendingHandoffAsync()
+    {
+        try
+        {
+            using var response = await Client.GetAsync("/api/shifts/handoff/pending");
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+            return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<PendingHandoffResponse>() : null;
+        }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; return null; }
+    }
+
+    private async Task<bool> HandoffShiftFromDialogAsync()
+    {
+        ShiftSummaryResponse? summary;
+        try { summary = await Client.GetFromJsonAsync<ShiftSummaryResponse>("/api/shifts/summary"); }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; return false; }
+        if (summary is null) { StatusText.Text = "No se pudo calcular el efectivo esperado para entregar el turno."; return false; }
+        var window = new CloseShiftWindow(summary.ExpectedCash) { Owner = this };
+        window.ConfigureForHandoff();
+        if (window.ShowDialog() != true || window.CountedCash is null) return false;
+        try
+        {
+            using var response = await Client.PostAsJsonAsync("/api/shifts/handoff", new { deliveredCash = window.CountedCash.Value });
+            if (!response.IsSuccessStatusCode) { StatusText.Text = await ReadApiMessageAsync(response); return false; }
+            var result = await response.Content.ReadFromJsonAsync<ShiftHandoffResponse>();
+            StatusText.Text = result is null ? "Entrega de turno registrada." : $"Entrega registrada. Diferencia: ${result.Difference:0.00}. El siguiente cajero deberá contar el efectivo.";
+            return true;
+        }
+        catch (HttpRequestException) { StatusText.Text = ConnectionHelp.ApiUnavailable; return false; }
     }
 
     private void OnApiAvailabilityChanged(object? sender, ApiAvailabilityStatus status)
@@ -997,8 +1155,7 @@ public partial class MainWindow : Window
         var line = existing ?? cart[^1];
         await ApplyPromotionQuoteAsync(line);
         CartList.Items.Refresh();
-        ProductSearchTextBox.Clear();
-        ProductResultsList.Visibility = Visibility.Collapsed;
+        ResetProductSearch();
         UpdateSaleSummary();
         QueueActiveTicketSave();
         SystemSounds.Asterisk.Play();
@@ -1046,7 +1203,7 @@ public partial class MainWindow : Window
             requestedQuantity is null &&
             IsBulkUnit(product.UnitOfMeasure))
         {
-            var window = new SaleQuantityWindow(product.Description, product.UnitOfMeasure, 1m) { Owner = this };
+            var window = new SaleQuantityWindow(product.Description, product.UnitOfMeasure, 1m, allowScale: true) { Owner = this };
             if (window.ShowDialog() != true || window.Quantity is null) { FocusProductInput(); return; }
             quantity = window.Quantity.Value;
         }
@@ -1063,8 +1220,7 @@ public partial class MainWindow : Window
         var line = existing ?? cart[^1];
         await ApplyPromotionQuoteAsync(line);
         CartList.Items.Refresh();
-        ProductSearchTextBox.Clear();
-        ProductResultsList.Visibility = Visibility.Collapsed;
+        ResetProductSearch();
         UpdateSaleSummary();
         QueueActiveTicketSave();
         SystemSounds.Asterisk.Play();
@@ -1110,6 +1266,17 @@ public partial class MainWindow : Window
 
     private static bool LooksLikeBarcode(string value) => value.Length >= 6 && value.All(char.IsLetterOrDigit);
 
+    private void ResetProductSearch()
+    {
+        _searchCancellation?.Cancel();
+        _productSearchRevision++;
+        _productResultsQuery = string.Empty;
+        ProductResultsList.SelectedItem = null;
+        ProductResultsList.ItemsSource = null;
+        ProductResultsList.Visibility = Visibility.Collapsed;
+        ProductSearchTextBox.Clear();
+    }
+
     private void FocusProductInput()
     {
         Dispatcher.BeginInvoke(() =>
@@ -1144,17 +1311,27 @@ public partial class MainWindow : Window
         });
     }
 
-    private void OnCartKeyDown(object sender, KeyEventArgs e)
+    private async void OnCartKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Delete) return;
-        DeleteSelectedCartLine();
-        e.Handled = true;
+        if (e.Key == Key.Delete)
+        {
+            DeleteSelectedCartLine();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            await EditSelectedCartLineAsync();
+        }
     }
 
-    private async void OnCartDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    private async void OnCartDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e) =>
+        await EditSelectedCartLineAsync();
+
+    private async Task EditSelectedCartLineAsync()
     {
         if (CartList.SelectedItem is not CartLineView line || _activeTicket is null) return;
-        var window = new SaleQuantityWindow(line.Description, line.UnitOfMeasure, line.Quantity) { Owner = this };
+        var window = new SaleQuantityWindow(line.Description, line.UnitOfMeasure, line.Quantity, allowScale: IsBulkUnit(line.UnitOfMeasure)) { Owner = this };
         if (window.ShowDialog() != true || window.Quantity is null) return;
         line.Quantity = window.Quantity.Value;
         await ApplyPromotionQuoteAsync(line);
@@ -1175,8 +1352,10 @@ public partial class MainWindow : Window
         }
 
         if (_activeTicket is null) return;
+        var removedIndex = CartList.SelectedIndex;
         _activeTicket.Lines.Remove(line);
         CartList.Items.Refresh();
+        CartList.SelectedIndex = CartList.Items.Count == 0 ? -1 : Math.Min(removedIndex, CartList.Items.Count - 1);
         UpdateSaleSummary();
         QueueActiveTicketSave();
         StatusText.Text = "Partida eliminada de la venta.";
@@ -1291,12 +1470,14 @@ public partial class MainWindow : Window
     private sealed record PromotionPriceQuote(Guid ProductId, decimal BaseUnitPrice, decimal UnitPrice, decimal Quantity, decimal Total, decimal DiscountTotal, bool PromotionApplied);
     private sealed record SaleResponse(Guid SaleId, decimal Total, decimal Change, bool Existing, bool InventoryAttentionRequired = false);
     private sealed record LicenseStatusResponse(bool IsActive, string State, string Message);
-    private sealed record StoreOptionsResponse(bool InventoryEnabled, string InventoryCostMethod, bool CreditSalesEnabled, bool CommonProductsEnabled, bool AutoPriceWithProfit, decimal DefaultProfitPercent, bool RoundSaleAmounts, string RoundingMode, string OccasionalNotice, int OccasionalNoticeEverySales);
+    private sealed record StoreOptionsResponse(bool InventoryEnabled, bool BlockSalesWithoutStock, string InventoryCostMethod, bool CreditSalesEnabled, bool CommonProductsEnabled, bool AutoPriceWithProfit, decimal DefaultProfitPercent, bool RoundSaleAmounts, string RoundingMode, string OccasionalNotice, int OccasionalNoticeEverySales);
     private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
     private sealed record CutSettingsResponse(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, bool BlockSalesWhenCashLimitReached, decimal CashLimit, string CashLimitMessage);
     private sealed record CashCutResponse(decimal InitialCash, decimal TotalSales, int SalesCount, decimal CashSales, decimal CardSales, decimal TransferSales, decimal CreditSales, decimal CashIn, decimal CashOut, decimal CashReturns, decimal Profit, decimal ExpectedCash);
     private sealed record MercadoPagoCheckoutStatus(bool Enabled, string RegisterName);
     private sealed record CurrentShiftResponse(Guid ShiftId, Guid RegisterId, Guid UserId, decimal InitialCash, DateTimeOffset OpenedAtUtc);
+    private sealed record PendingHandoffResponse(Guid HandoffId, string FromUser, decimal ExpectedCash, decimal DeliveredCash, decimal Difference, DateTimeOffset DeliveredAtUtc);
+    private sealed record ShiftHandoffResponse(Guid HandoffId, Guid FromShiftId, string FromUser, decimal ExpectedCash, decimal DeliveredCash, decimal Difference, DateTimeOffset DeliveredAtUtc);
     private sealed record OpenShiftConflictResponse(string? Code, string? Message, string? OpenedBy, DateTimeOffset OpenedAtUtc);
     private sealed record LatestTicketResponse(Guid SaleId);
 
@@ -1738,6 +1919,17 @@ public partial class MainWindow : Window
             {
                 var decisionWindow = new ExitShiftWindow { Owner = this };
                 if (decisionWindow.ShowDialog() != true || decisionWindow.Decision == ExitShiftDecision.Cancel) return;
+                if (decisionWindow.Decision == ExitShiftDecision.ChangeShiftAndSignOut)
+                {
+                    if (!await HandoffShiftFromDialogAsync())
+                    {
+                        MessageBox.Show(StatusText.Text, "No se pudo cambiar el turno", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+                    await EndSessionAsync();
+                    CompleteSignOut();
+                    return;
+                }
                 if (decisionWindow.Decision is ExitShiftDecision.CloseShiftAndExit or ExitShiftDecision.CloseShiftAndSignOut)
                 {
                     var closed = await CloseShiftFromDialogAsync(existingAuthorization: _modulePermissionLease);

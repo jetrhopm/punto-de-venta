@@ -1,9 +1,11 @@
 <Project>
   <PropertyGroup>
-    <Version>3.3.53</Version>
-    <AssemblyVersion>3.3.53.0</AssemblyVersion>
-    <FileVersion>3.3.53.0</FileVersion>
-    <InformationalVersion>3.3.53</InformationalVersion>
+    <Version>3.3.58</Version>
+    <AssemblyVersion>3.3.58.0</AssemblyVersion>
+    <FileVersion>3.3.58.0</FileVersion>
+    <InformationalVersion>3.3.58</InformationalVersion>
+    <!-- Evita que .NET agregue el commit de git (3.3.57+e3193057...) a la versión visible del producto. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Authors>Jetrho Pérez M.</Authors>
     <Company>Jetrho Pérez M.</Company>
     <Copyright>Copyright © 2026 Jetrho Pérez M.</Copyright>

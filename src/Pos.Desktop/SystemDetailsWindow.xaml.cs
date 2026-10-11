@@ -17,7 +17,7 @@ public partial class SystemDetailsWindow : Window
     {
         DetailsText.Text = "Consultando el estado de JetVenta...";
         var apiOk = await ApiClient.WaitUntilAvailableAsync();
-        var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "No disponible";
+        var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "No disponible";
         var lines = new[]
         {
             "JETVENTA - DETALLES DEL SISTEMA",

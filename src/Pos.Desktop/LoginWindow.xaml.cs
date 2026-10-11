@@ -140,9 +140,9 @@ public partial class LoginWindow : Window
 
     private void OnPairClick(object sender, RoutedEventArgs e) => new JoinServerWindow { Owner = this }.ShowDialog();
 
-    private void OnActivateLicenseClick(object sender, RoutedEventArgs e)
+    private async void OnActivateLicenseClick(object sender, RoutedEventArgs e)
     {
-        if (UserComboBox.SelectedItem is not LoginUserOption)
+        if (UserComboBox.SelectedItem is not LoginUserOption selectedUser)
         {
             SetStatus("Selecciona un usuario autorizado para activar la licencia.", StatusKind.Information);
             UserComboBox.Focus();
@@ -156,8 +156,9 @@ public partial class LoginWindow : Window
             return;
         }
 
-        _openLicenseAfterLogin = true;
-        OnLoginClick(sender, e);
+        var license = new LicenseWindow(selectedUser.UserName, PasswordBox.Password) { Owner = this };
+        license.ShowDialog();
+        await LoadStartupLicenseStatusAsync();
     }
 
     private async void OnLoginClick(object sender, RoutedEventArgs e)

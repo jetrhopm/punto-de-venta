@@ -7,15 +7,15 @@
         PreviewKeyDown="OnPreviewKeyDown" Loaded="OnLoaded">
     <Window.Resources>
         <Style x:Key="TopNavButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="MinWidth" Value="86"/>
-            <Setter Property="Height" Value="54"/>
+            <Setter Property="MinWidth" Value="{DynamicResource UiTopNavMinWidth}"/>
+            <Setter Property="Height" Value="{DynamicResource UiNavigationHeight}"/>
             <Setter Property="Margin" Value="2"/>
             <Setter Property="Padding" Value="7,5"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="{DynamicResource UiTopNavFontSize}"/>
             <Setter Property="BorderThickness" Value="0"/>
         </Style>
         <Style x:Key="SalesToolbarButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Height" Value="42"/>
+            <Setter Property="Height" Value="{DynamicResource UiToolbarHeight}"/>
             <Setter Property="Margin" Value="0,0,7,0"/>
             <Setter Property="Padding" Value="11,6"/>
             <Setter Property="FontSize" Value="12"/>
@@ -24,7 +24,7 @@
             <Setter Property="BorderBrush" Value="#D7E5F1"/>
         </Style>
         <Style x:Key="RailButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Height" Value="72"/>
+            <Setter Property="Height" Value="{DynamicResource UiRailButtonHeight}"/>
             <Setter Property="Margin" Value="0,0,0,8"/>
             <Setter Property="Padding" Value="8,7"/>
             <Setter Property="FontSize" Value="12"/>
@@ -34,7 +34,7 @@
             <Setter Property="BorderThickness" Value="1"/>
         </Style>
         <Style x:Key="PaymentButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Height" Value="64"/>
+            <Setter Property="Height" Value="{DynamicResource UiPaymentButtonHeight}"/>
             <Setter Property="Padding" Value="5"/>
             <Setter Property="FontSize" Value="11"/>
         </Style>
@@ -55,11 +55,11 @@
     </Window.Resources>
 
     <Grid Background="{StaticResource AppBackgroundBrush}">
-        <Grid.RowDefinitions><RowDefinition Height="76"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="34"/></Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="{DynamicResource UiMainHeaderHeight}"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="34"/></Grid.RowDefinitions>
 
         <Border Grid.Row="0" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1">
             <Grid Margin="16,0">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="210"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="{DynamicResource UiBrandColumnWidth}"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                     <Image Source="/Assets/jetventa-banner.png"
                            Width="150" Height="50"
@@ -143,8 +143,8 @@
             </Border>
         </Border>
 
-        <Grid x:Name="SalesWorkspace" Grid.Row="2" Margin="14,12" Background="#EDF4FA">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="122"/><ColumnDefinition Width="*"/><ColumnDefinition Width="310"/></Grid.ColumnDefinitions>
+        <Grid x:Name="SalesWorkspace" Grid.Row="2" Margin="{DynamicResource UiMainContentMargin}" Background="#EDF4FA">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="{DynamicResource UiSalesRailWidth}"/><ColumnDefinition Width="*"/><ColumnDefinition Width="{DynamicResource UiSalesPaymentWidth}"/></Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Background="#F7FBFF" BorderBrush="#D6E5F1" BorderThickness="1" CornerRadius="7" Padding="9" Margin="0,0,10,0"><StackPanel>
                 <Button Style="{StaticResource RailButton}" Background="#EAF4FF" BorderBrush="#9DC9EC" Click="OnNewTicketClick"><StackPanel HorizontalAlignment="Center"><icons:PackIconMaterial Kind="PlusBoxOutline" Width="25" Height="25" HorizontalAlignment="Center" Foreground="#0879D8"/><TextBlock Text="Nuevo ticket" Margin="0,4,0,0" TextAlignment="Center"/><TextBlock Text="F6" FontSize="11" FontWeight="Bold" Foreground="#0879D8" HorizontalAlignment="Center"/></StackPanel></Button>
@@ -197,6 +197,17 @@
                     </Grid>
 
                     <ListView Grid.Row="3" x:Name="CartList" Margin="0,10,0,14" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Background="#FBFDFF" KeyDown="OnCartKeyDown" MouseDoubleClick="OnCartDoubleClick">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+                                <Style.Triggers>
+                                    <!-- Resalta la partida elegida con flechas aunque el foco siga en la búsqueda -->
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                        <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ListView.ItemContainerStyle>
                         <ListView.View>
                             <GridView AllowsColumnReorder="True">
                                 <GridViewColumn Header="Código de barras" DisplayMemberBinding="{Binding Code}" Width="125" />

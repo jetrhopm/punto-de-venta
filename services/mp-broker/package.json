@@ -1,0 +1,17 @@
+{
+  "name": "jetventa-mp-broker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Intermediario OAuth de JetVenta para Mercado Pago Point. Guarda el Client Secret y entrega tokens a cada instalación una sola vez.",
+  "type": "module",
+  "main": "src/server.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test",
+    "migrate": "node src/migrate.js"
+  },
+  "dependencies": {
+    "mysql2": "^3.11.0"
+  }
+}

@@ -20,6 +20,14 @@ public partial class CloseShiftWindow : Window
         UpdateDifference();
     }
 
+    public void ConfigureForHandoff()
+    {
+        Title = "Entregar turno";
+        TitleText.Text = "Entregar turno";
+        CountedLabelText.Text = "Efectivo que entregas al siguiente cajero";
+        ConfirmButton.Content = "Registrar entrega y cerrar sesión";
+    }
+
     private void OnCountedCashChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) => UpdateDifference();
 
     private void UpdateDifference()

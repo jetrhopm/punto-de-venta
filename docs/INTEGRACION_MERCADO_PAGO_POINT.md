@@ -19,45 +19,47 @@ El flujo de producción está pensado para que el usuario final no copie tokens:
 
 La impresión ocurre después de confirmar la venta local. Un fallo de impresora no crea otra orden ni otra venta.
 
-## Configuración de desarrollo
+## Intermediario OAuth central
 
-No se guardan credenciales reales en Git. Para habilitar OAuth define en el servidor:
+Desde esta versión la autorización pasa por el intermediario `services/mp-broker`
+(Node.js en `https://mp.gocentersuplementos.com`). Es el único que conoce el Client
+Secret; la API local de cada tienda ya no expone callback ni webhook a Internet.
 
-```text
-MercadoPago__ClientId=<APP_ID>
-MercadoPago__ClientSecret=<CLIENT_SECRET>
-MercadoPago__RedirectUri=https://<dominio-publico>/api/integrations/mercado-pago/oauth/callback
-MercadoPago__WebhookSecret=<SECRETO_GENERADO_EN_WEBHOOKS>
+1. **Autorizar cuenta** → la API local se registra una vez en el intermediario
+   (`installation_id` + secreto, guardados con DPAPI) y pide `POST /v1/oauth/start`.
+2. El navegador abre Mercado Pago; al aceptar, Mercado Pago regresa a
+   `https://mp.gocentersuplementos.com/v1/oauth/callback`.
+3. La ventana de configuración consulta `GET /api/integrations/mercado-pago/oauth/status`;
+   la API recoge los tokens con `POST /v1/oauth/pickup` una sola vez y los cifra con DPAPI.
+4. Cuando faltan menos de 30 días para que venza el Access Token (dura 180), la API lo
+   renueva con `POST /v1/oauth/refresh`. Si el intermediario no responde y el token sigue
+   vigente, los cobros continúan con el token actual.
+5. Si Mercado Pago rechaza la renovación (permiso revocado), JetVenta borra los tokens y
+   pide volver a autorizar.
+
+Configuración de la API local (`appsettings.json`):
+
+```json
+"MercadoPago": { "BrokerUrl": "https://mp.gocentersuplementos.com/" }
 ```
 
-El callback debe ser HTTPS, público y coincidir exactamente con el registrado en la aplicación de Mercado Pago. El Access Token y el refresh token se cifran con DPAPI vinculado al equipo servidor. JetVenta renueva automáticamente el Access Token antes de su vencimiento y conserva el nuevo refresh token.
+Columnas reutilizadas en `store` (sin migración): `MercadoPagoOAuthState` guarda el id del
+intento en el intermediario, `MercadoPagoOAuthStateExpiresAtUtc` su vencimiento y
+`MercadoPagoOAuthVerifierProtected` la identidad de la instalación cifrada.
 
-Desde 3.3.9 se configura además el evento **Order** de Mercado Pago hacia:
+El despliegue del intermediario está en `services/mp-broker/README.md`.
 
-```text
-https://<dominio-publico>/api/integrations/mercado-pago/webhook
-```
+### Solo pruebas de desarrollo
 
-La firma `x-signature` se valida con `MercadoPago__WebhookSecret`; la API
-registra el evento, responde de inmediato y concilia la orden posteriormente.
-No expongas la API local de una tienda a Internet: usa un servidor HTTPS o proxy
-controlado que entregue el Webhook al servicio de JetVenta.
+El campo para pegar un Access Token de prueba (`APP_USR-` en la documentación actual de Point, o `TEST-` en integraciones sandbox anteriores) sólo aparece si la API tiene
+`"MercadoPago": { "AllowTestToken": true }` (ya incluido en `appsettings.Development.json`).
+En producción queda oculto y el endpoint lo rechaza.
 
-Para desarrollo local se puede usar **Configuración > Mercado Pago Point > Solo pruebas de desarrollo**. Esa opción valida un Access Token de prueba contra la lista de terminales antes de guardarlo. No debe ser el flujo de una instalación distribuida.
+### Webhooks
 
-## Requisitos para habilitar el botón de autorización
-
-JetVenta debe tener una sola aplicación OAuth central, propiedad del proyecto, no una aplicación diferente por tienda. El usuario final no necesita conocer ni configurar estos valores:
-
-```text
-MercadoPago__ClientId=<APP_ID_DE_JETVENTA>
-MercadoPago__ClientSecret=<CLIENT_SECRET_DE_JETVENTA>
-MercadoPago__RedirectUri=https://<dominio-publico>/api/integrations/mercado-pago/oauth/callback
-```
-
-El `ClientSecret` solo vive en la API desplegada. La URL de retorno debe ser pública, HTTPS y coincidir exactamente con la registrada en la aplicación de Mercado Pago. Para el producto distribuido se requiere alojar la API en un servidor con dominio o subdominio estable; una URL `127.0.0.1`, un callback distinto por cliente o un secreto dentro del cliente WPF no son opciones válidas.
-
-Una vez configurado el servidor, la experiencia del comerciante es: **Configuración > Mercado Pago Point > Autorizar cuenta > iniciar sesión en Mercado Pago > aceptar > seleccionar terminal**. El Access Token y el refresh token se renuevan y conservan automáticamente en la API. Si el comerciante revoca el acceso, JetVenta mostrará que la cuenta necesita autorizarse de nuevo.
+Pendiente para una segunda fase: el intermediario recibirá el evento **Order** y cada
+tienda recogerá sus eventos. Mientras tanto la ventana de cobro consulta la orden cada 2
+segundos y retoma cobros pendientes.
 
 ## Desconectar y eliminar datos locales
 

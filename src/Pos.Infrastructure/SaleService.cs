@@ -52,6 +52,16 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         var stockAfterByProduct = stockBeforeByProduct.ToDictionary(item => item.Key, item => item.Value);
         if (store.InventoryEnabled)
         {
+            if (store.BlockSalesWithoutStock)
+            {
+                var unavailable = expanded
+                    .Where(requirement => !products[requirement.Key].IsKit && !products[requirement.Key].IsTemporary && products[requirement.Key].Stock < requirement.Value)
+                    .Select(requirement => $"{products[requirement.Key].Description} (disponible: {products[requirement.Key].Stock:0.###}; solicitada: {requirement.Value:0.###})")
+                    .ToArray();
+                if (unavailable.Length > 0)
+                    throw new InvalidOperationException($"No hay existencia suficiente para completar la venta: {string.Join("; ", unavailable)}.");
+            }
+
             foreach (var requirement in expanded)
             {
                 var product = products[requirement.Key];

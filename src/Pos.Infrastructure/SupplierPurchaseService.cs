@@ -7,9 +7,23 @@ namespace Pos.Infrastructure;
 
 public sealed record SupplierCommand(string Name, string? Phone, string? Email);
 public sealed record SupplierResult(Guid Id, string Name, string? Phone, string? Email);
-public sealed record PurchaseLineCommand(Guid ProductId, decimal Quantity, decimal UnitCost, decimal? SalePrice = null);
-public sealed record ReceivePurchaseCommand(Guid OperationId, Guid? SupplierId, IReadOnlyList<PurchaseLineCommand> Lines);
-public sealed record ReceivePurchaseResult(Guid PurchaseId, Guid OperationId, decimal Total, bool Existing);
+/// <summary>
+/// Partida recibida. Decisión de precio (opcional, excluyentes):
+/// <see cref="ProfitPercentToApply"/> recalcula el precio con el costo promedio nuevo;
+/// <see cref="SalePrice"/> fija un precio (conservar o manual). Sin ninguno, el precio no cambia.
+/// </summary>
+public sealed record PurchaseLineCommand(Guid ProductId, decimal Quantity, decimal UnitCost, decimal? SalePrice = null, decimal? ProfitPercentToApply = null);
+/// <summary>
+/// <see cref="CashWithdrawn"/> es el efectivo que el cajero declara haber retirado de caja; puede diferir del total
+/// (pagó otra persona, mercancía regalada). Si se paga desde caja y no se indica, se usa el total.
+/// </summary>
+public sealed record ReceivePurchaseCommand(Guid OperationId, Guid? SupplierId, IReadOnlyList<PurchaseLineCommand> Lines, bool PayFromCashRegister = false, decimal? CashWithdrawn = null, string? Notes = null);
+public sealed record ReceivePurchaseResult(Guid PurchaseId, Guid OperationId, decimal Total, bool Existing, bool PaidFromCashRegister = false, decimal? CashWithdrawn = null);
+public sealed record PurchaseHistoryItem(Guid Id, DateTimeOffset CreatedAtUtc, Guid SupplierId, string Supplier, Guid UserId, string Cashier, int LineCount, decimal Pieces, decimal Total, bool PaidFromCashRegister, decimal? CashWithdrawn, string? Notes);
+public sealed record PurchaseHistoryLine(string Code, string Description, string UnitOfMeasure, decimal Quantity, decimal UnitCost, decimal LineTotal);
+public sealed record PurchaseHistoryDetail(PurchaseHistoryItem Purchase, IReadOnlyList<PurchaseHistoryLine> Lines);
+public sealed record PurchaseCashierOption(Guid Id, string Name);
+public sealed record PurchasePricingDefaults(decimal DefaultProfitPercent, bool AutoPriceWithProfit);
 public sealed record PurchaseSuggestion(Guid ProductId, string Code, string Description, Guid? DepartmentId, string? Department, Guid? SupplierId, string? Supplier, decimal Stock, decimal MinimumStock, decimal MaximumStock, decimal SuggestedQuantity, decimal UnitCost, decimal EstimatedTotal, string UnitOfMeasure);
 public sealed record PurchasePlanningProduct(Guid ProductId, string Code, string Description, Guid? DepartmentId, string? Department, Guid? SupplierId, string? Supplier, decimal Stock, decimal MinimumStock, decimal MaximumStock, decimal SuggestedQuantity, decimal UnitCost, decimal EstimatedTotal, decimal QuantitySold, string UnitOfMeasure);
 public sealed record PurchaseOrderLineCommand(Guid ProductId, decimal Quantity, decimal UnitCost);
@@ -40,11 +54,17 @@ public sealed class SupplierPurchaseService(PosDbContext database)
     {
         var user = await UserAsync(token, cancellationToken);
         if (user is null) return null;
-        if (command.OperationId == Guid.Empty || command.Lines.Count == 0) throw new ArgumentException("La compra requiere operación y partidas.");
+        var session = await SessionAsync(token, cancellationToken);
+        if (command.OperationId == Guid.Empty || command.Lines is null || command.Lines.Count == 0) throw new ArgumentException("La compra requiere operación y partidas.");
+        if (command.Lines.Select(item => item.ProductId).Distinct().Count() != command.Lines.Count) throw new ArgumentException("Un producto aparece más de una vez en la compra; suma sus piezas en una sola partida.");
+        if (command.CashWithdrawn is < 0m) throw new ArgumentException("El efectivo retirado de caja no puede ser negativo.");
+        if (command.Notes?.Trim().Length > 300) throw new ArgumentException("La nota de la compra no puede exceder 300 caracteres.");
         await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         var existing = await database.Purchases.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
-        if (existing is not null) return new ReceivePurchaseResult(existing.Id, existing.OperationId, existing.Total, true);
+        if (existing is not null) return new ReceivePurchaseResult(existing.Id, existing.OperationId, existing.Total, true, existing.PaidFromCashRegister, existing.CashWithdrawn);
+        // El proveedor es opcional también al pagar con caja (decisión 2026-10-10): sin él se usa "Sin proveedor".
         var supplierId = command.SupplierId;
+        string supplierName;
         if (supplierId is null || supplierId == Guid.Empty)
         {
             var directSupplier = await database.Suppliers.SingleOrDefaultAsync(item => item.Name == "Sin proveedor", cancellationToken);
@@ -54,33 +74,132 @@ public sealed class SupplierPurchaseService(PosDbContext database)
                 database.Suppliers.Add(directSupplier);
             }
             supplierId = directSupplier.Id;
+            supplierName = directSupplier.Name;
         }
-        else if (!await database.Suppliers.AnyAsync(item => item.Id == supplierId, cancellationToken)) throw new KeyNotFoundException("Proveedor no encontrado.");
+        else
+        {
+            supplierName = await database.Suppliers.Where(item => item.Id == supplierId).Select(item => item.Name).SingleOrDefaultAsync(cancellationToken)
+                ?? throw new KeyNotFoundException("Proveedor no encontrado.");
+        }
         var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
         var ids = command.Lines.Select(item => item.ProductId).Distinct().ToArray();
         await InventoryConcurrency.LockProductsAsync(database, ids, cancellationToken);
         var products = await database.Products.Where(item => ids.Contains(item.Id) && item.IsActive).ToDictionaryAsync(item => item.Id, cancellationToken);
         if (products.Count != ids.Length) throw new KeyNotFoundException("Una o mas partidas no existen o estan inactivas.");
-        var purchase = new PurchaseRecord { Id = Guid.NewGuid(), OperationId = command.OperationId, SupplierId = supplierId.Value, UserId = user.Id, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var purchase = new PurchaseRecord { Id = Guid.NewGuid(), OperationId = command.OperationId, SupplierId = supplierId.Value, UserId = user.Id, CreatedAtUtc = DateTimeOffset.UtcNow, PaidFromCashRegister = command.PayFromCashRegister };
         var total = 0m;
         foreach (var line in command.Lines)
         {
             if (line.Quantity <= 0m || line.UnitCost < 0m || line.SalePrice is < 0m) throw new ArgumentException("La cantidad debe ser positiva y el costo y precio no pueden ser negativos.");
             var product = products[line.ProductId]; var before = product.Stock; var oldValue = before * product.Cost; var receivedValue = line.Quantity * line.UnitCost; var after = before + line.Quantity;
             product.Cost = after == 0m ? 0m : decimal.Round((oldValue + receivedValue) / after, 2, MidpointRounding.AwayFromZero);
-            if (line.SalePrice is decimal salePrice)
+            if (line.ProfitPercentToApply is decimal percent)
+            {
+                // Ajuste autorizado por el usuario: precio = costo promedio nuevo + % de ganancia.
+                if (percent < 0m || percent > 999.99m) throw new ArgumentException($"El % de ganancia de {product.Description} debe estar entre 0 y 999.99.");
+                product.ProfitPercent = decimal.Round(percent, 2, MidpointRounding.AwayFromZero);
+                product.Price = decimal.Round(product.Cost * (1m + product.ProfitPercent / 100m), 2, MidpointRounding.AwayFromZero);
+            }
+            else if (line.SalePrice is decimal salePrice)
             {
                 product.Price = decimal.Round(salePrice, 2, MidpointRounding.AwayFromZero);
                 if (product.Cost > 0m) product.ProfitPercent = decimal.Round(((product.Price - product.Cost) / product.Cost) * 100m, 2, MidpointRounding.AwayFromZero);
             }
             if (store.InventoryEnabled) product.Stock = decimal.Round(after, 3, MidpointRounding.AwayFromZero);
             if (store.AutoPriceWithProfit && product.Price <= 0m) product.Price = decimal.Round(product.Cost * (1m + (product.ProfitPercent > 0m ? product.ProfitPercent : store.DefaultProfitPercent) / 100m), 2, MidpointRounding.AwayFromZero);
+            var supplierUnitCost = decimal.Round(line.UnitCost, 2, MidpointRounding.AwayFromZero);
+            if (product.Price < supplierUnitCost)
+                throw new ArgumentException($"El precio de venta de {product.Description} (${product.Price:0.00}) no puede ser menor al precio del proveedor (${supplierUnitCost:0.00}).");
             var lineTotal = decimal.Round(receivedValue, 2, MidpointRounding.AwayFromZero); total += lineTotal;
             database.PurchaseLines.Add(new PurchaseLineRecord { Id = Guid.NewGuid(), PurchaseId = purchase.Id, ProductId = product.Id, Quantity = line.Quantity, UnitCost = decimal.Round(line.UnitCost, 2), LineTotal = lineTotal });
             if (store.InventoryEnabled) database.InventoryMovements.Add(new InventoryMovementRecord { Id = Guid.NewGuid(), ProductId = product.Id, UserId = user.Id, OperationId = command.OperationId, Quantity = line.Quantity, StockBefore = before, StockAfter = product.Stock, Reason = "Purchase", CreatedAtUtc = purchase.CreatedAtUtc });
         }
-        purchase.Total = decimal.Round(total, 2); database.Purchases.Add(purchase); await database.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
-        return new ReceivePurchaseResult(purchase.Id, purchase.OperationId, purchase.Total, false);
+        purchase.Total = decimal.Round(total, 2);
+        purchase.Notes = Clean(command.Notes);
+        if (command.PayFromCashRegister)
+        {
+            // Se registra lo que realmente salió de caja, no necesariamente el total de la compra.
+            var withdrawn = decimal.Round(command.CashWithdrawn ?? purchase.Total, 2, MidpointRounding.AwayFromZero);
+            purchase.CashWithdrawn = withdrawn;
+            purchase.PaidFromCashRegister = withdrawn > 0m;
+            if (withdrawn > 0m)
+            {
+                if (session?.RegisterId is not Guid registerId) throw new InvalidOperationException("No se puede pagar desde caja porque esta sesión no pertenece a una caja.");
+                var shift = await database.Shifts.SingleOrDefaultAsync(item => item.RegisterId == registerId && item.UserId == user.Id && item.Status == "Open", cancellationToken);
+                if (shift is null) throw new InvalidOperationException("Abre tu turno antes de pagar al proveedor con efectivo de caja.");
+                var reason = $"Pago a proveedor: {supplierName}";
+                if (reason.Length > 160) reason = reason[..160];
+                database.CashMovements.Add(new CashMovementRecord { Id = Guid.NewGuid(), ShiftId = shift.Id, Type = "Out", Amount = withdrawn, Reason = reason, CreatedAtUtc = purchase.CreatedAtUtc });
+            }
+        }
+        database.Purchases.Add(purchase); await database.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
+        return new ReceivePurchaseResult(purchase.Id, purchase.OperationId, purchase.Total, false, purchase.PaidFromCashRegister, purchase.CashWithdrawn);
+    }
+
+    public async Task<PurchasePricingDefaults?> PricingDefaultsAsync(string token, CancellationToken cancellationToken)
+    {
+        if (await UserAsync(token, cancellationToken) is null) return null;
+        var store = await database.Stores.AsNoTracking().OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
+        return new PurchasePricingDefaults(store.DefaultProfitPercent, store.AutoPriceWithProfit);
+    }
+
+    public async Task<IReadOnlyList<PurchaseCashierOption>?> HistoryCashiersAsync(string token, CancellationToken cancellationToken)
+    {
+        if (await UserAsync(token, cancellationToken) is null) return null;
+        var userIds = await database.Purchases.AsNoTracking().Select(item => item.UserId).Distinct().ToListAsync(cancellationToken);
+        return await database.Users.AsNoTracking().Where(item => userIds.Contains(item.Id)).OrderBy(item => item.DisplayName).Select(item => new PurchaseCashierOption(item.Id, item.DisplayName)).ToListAsync(cancellationToken);
+    }
+
+    /// <summary>Historial de compras a proveedores, filtrable por fecha, cajero, proveedor y pago desde caja.</summary>
+    public async Task<IReadOnlyList<PurchaseHistoryItem>?> HistoryAsync(string token, DateTimeOffset? from, DateTimeOffset? to, Guid? userId, Guid? supplierId, bool? paidFromCash, CancellationToken cancellationToken)
+    {
+        if (await UserAsync(token, cancellationToken) is null) return null;
+        // Npgsql sólo acepta DateTimeOffset en UTC para columnas timestamptz.
+        var fromUtc = from?.ToUniversalTime();
+        var toUtc = to?.ToUniversalTime();
+        var purchases = database.Purchases.AsNoTracking();
+        if (fromUtc is DateTimeOffset start) purchases = purchases.Where(item => item.CreatedAtUtc >= start);
+        if (toUtc is DateTimeOffset end) purchases = purchases.Where(item => item.CreatedAtUtc < end);
+        if (userId is Guid cashier && cashier != Guid.Empty) purchases = purchases.Where(item => item.UserId == cashier);
+        if (supplierId is Guid supplier && supplier != Guid.Empty) purchases = purchases.Where(item => item.SupplierId == supplier);
+        if (paidFromCash is bool paid) purchases = purchases.Where(item => item.PaidFromCashRegister == paid);
+        var rows = await (from purchase in purchases
+                          join supplierRecord in database.Suppliers.AsNoTracking() on purchase.SupplierId equals supplierRecord.Id
+                          join user in database.Users.AsNoTracking() on purchase.UserId equals user.Id
+                          orderby purchase.CreatedAtUtc descending
+                          select new { purchase.Id, purchase.CreatedAtUtc, purchase.SupplierId, Supplier = supplierRecord.Name, purchase.UserId, Cashier = user.DisplayName, purchase.Total, purchase.PaidFromCashRegister, purchase.CashWithdrawn, purchase.Notes })
+            .Take(1000)
+            .ToListAsync(cancellationToken);
+        var ids = rows.Select(item => item.Id).ToArray();
+        var lineStats = await database.PurchaseLines.AsNoTracking()
+            .Where(item => ids.Contains(item.PurchaseId))
+            .GroupBy(item => item.PurchaseId)
+            .Select(group => new { PurchaseId = group.Key, Count = group.Count(), Pieces = group.Sum(item => item.Quantity) })
+            .ToDictionaryAsync(item => item.PurchaseId, cancellationToken);
+        return rows.Select(item =>
+        {
+            var stats = lineStats.GetValueOrDefault(item.Id);
+            return new PurchaseHistoryItem(item.Id, item.CreatedAtUtc, item.SupplierId, item.Supplier, item.UserId, item.Cashier, stats?.Count ?? 0, stats?.Pieces ?? 0m, item.Total, item.PaidFromCashRegister, item.CashWithdrawn, item.Notes);
+        }).ToList();
+    }
+
+    public async Task<PurchaseHistoryDetail?> HistoryDetailAsync(string token, Guid purchaseId, CancellationToken cancellationToken)
+    {
+        if (await UserAsync(token, cancellationToken) is null) return null;
+        var header = await (from purchase in database.Purchases.AsNoTracking()
+                            join supplierRecord in database.Suppliers.AsNoTracking() on purchase.SupplierId equals supplierRecord.Id
+                            join user in database.Users.AsNoTracking() on purchase.UserId equals user.Id
+                            where purchase.Id == purchaseId
+                            select new { purchase.Id, purchase.CreatedAtUtc, purchase.SupplierId, Supplier = supplierRecord.Name, purchase.UserId, Cashier = user.DisplayName, purchase.Total, purchase.PaidFromCashRegister, purchase.CashWithdrawn, purchase.Notes })
+            .SingleOrDefaultAsync(cancellationToken) ?? throw new KeyNotFoundException("Compra no encontrada.");
+        var lines = await (from line in database.PurchaseLines.AsNoTracking()
+                           join product in database.Products.AsNoTracking() on line.ProductId equals product.Id
+                           where line.PurchaseId == purchaseId
+                           orderby product.Description
+                           select new PurchaseHistoryLine(product.Code, product.Description, product.UnitOfMeasure, line.Quantity, line.UnitCost, line.LineTotal))
+            .ToListAsync(cancellationToken);
+        var item = new PurchaseHistoryItem(header.Id, header.CreatedAtUtc, header.SupplierId, header.Supplier, header.UserId, header.Cashier, lines.Count, lines.Sum(line => line.Quantity), header.Total, header.PaidFromCashRegister, header.CashWithdrawn, header.Notes);
+        return new PurchaseHistoryDetail(item, lines);
     }
 
     public async Task<IReadOnlyList<PurchaseSuggestion>?> SuggestionsAsync(string token, Guid? supplierId, Guid? departmentId, CancellationToken cancellationToken)
@@ -241,11 +360,15 @@ public sealed class SupplierPurchaseService(PosDbContext database)
 
     private async Task<UserRecord?> UserAsync(string token, CancellationToken cancellationToken)
     {
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty)));
-        var session = await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
+        var session = await SessionAsync(token, cancellationToken);
         if (session is null) return null;
         var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
         return user.IsAdministrator || await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "ManageSuppliersAndPurchases", cancellationToken) ? user : null;
+    }
+    private async Task<SessionRecord?> SessionAsync(string token, CancellationToken cancellationToken)
+    {
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token ?? string.Empty)));
+        return await database.Sessions.AsNoTracking().SingleOrDefaultAsync(item => item.TokenHash == hash && item.RevokedAtUtc == null && item.ExpiresAtUtc > DateTimeOffset.UtcNow, cancellationToken);
     }
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

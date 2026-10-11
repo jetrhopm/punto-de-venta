@@ -2,15 +2,17 @@
     <Grid Margin="24">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <StackPanel>
-            <StackPanel Orientation="Horizontal"><Border Width="46" Height="46" Background="#E7F3FB" CornerRadius="6"><icons:PackIconMaterial Kind="TuneVariant" Width="27" Height="27" Foreground="{StaticResource PrimaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><StackPanel Margin="12,0,0,0"><TextBlock Text="Opciones habilitadas" FontSize="24" FontWeight="Bold" Foreground="#17324D"/><TextBlock Text="Define cómo trabaja JetVenta con inventario, crédito y precios." Foreground="{StaticResource TextMutedBrush}" Margin="0,3,0,0"/></StackPanel></StackPanel>
+            <StackPanel Orientation="Horizontal"><Border Width="46" Height="46" Background="#E7F3FB" CornerRadius="6"><icons:PackIconMaterial Kind="TuneVariant" Width="27" Height="27" Foreground="{StaticResource PrimaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><StackPanel Margin="12,0,0,0"><TextBlock Text="Opciones habilitadas" FontSize="24" FontWeight="Bold" Foreground="#17324D"/><TextBlock Text="Define cómo trabaja JetVenta con inventario, crédito, precios y corte de caja." Foreground="{StaticResource TextMutedBrush}" Margin="0,3,0,0"/></StackPanel></StackPanel>
         </StackPanel>
         <ScrollViewer Grid.Row="1" Margin="0,18,0,12" VerticalScrollBarVisibility="Auto">
             <StackPanel>
                 <Border Background="#F3F8FC" BorderBrush="#D7E6F0" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,12">
                     <StackPanel>
-                        <CheckBox x:Name="InventoryEnabledBox" Content="Utilizar inventario para mis productos" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                        <CheckBox x:Name="InventoryEnabledBox" Content="Utilizar inventario para mis productos" FontWeight="SemiBold" Margin="0,0,0,6" Checked="OnInventoryChanged" Unchecked="OnInventoryChanged"/>
                         <TextBlock Text="Controla existencias, entradas, salidas, mínimos y máximos. Puedes activarlo después si hoy no llevas inventario." TextWrapping="Wrap" Foreground="{StaticResource TextMutedBrush}" Margin="22,0,0,10"/>
                         <Grid Margin="22,0,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="220"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Método de costo de inventario" VerticalAlignment="Center"/><ComboBox x:Name="CostMethodBox" Grid.Column="1" SelectedIndex="0"><ComboBoxItem Tag="WeightedAverage">Costo promedio ponderado</ComboBoxItem></ComboBox><TextBlock Grid.Column="2" Text="Se actualiza al recibir compras." Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="10,0,0,0"/></Grid>
+                        <CheckBox x:Name="BlockSalesWithoutStockBox" Content="No permitir ventas que excedan la existencia disponible" FontWeight="SemiBold" Margin="22,12,0,5"/>
+                        <TextBlock Text="Al cobrar, JetVenta bloqueará la venta si el artículo o los componentes de un kit no tienen suficientes existencias. Desactívalo para permitir existencias negativas, como funciona actualmente." TextWrapping="Wrap" Foreground="{StaticResource TextMutedBrush}" Margin="44,0,0,0"/>
                     </StackPanel>
                 </Border>
                 <Border Background="#FFFFFF" BorderBrush="#D7E6F0" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,12">
@@ -36,6 +38,12 @@
                     <StackPanel>
                         <CheckBox x:Name="RoundAmountsBox" Content="Habilitar redondeo de centavos a cantidad cerrada" FontWeight="SemiBold" Margin="0,0,0,8" Checked="OnRoundChanged" Unchecked="OnRoundChanged"/>
                         <Grid Margin="22,0,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="160"/><ColumnDefinition Width="280"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Tipo de redondeo" VerticalAlignment="Center"/><ComboBox x:Name="RoundingModeBox" Grid.Column="1" SelectionChanged="OnRoundChanged"><ComboBoxItem Tag="Tenths">A décimas (45.52 → 45.60, 35.18 → 35.20)</ComboBoxItem><ComboBoxItem Tag="Whole">A pesos cerrados (45.52 → 46.00)</ComboBoxItem></ComboBox></Grid>
+                    </StackPanel>
+                </Border>
+                <Border Background="#F3F8FC" BorderBrush="#D7E6F0" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,12">
+                    <StackPanel>
+                        <CheckBox x:Name="PrintShiftCloseBox" Content="Imprimir el comprobante del corte de caja al cerrar turno" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                        <TextBlock x:Name="PrintShiftCloseHint" Text="Se aplica sólo a esta caja, porque usa la impresora configurada en este equipo." Foreground="{StaticResource TextMutedBrush}" Margin="22,0,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
                 <Border Background="#FFFFFF" BorderBrush="#D7E6F0" BorderThickness="1" CornerRadius="6" Padding="14">

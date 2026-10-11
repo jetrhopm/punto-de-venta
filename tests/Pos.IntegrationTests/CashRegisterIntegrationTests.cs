@@ -9,6 +9,110 @@ namespace Pos.IntegrationTests;
 public sealed class CashRegisterIntegrationTests
 {
     [Fact]
+    public async Task PayingSupplierFromCashRegisterRecordsCashOutInTheCurrentShift()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda pago proveedor " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow };
+        var user = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "PAGO_PROVEEDOR_" + suffix, DisplayName = "Comprador", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja pago proveedor " + suffix, IsActive = true };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, RegisterId = register.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        var supplier = new SupplierRecord { Id = Guid.NewGuid(), Name = "Proveedor prueba " + suffix, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var product = new ProductRecord { Id = Guid.NewGuid(), Code = "PAGO-" + suffix, NormalizedCode = "PAGO-" + suffix.ToUpperInvariant(), Description = "Producto de compra", Price = 25m, Cost = 10m, Stock = 4m, IsActive = true };
+        database.AddRange(store, user, register, session, supplier, product);
+        await database.SaveChangesAsync();
+
+        try
+        {
+            var shift = await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(100m), CancellationToken.None);
+            Assert.NotNull(shift);
+            var operationId = Guid.NewGuid();
+            var received = await new SupplierPurchaseService(database).ReceiveAsync(token, new ReceivePurchaseCommand(operationId, supplier.Id, [new PurchaseLineCommand(product.Id, 2m, 12m, 25m)], true), CancellationToken.None);
+            Assert.NotNull(received);
+            Assert.True(received!.PaidFromCashRegister);
+            Assert.Equal(24m, received.Total);
+            Assert.True(await database.Purchases.AnyAsync(item => item.Id == received.PurchaseId && item.PaidFromCashRegister));
+            var movement = await database.CashMovements.SingleAsync(item => item.ShiftId == shift!.ShiftId && item.Reason.StartsWith("Pago a proveedor:"));
+            Assert.Equal("Out", movement.Type);
+            Assert.Equal(24m, movement.Amount);
+            var summary = await new CashRegisterService(database).CurrentSummaryAsync(token, CancellationToken.None);
+            Assert.Equal(76m, summary!.ExpectedCash);
+        }
+        finally
+        {
+            var purchaseIds = await database.Purchases.Where(item => item.UserId == user.Id).Select(item => item.Id).ToListAsync();
+            var shiftIds = await database.Shifts.Where(item => item.RegisterId == register.Id).Select(item => item.Id).ToListAsync();
+            database.PurchaseLines.RemoveRange(database.PurchaseLines.Where(item => purchaseIds.Contains(item.PurchaseId)));
+            database.Purchases.RemoveRange(database.Purchases.Where(item => purchaseIds.Contains(item.Id)));
+            database.InventoryMovements.RemoveRange(database.InventoryMovements.Where(item => item.ProductId == product.Id));
+            database.CashMovements.RemoveRange(database.CashMovements.Where(item => shiftIds.Contains(item.ShiftId)));
+            database.Shifts.RemoveRange(database.Shifts.Where(item => shiftIds.Contains(item.Id)));
+            database.Sessions.Remove(session);
+            database.Products.Remove(product);
+            database.Suppliers.Remove(supplier);
+            database.Registers.Remove(register);
+            database.Users.Remove(user);
+            database.Stores.Remove(store);
+            await database.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
+    public async Task ChangeOfShiftRequiresCountedDeliveryAndCountedReception()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var firstToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var secondToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda relevo " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow };
+        var firstUser = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "RELEVO_1_" + suffix, DisplayName = "Paola", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var secondUser = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "RELEVO_2_" + suffix, DisplayName = "Diego", IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja relevo " + suffix, IsActive = true };
+        var firstSession = new SessionRecord { Id = Guid.NewGuid(), UserId = firstUser.Id, RegisterId = register.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(firstToken))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        var secondSession = new SessionRecord { Id = Guid.NewGuid(), UserId = secondUser.Id, RegisterId = register.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(secondToken))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        database.AddRange(store, firstUser, secondUser, register, firstSession, secondSession);
+        await database.SaveChangesAsync();
+
+        try
+        {
+            var shifts = new ShiftService(database);
+            var cash = new CashRegisterService(database);
+            Assert.NotNull(await shifts.OpenAsync(firstToken, new OpenShiftCommand(100m), CancellationToken.None));
+            var handoff = await cash.HandoffAsync(firstToken, new HandoffShiftCommand(95m), CancellationToken.None);
+            Assert.NotNull(handoff);
+            Assert.Equal(-5m, handoff!.Difference);
+            var pending = await shifts.PendingHandoffAsync(secondToken, CancellationToken.None);
+            Assert.NotNull(pending);
+            Assert.Equal(95m, pending!.DeliveredCash);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => shifts.OpenAsync(secondToken, new OpenShiftCommand(0m), CancellationToken.None));
+            var received = await shifts.ReceiveHandoffAsync(secondToken, new ReceiveShiftHandoffCommand(pending.HandoffId, 94m), CancellationToken.None);
+            Assert.NotNull(received);
+            Assert.Equal(94m, received!.InitialCash);
+            var saved = await database.ShiftHandoffs.SingleAsync(item => item.Id == pending.HandoffId);
+            Assert.Equal("Received", saved.Status);
+            Assert.Equal(94m, saved.ReceivedCash);
+            var report = await cash.HandoffsForDayAsync(firstToken, DateOnly.FromDateTime(DateTime.Today), null, CancellationToken.None);
+            Assert.Contains(report!, item => item.Cashier == "Paola" && item.DeliveredCash == 95m && item.ReceivedCash == 94m);
+        }
+        finally
+        {
+            var shiftIds = await database.Shifts.Where(item => item.RegisterId == register.Id).Select(item => item.Id).ToListAsync();
+            database.ShiftHandoffs.RemoveRange(database.ShiftHandoffs.Where(item => item.RegisterId == register.Id));
+            database.Shifts.RemoveRange(database.Shifts.Where(item => shiftIds.Contains(item.Id)));
+            database.Sessions.RemoveRange(database.Sessions.Where(item => item.UserId == firstUser.Id || item.UserId == secondUser.Id));
+            database.Registers.Remove(register);
+            database.Users.RemoveRange(firstUser, secondUser);
+            database.Stores.Remove(store);
+            await database.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
     public async Task CashierCanReadStorePaymentMethodsButCannotChangeThem()
     {
         await using var database = new PosDbContextFactory().CreateDbContext([]);
@@ -84,11 +188,14 @@ public sealed class CashRegisterIntegrationTests
     {
         await using var database = new PosDbContextFactory().CreateDbContext([]);
         await database.Database.MigrateAsync();
+        await using var transaction = await database.Database.BeginTransactionAsync();
 
         var suffix = Guid.NewGuid().ToString("N");
         var firstToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         var secondToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-        var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda original " + suffix, BusinessType = "Abarrotes", CreatedAtUtc = DateTimeOffset.UtcNow };
+        // Esta prueba debe ser la primera tienda de su propia transacción: los servicios
+        // trabajan con una sola tienda y seleccionan la más antigua.
+        var store = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda de prueba " + suffix, BusinessType = "Abarrotes", CreatedAtUtc = DateTimeOffset.FromUnixTimeSeconds(-1) };
         var firstAdministrator = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "ADMIN_ONE_" + suffix, DisplayName = "Administrador caja uno", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
         var secondAdministrator = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "ADMIN_TWO_" + suffix, DisplayName = "Administrador caja dos", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
         var firstRegister = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja uno " + suffix, IsActive = true };
@@ -113,11 +220,7 @@ public sealed class CashRegisterIntegrationTests
         }
         finally
         {
-            database.Sessions.RemoveRange(firstSession, secondSession);
-            database.Registers.RemoveRange(firstRegister, secondRegister);
-            database.Users.RemoveRange(firstAdministrator, secondAdministrator);
-            database.Stores.Remove(store);
-            await database.SaveChangesAsync();
+            await transaction.RollbackAsync();
         }
     }
 

@@ -1,0 +1,52 @@
+<Window x:Class="Pos.Desktop.PurchasePaymentWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
+        Title="Pago al proveedor" Width="560" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource AppBackgroundBrush}" PreviewKeyDown="OnPreviewKeyDown">
+    <StackPanel Margin="24">
+        <StackPanel Orientation="Horizontal">
+            <Border Width="46" Height="46" Background="#E4F2EC" CornerRadius="6"><icons:PackIconMaterial Kind="CashMinus" Width="26" Height="26" Foreground="#238A68" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+            <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                <TextBlock Text="Confirmar recepción" FontSize="22" FontWeight="SemiBold" Foreground="#17324D"/>
+                <TextBlock Text="Revisa el total y cómo se paga al proveedor." Foreground="#637589"/>
+            </StackPanel>
+        </StackPanel>
+
+        <TextBlock Text="Proveedor" FontWeight="SemiBold" Foreground="#17324D" Margin="0,16,0,0"/>
+        <ComboBox x:Name="SupplierPicker" Height="36" Margin="0,6,0,0" DisplayMemberPath="DisplayText" SelectionChanged="OnSupplierChanged"/>
+
+        <Border Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="7" Padding="16" Margin="0,16,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Total a pagar al proveedor" Foreground="#637589"/>
+                    <TextBlock x:Name="TotalText" FontSize="32" FontWeight="Bold" Foreground="#17324D"/>
+                </StackPanel>
+                <TextBlock Grid.Column="1" x:Name="LinesText" Foreground="#637589" VerticalAlignment="Bottom" TextAlignment="Right"/>
+            </Grid>
+        </Border>
+
+        <TextBlock Text="¿Cómo se paga?" FontWeight="SemiBold" Foreground="#17324D" Margin="0,16,0,6"/>
+        <RadioButton x:Name="NoCashRadio" GroupName="Payment" Content="No sale dinero de caja (pagó otra persona, a crédito o es regalo del proveedor)" Checked="OnPaymentModeChanged" Margin="0,0,0,6"/>
+        <RadioButton x:Name="CashRadio" GroupName="Payment" Content="Pagar con efectivo de caja" Checked="OnPaymentModeChanged" FontWeight="SemiBold"/>
+        <TextBlock x:Name="CashDisabledText" Foreground="#A96300" Margin="24,3,0,0" TextWrapping="Wrap" Visibility="Collapsed" Text="Se registrará como pago a &quot;Sin proveedor&quot;. Si sabes a quién le pagas, elígelo arriba o explica en la nota qué se compró."/>
+
+        <StackPanel x:Name="CashPanel" Margin="24,10,0,0" Visibility="Collapsed">
+            <TextBlock Text="Efectivo que retiraste de caja" FontWeight="SemiBold" Foreground="#17324D"/>
+            <TextBox x:Name="WithdrawnBox" Height="42" FontSize="19" Padding="10,5" Margin="0,6,0,0" TextChanged="OnWithdrawnChanged" ToolTip="Escribe exactamente lo que sacaste de la caja. Se restará del efectivo esperado en el corte."/>
+            <TextBlock x:Name="DifferenceText" TextWrapping="Wrap" Margin="0,6,0,0"/>
+        </StackPanel>
+
+        <TextBlock Text="Nota (opcional)" FontWeight="SemiBold" Foreground="#17324D" Margin="0,14,0,0"/>
+        <TextBox x:Name="NotesBox" Height="38" Padding="8,5" Margin="0,6,0,0" MaxLength="300" ToolTip="Ej.: pagó el gerente, mercancía de regalo, pago parcial."/>
+
+        <TextBlock x:Name="MessageText" Foreground="#B42318" TextWrapping="Wrap" Margin="0,10,0,0"/>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button Width="112" Height="40" Margin="0,0,8,0" Style="{StaticResource CancelButtonStyle}" Click="OnCancelClick">Cancelar</Button>
+            <Button Width="180" Height="40" Style="{StaticResource ConfirmButtonStyle}" IsDefault="True" Click="OnConfirmClick">
+                <StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="PackageDown" Width="18" Height="18" Margin="0,0,7,0"/><TextBlock Text="Registrar recepción"/></StackPanel>
+            </Button>
+        </StackPanel>
+    </StackPanel>
+</Window>

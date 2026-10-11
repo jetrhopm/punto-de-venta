@@ -20,6 +20,9 @@
             </StackPanel>
         </StackPanel>
         <StackPanel Grid.Row="1" Margin="0,20,0,0">
+            <Button Height="54" Margin="0,0,0,10" Background="#146CB0" Foreground="White" FontWeight="Bold" Click="OnChangeShiftClick">
+                <StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="AccountSwitchOutline" Width="20" Height="20" Margin="0,0,8,0"/><TextBlock Text="Cambiar turno y volver al inicio de sesión"/></StackPanel>
+            </Button>
             <Button Height="54" Margin="0,0,0,10" Style="{StaticResource SuccessButtonStyle}" Click="OnCloseShiftAndSignOutClick">
                 <StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="ClipboardCheckOutline" Width="20" Height="20" Margin="0,0,8,0"/><TextBlock Text="Cerrar turno, realizar corte y volver al inicio de sesión"/></StackPanel>
             </Button>
@@ -33,6 +36,6 @@
                 <StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="CloseCircleOutline" Width="20" Height="20" Margin="0,0,8,0"/><TextBlock Text="Cancelar"/></StackPanel>
             </Button>
         </StackPanel>
-        <TextBlock Grid.Row="2" Text="Volver al inicio de sesión conserva JetVenta abierto, pero cierra por completo la sesión actual. Dejar el turno abierto no realiza corte." Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+        <TextBlock Grid.Row="2" Text="Cambiar turno requiere contar y entregar el efectivo; el siguiente cajero deberá contarlo y confirmarlo. Dejar el turno abierto no registra una entrega." Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
     </Grid>
 </Window>

@@ -13,11 +13,15 @@ public partial class LicenseWindow : Window
     private static HttpClient Client => ApiClient.Client;
     private bool _busy;
     private LicenseStatus? _currentStatus;
+    private readonly string? _activationUserName;
+    private readonly string? _activationPassword;
     private readonly DispatcherTimer _countdownTimer = new() { Interval = TimeSpan.FromSeconds(1) };
 
-    public LicenseWindow()
+    public LicenseWindow(string? activationUserName = null, string? activationPassword = null)
     {
         InitializeComponent();
+        _activationUserName = string.IsNullOrWhiteSpace(activationUserName) ? null : activationUserName;
+        _activationPassword = string.IsNullOrEmpty(activationPassword) ? null : activationPassword;
         _countdownTimer.Tick += (_, _) => UpdateCountdown();
         Loaded += async (_, _) => await LoadStatusAsync();
         Closed += (_, _) => _countdownTimer.Stop();
@@ -43,7 +47,9 @@ public partial class LicenseWindow : Window
         {
             SetBusy(true);
             var content = await File.ReadAllTextAsync(picker.FileName);
-            using var response = await Client.PostAsJsonAsync("api/license/import", new { content });
+            using var response = HasLoginActivationCredentials
+                ? await Client.PostAsJsonAsync("api/license/activation-import", new { userName = _activationUserName, password = _activationPassword, content })
+                : await Client.PostAsJsonAsync("api/license/import", new { content });
             if (!response.IsSuccessStatusCode)
             {
                 var detail = await response.Content.ReadAsStringAsync();
@@ -66,7 +72,8 @@ public partial class LicenseWindow : Window
         try
         {
             SetBusy(true);
-            var result = await Client.GetFromJsonAsync<LicenseStatus>("api/license/status");
+            var endpoint = HasLoginActivationCredentials ? "api/license/activation-status" : "api/license/status";
+            var result = await Client.GetFromJsonAsync<LicenseStatus>(endpoint);
             if (result is null) throw new InvalidOperationException("JetVenta no devolvió el estado de la licencia.");
             RequestCodeTextBox.Text = result.RequestCode;
             ApplyStatus(result);
@@ -153,6 +160,8 @@ public partial class LicenseWindow : Window
         _busy = busy;
         ImportButton.IsEnabled = !busy;
     }
+
+    private bool HasLoginActivationCredentials => _activationUserName is not null && _activationPassword is not null;
 
     private static string? ExtractMessage(string content)
     {

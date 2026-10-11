@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Win32;
 using Pos.Domain;
 using System.Runtime.InteropServices;
@@ -27,6 +28,7 @@ public sealed record LicenseStartupStatusResult(
     DateTimeOffset? ExpiresAtUtc);
 
 public sealed record ImportLicenseCommand(string Content);
+public sealed record ActivateLicenseCommand(string UserName, string Password, string Content);
 
 public sealed record TrialClockResult(bool IsActive, string State, DateTimeOffset LastSeenAtUtc, DateTimeOffset ExpiresAtUtc);
 
@@ -65,7 +67,7 @@ public static class TrialStatePolicy
     }
 }
 
-public sealed class LicenseService(PosDbContext database)
+public sealed class LicenseService(PosDbContext database, PasswordHasher<UserRecord> passwordHasher)
 {
     private static readonly byte[] StorageEntropy = SHA256.HashData(Encoding.UTF8.GetBytes("JetVenta license storage v1"));
     private static readonly byte[] TrialEntropy = SHA256.HashData(Encoding.UTF8.GetBytes("JetVenta trial storage v1"));
@@ -213,7 +215,23 @@ public sealed class LicenseService(PosDbContext database)
     {
         if (!await IsAuthorizedAsync(token, requireConfigurationPermission: true, cancellationToken)) return null;
 
-        if (!JetVentaLicensing.TryReadLicense(command.Content, out var signedLicense, out var error)) throw new ArgumentException(error);
+        return ImportVerified(command.Content);
+    }
+
+    public async Task<LicenseStatusResult?> ActivateAsync(ActivateLicenseCommand command, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(command.UserName) || string.IsNullOrEmpty(command.Password)) return null;
+        var normalizedUserName = InitialSetupService.NormalizeUserName(command.UserName);
+        var user = await database.Users.SingleOrDefaultAsync(item => item.NormalizedUserName == normalizedUserName && item.IsActive, cancellationToken);
+        if (user is null || passwordHasher.VerifyHashedPassword(user, user.PasswordHash, command.Password) == PasswordVerificationResult.Failed) return null;
+        if (!user.IsAdministrator && !await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == Permission.ConfigureStore.ToString(), cancellationToken)) return null;
+
+        return ImportVerified(command.Content);
+    }
+
+    private LicenseStatusResult ImportVerified(string content)
+    {
+        if (!JetVentaLicensing.TryReadLicense(content, out var signedLicense, out var error)) throw new ArgumentException(error);
         if (!JetVentaLicensing.Verify(signedLicense!)) throw new ArgumentException("La firma de la licencia no es válida.");
         var fingerprint = GetMachineFingerprint();
         if (!string.Equals(signedLicense!.License.MachineFingerprint, fingerprint, StringComparison.Ordinal)) throw new ArgumentException("Esta licencia fue creada para otro equipo.");

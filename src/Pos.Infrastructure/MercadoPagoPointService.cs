@@ -6,7 +6,8 @@ using System.Text;
 
 namespace Pos.Infrastructure;
 
-public sealed record MercadoPagoSettingsResult(bool Enabled, string Environment, bool AccountConnected, long? AccountUserId, string TerminalId, string TerminalLabel, bool OAuthAvailable, bool WebhookConfigured, string RegisterName, string Message);
+public sealed record MercadoPagoSettingsResult(bool Enabled, string Environment, bool AccountConnected, long? AccountUserId, string TerminalId, string TerminalLabel, bool OAuthAvailable, bool WebhookConfigured, string RegisterName, string Message, bool TestTokenAllowed = false);
+public sealed record MercadoPagoOAuthStatusResult(string Status, string Message);
 public sealed record MercadoPagoTerminalResult(string Id, string Label, string OperatingMode, bool Selected);
 public sealed record ConfigureMercadoPagoTestCommand(string AccessToken);
 public sealed record SelectMercadoPagoTerminalCommand(string TerminalId, string Label);
@@ -18,7 +19,7 @@ public sealed record MercadoPagoCheckoutStatus(bool Enabled, string RegisterName
 public sealed record MercadoPagoWebhookReceipt(bool Accepted, string Message);
 public sealed record MercadoPagoRefundResult(Guid OperationId, decimal Amount, string Status, string StatusDetail, bool Confirmed);
 
-public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPointClient client, IConfiguration configuration)
+public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPointClient client, JetVentaBrokerClient broker, IConfiguration configuration)
 {
     private static readonly SemaphoreSlim TokenRefreshGate = new(1, 1);
     public async Task<MercadoPagoSettingsResult?> GetSettingsAsync(string token, CancellationToken cancellationToken)
@@ -27,10 +28,12 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         if (register is null) return null;
         var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
         var connected = !string.IsNullOrWhiteSpace(store.MercadoPagoAccessTokenProtected);
-        var oauth = !string.IsNullOrWhiteSpace(configuration["MercadoPago:ClientId"]) && !string.IsNullOrWhiteSpace(configuration["MercadoPago:ClientSecret"]) && !string.IsNullOrWhiteSpace(configuration["MercadoPago:RedirectUri"]);
+        // La autorización se hace a través del intermediario central de JetVenta,
+        // que es el único que conoce el Client Secret de la aplicación.
+        var oauth = broker.IsConfigured;
         var webhook = !string.IsNullOrWhiteSpace(configuration["MercadoPago:WebhookSecret"]);
         var message = !connected ? "Autoriza la cuenta de Mercado Pago o guarda un Access Token de prueba." : string.IsNullOrWhiteSpace(register.MercadoPagoTerminalId) ? "Cuenta conectada. Selecciona una terminal Point en modo PDV para esta caja." : !register.MercadoPagoEnabled ? "Cuenta y terminal configuradas. Point está desactivado sólo en esta caja." : !webhook ? "Cuenta y terminal listas para cobrar en esta caja. Falta configurar el secreto Webhook HTTPS para conciliación automática." : "Cuenta, terminal y conciliación Webhook listas para cobrar en esta caja.";
-        return new(register.MercadoPagoEnabled, store.MercadoPagoEnvironment, connected, store.MercadoPagoUserId, register.MercadoPagoTerminalId, register.MercadoPagoTerminalLabel, oauth, webhook, register.Name, message);
+        return new(register.MercadoPagoEnabled, store.MercadoPagoEnvironment, connected, store.MercadoPagoUserId, register.MercadoPagoTerminalId, register.MercadoPagoTerminalLabel, oauth, webhook, register.Name, message, TestTokenAllowed);
     }
 
     // El cajero necesita saber si esta caja cobra con Point, pero no debe recibir
@@ -45,10 +48,12 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
     {
         var register = await CurrentRegisterAsync(token, configure: true, cancellationToken);
         if (register is null) return null;
-        if (string.IsNullOrWhiteSpace(command.AccessToken) || !command.AccessToken.StartsWith("TEST-", StringComparison.Ordinal)) throw new ArgumentException("El modo de pruebas acepta únicamente un Access Token de sandbox que inicie con TEST-.");
-        _ = await client.ListTerminalsAsync(command.AccessToken.Trim(), cancellationToken);
+        if (!TestTokenAllowed) throw new ArgumentException("El modo de pruebas está desactivado en esta instalación. Usa Autorizar cuenta.");
+        var accessToken = command.AccessToken?.Trim() ?? string.Empty;
+        if (!IsTestAccessToken(accessToken)) throw new ArgumentException("Escribe un Access Token de prueba de Mercado Pago. Normalmente inicia con APP_USR-; obténlo desde Tus integraciones > Pruebas > Credenciales de prueba.");
+        _ = await client.ListTerminalsAsync(accessToken, cancellationToken);
         var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
-        store.MercadoPagoAccessTokenProtected = Protect(command.AccessToken.Trim());
+        store.MercadoPagoAccessTokenProtected = Protect(accessToken);
         store.MercadoPagoRefreshTokenProtected = string.Empty;
         store.MercadoPagoEnvironment = "Test";
         register.MercadoPagoEnabled = true;
@@ -129,46 +134,115 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         store.MercadoPagoUserId = null;
         store.MercadoPagoTokenExpiresAtUtc = null;
         store.MercadoPagoOAuthState = string.Empty;
-        store.MercadoPagoOAuthVerifierProtected = string.Empty;
+        // MercadoPagoOAuthVerifierProtected guarda la identidad de esta instalación ante el
+        // intermediario, no datos de la cuenta; se conserva para volver a autorizar.
         store.MercadoPagoOAuthStateExpiresAtUtc = null;
         await database.SaveChangesAsync(cancellationToken);
         return true;
     }
 
+    // Inicia la autorización en el intermediario. Columnas reutilizadas de la versión anterior:
+    //   MercadoPagoOAuthState              -> id del intento en el intermediario
+    //   MercadoPagoOAuthStateExpiresAtUtc  -> vencimiento del intento
+    //   MercadoPagoOAuthVerifierProtected  -> identidad de la instalación (DPAPI)
     public async Task<string?> BeginOAuthAsync(string token, CancellationToken cancellationToken)
     {
         var register = await CurrentRegisterAsync(token, configure: true, cancellationToken);
         if (register is null) return null;
-        var clientId = configuration["MercadoPago:ClientId"] ?? throw new InvalidOperationException("JetVenta todavía no tiene configurado su App ID de Mercado Pago.");
-        var redirectUri = configuration["MercadoPago:RedirectUri"] ?? throw new InvalidOperationException("Falta registrar el callback HTTPS de Mercado Pago.");
-        var verifier = Base64Url(RandomNumberGenerator.GetBytes(48));
-        var challenge = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
-        var state = Base64Url(RandomNumberGenerator.GetBytes(32));
+        if (!broker.IsConfigured) throw new InvalidOperationException("Falta configurar la dirección del intermediario de JetVenta (MercadoPago:BrokerUrl).");
         var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
-        store.MercadoPagoOAuthState = state;
-        store.MercadoPagoOAuthVerifierProtected = Protect(verifier);
-        store.MercadoPagoOAuthStateExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10);
+        var installation = await EnsureBrokerInstallationAsync(store, cancellationToken);
+        BrokerOAuthStart started;
+        try { started = await broker.StartAsync(installation, cancellationToken); }
+        catch (MercadoPagoPointException exception) when (exception.ProviderCode == "unknown_installation")
+        {
+            // El intermediario no reconoce esta instalación (base reiniciada o revocada): se registra de nuevo una vez.
+            store.MercadoPagoOAuthVerifierProtected = string.Empty;
+            installation = await EnsureBrokerInstallationAsync(store, cancellationToken);
+            started = await broker.StartAsync(installation, cancellationToken);
+        }
+        store.MercadoPagoOAuthState = started.AttemptId.ToString();
+        store.MercadoPagoOAuthStateExpiresAtUtc = started.ExpiresAt;
         await database.SaveChangesAsync(cancellationToken);
-        return $"https://auth.mercadopago.com/authorization?response_type=code&client_id={Uri.EscapeDataString(clientId)}&redirect_uri={Uri.EscapeDataString(redirectUri)}&code_challenge={Uri.EscapeDataString(challenge)}&code_challenge_method=S256&state={Uri.EscapeDataString(state)}&scope=offline_access";
+        return started.AuthorizationUrl;
     }
 
-    public async Task CompleteOAuthAsync(string code, string state, CancellationToken cancellationToken)
+    // La ventana de configuración consulta este estado mientras el administrador acepta en el navegador.
+    public async Task<MercadoPagoOAuthStatusResult?> GetOAuthStatusAsync(string token, CancellationToken cancellationToken)
     {
-        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
-        var receivedState = Encoding.UTF8.GetBytes(state ?? string.Empty);
-        var expectedState = Encoding.UTF8.GetBytes(store.MercadoPagoOAuthState);
-        if (string.IsNullOrWhiteSpace(code) || receivedState.Length != expectedState.Length || !CryptographicOperations.FixedTimeEquals(receivedState, expectedState) || store.MercadoPagoOAuthStateExpiresAtUtc <= DateTimeOffset.UtcNow) throw new InvalidOperationException("La autorización expiró o no pertenece a esta tienda.");
-        var result = await client.ExchangeAuthorizationCodeAsync(configuration["MercadoPago:ClientId"]!, configuration["MercadoPago:ClientSecret"]!, code, configuration["MercadoPago:RedirectUri"]!, Unprotect(store.MercadoPagoOAuthVerifierProtected), cancellationToken);
-        store.MercadoPagoAccessTokenProtected = Protect(result.AccessToken);
-        store.MercadoPagoRefreshTokenProtected = string.IsNullOrWhiteSpace(result.RefreshToken) ? string.Empty : Protect(result.RefreshToken);
-        store.MercadoPagoUserId = result.UserId;
-        store.MercadoPagoTokenExpiresAtUtc = DateTimeOffset.UtcNow.AddSeconds(result.ExpiresIn);
-        store.MercadoPagoEnvironment = "Production";
-        store.MercadoPagoOAuthState = string.Empty;
-        store.MercadoPagoOAuthVerifierProtected = string.Empty;
-        store.MercadoPagoOAuthStateExpiresAtUtc = null;
-        await database.SaveChangesAsync(cancellationToken);
+        var register = await CurrentRegisterAsync(token, configure: true, cancellationToken);
+        if (register is null) return null;
+        var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
+        if (!Guid.TryParse(store.MercadoPagoOAuthState, out var attemptId))
+            return new("none", string.IsNullOrWhiteSpace(store.MercadoPagoAccessTokenProtected) ? "No hay una autorización en curso." : "Cuenta conectada.");
+
+        var installation = ReadBrokerInstallation(store) ?? throw new InvalidOperationException("Falta la identidad de esta instalación. Vuelve a pulsar Autorizar cuenta.");
+        BrokerOAuthPickup pickup;
+        try { pickup = await broker.PickupAsync(installation, attemptId, cancellationToken); }
+        catch (MercadoPagoPointException exception) when (exception.StatusCode is 401 or 404)
+        {
+            // El intento ya no existe o la instalación no es reconocida: se reinicia el proceso.
+            ClearOAuthAttempt(store);
+            if (exception.ProviderCode == "unknown_installation") store.MercadoPagoOAuthVerifierProtected = string.Empty;
+            await database.SaveChangesAsync(cancellationToken);
+            return new("failed", "La autorización ya no está disponible. Vuelve a pulsar Autorizar cuenta.");
+        }
+        switch (pickup.Status)
+        {
+            case "pending":
+                return new("pending", "Esperando que aceptes el acceso en Mercado Pago.");
+            case "completed" when pickup.Tokens is not null:
+                store.MercadoPagoAccessTokenProtected = Protect(pickup.Tokens.AccessToken);
+                store.MercadoPagoRefreshTokenProtected = string.IsNullOrWhiteSpace(pickup.Tokens.RefreshToken) ? string.Empty : Protect(pickup.Tokens.RefreshToken);
+                store.MercadoPagoUserId = pickup.Tokens.UserId == 0 ? null : pickup.Tokens.UserId;
+                store.MercadoPagoTokenExpiresAtUtc = pickup.Tokens.ExpiresIn > 0 ? DateTimeOffset.UtcNow.AddSeconds(pickup.Tokens.ExpiresIn) : null;
+                store.MercadoPagoEnvironment = "Production";
+                ClearOAuthAttempt(store);
+                await database.SaveChangesAsync(cancellationToken);
+                return new("completed", "Cuenta autorizada. Selecciona la terminal de esta caja.");
+            case "picked_up":
+                // Otra consulta ya guardó los tokens (por ejemplo, dos ventanas abiertas).
+                ClearOAuthAttempt(store);
+                await database.SaveChangesAsync(cancellationToken);
+                return string.IsNullOrWhiteSpace(store.MercadoPagoAccessTokenProtected)
+                    ? new("failed", "La autorización ya se había entregado y no se guardó en esta caja. Vuelve a pulsar Autorizar cuenta.")
+                    : new("completed", "Cuenta autorizada.");
+            default:
+                ClearOAuthAttempt(store);
+                await database.SaveChangesAsync(cancellationToken);
+                return new(pickup.Status == "expired" ? "expired" : "failed", pickup.Message ?? "La autorización no se completó. Vuelve a intentarlo.");
+        }
     }
+
+    private async Task<BrokerInstallation> EnsureBrokerInstallationAsync(StoreRecord store, CancellationToken cancellationToken)
+    {
+        var existing = ReadBrokerInstallation(store);
+        if (existing is not null) return existing;
+        var version = typeof(MercadoPagoPointService).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        var installation = await broker.RegisterAsync(LicenseService.GetMachineFingerprint(), version, cancellationToken);
+        store.MercadoPagoOAuthVerifierProtected = Protect(System.Text.Json.JsonSerializer.Serialize(installation));
+        await database.SaveChangesAsync(cancellationToken);
+        return installation;
+    }
+
+    private static BrokerInstallation? ReadBrokerInstallation(StoreRecord store)
+    {
+        if (string.IsNullOrWhiteSpace(store.MercadoPagoOAuthVerifierProtected)) return null;
+        try { return System.Text.Json.JsonSerializer.Deserialize<BrokerInstallation>(Unprotect(store.MercadoPagoOAuthVerifierProtected)); }
+        catch (Exception exception) when (exception is InvalidOperationException or System.Text.Json.JsonException) { return null; }
+    }
+
+    private static void ClearOAuthAttempt(StoreRecord store)
+    {
+        store.MercadoPagoOAuthState = string.Empty;
+        store.MercadoPagoOAuthStateExpiresAtUtc = null;
+    }
+
+    private bool TestTokenAllowed => string.Equals(configuration["MercadoPago:AllowTestToken"], "true", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsTestAccessToken(string token) =>
+        token.StartsWith("TEST-", StringComparison.OrdinalIgnoreCase) ||
+        token.StartsWith("APP_USR-", StringComparison.OrdinalIgnoreCase);
 
     public async Task<MercadoPagoOrderResult?> CreateOrderAsync(string token, CreateMercadoPagoOrderCommand command, CancellationToken cancellationToken)
     {
@@ -491,29 +565,55 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         webhook.LastError = error[..Math.Min(error.Length, 500)];
         webhook.NextAttemptAtUtc = now.AddMinutes(Math.Min(15, Math.Max(1, webhook.AttemptCount)));
     }
+    // El Access Token de Mercado Pago dura 180 días. Se renueva por el intermediario cuando
+    // faltan menos de 30 días; si el intermediario no responde y el token sigue vigente,
+    // se usa el actual para no detener los cobros.
+    private static readonly TimeSpan RefreshWindow = TimeSpan.FromDays(30);
+
     private async Task<string> GetAccessTokenAsync(StoreRecord store, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(store.MercadoPagoAccessTokenProtected)) throw new InvalidOperationException("La cuenta de Mercado Pago no está autorizada.");
-        if (store.MercadoPagoTokenExpiresAtUtc is null || store.MercadoPagoTokenExpiresAtUtc > DateTimeOffset.UtcNow.AddMinutes(5)) return Unprotect(store.MercadoPagoAccessTokenProtected);
-        if (string.IsNullOrWhiteSpace(store.MercadoPagoRefreshTokenProtected)) throw new InvalidOperationException("La autorización de Mercado Pago expiró. Vuelve a conectar la cuenta desde Configuración.");
+        if (!NeedsRefresh(store)) return Unprotect(store.MercadoPagoAccessTokenProtected);
+        if (string.IsNullOrWhiteSpace(store.MercadoPagoRefreshTokenProtected)) return CurrentOrExpired(store, "La autorización de Mercado Pago expiró. Vuelve a conectar la cuenta desde Configuración.");
         await TokenRefreshGate.WaitAsync(cancellationToken);
         try
         {
             await database.Entry(store).ReloadAsync(cancellationToken);
-            if (store.MercadoPagoTokenExpiresAtUtc is null || store.MercadoPagoTokenExpiresAtUtc > DateTimeOffset.UtcNow.AddMinutes(5)) return Unprotect(store.MercadoPagoAccessTokenProtected);
-            var result = await client.RefreshAccessTokenAsync(
-                configuration["MercadoPago:ClientId"] ?? throw new InvalidOperationException("Falta el App ID de Mercado Pago."),
-                configuration["MercadoPago:ClientSecret"] ?? throw new InvalidOperationException("Falta el secreto de la aplicación de Mercado Pago."),
-                Unprotect(store.MercadoPagoRefreshTokenProtected),
-                cancellationToken);
+            if (!NeedsRefresh(store)) return Unprotect(store.MercadoPagoAccessTokenProtected);
+            var installation = ReadBrokerInstallation(store);
+            if (installation is null || !broker.IsConfigured) return CurrentOrExpired(store, "La autorización de Mercado Pago expiró y esta instalación no puede renovarla. Vuelve a conectar la cuenta desde Configuración.");
+            OAuthTokenResult result;
+            try { result = await broker.RefreshAsync(installation, Unprotect(store.MercadoPagoRefreshTokenProtected), cancellationToken); }
+            catch (MercadoPagoPointException exception) when (exception.ProviderCode == "authorization_revoked")
+            {
+                // El comercio revocó el permiso o el refresh token ya no es válido.
+                store.MercadoPagoAccessTokenProtected = string.Empty;
+                store.MercadoPagoRefreshTokenProtected = string.Empty;
+                store.MercadoPagoTokenExpiresAtUtc = null;
+                await database.SaveChangesAsync(CancellationToken.None);
+                throw new InvalidOperationException("Mercado Pago ya no reconoce la autorización de esta tienda. Vuelve a autorizar la cuenta desde Configuración.");
+            }
+            catch (MercadoPagoPointException)
+            {
+                return CurrentOrExpired(store, "No se pudo renovar la autorización de Mercado Pago y el acceso ya venció. Revisa la conexión a Internet e intenta de nuevo.");
+            }
             store.MercadoPagoAccessTokenProtected = Protect(result.AccessToken);
             if (!string.IsNullOrWhiteSpace(result.RefreshToken)) store.MercadoPagoRefreshTokenProtected = Protect(result.RefreshToken);
-            store.MercadoPagoTokenExpiresAtUtc = DateTimeOffset.UtcNow.AddSeconds(result.ExpiresIn);
+            store.MercadoPagoTokenExpiresAtUtc = result.ExpiresIn > 0 ? DateTimeOffset.UtcNow.AddSeconds(result.ExpiresIn) : null;
             await database.SaveChangesAsync(cancellationToken);
             return result.AccessToken;
         }
         finally { TokenRefreshGate.Release(); }
     }
+
+    private static bool NeedsRefresh(StoreRecord store) => store.MercadoPagoTokenExpiresAtUtc is DateTimeOffset expiresAt && expiresAt <= DateTimeOffset.UtcNow.Add(RefreshWindow);
+
+    private static string CurrentOrExpired(StoreRecord store, string expiredMessage)
+    {
+        if (store.MercadoPagoTokenExpiresAtUtc is DateTimeOffset expiresAt && expiresAt > DateTimeOffset.UtcNow.AddMinutes(5)) return Unprotect(store.MercadoPagoAccessTokenProtected);
+        throw new InvalidOperationException(expiredMessage);
+    }
+
     private static string Protect(string value)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("La protección de credenciales de JetVenta requiere Windows.");
@@ -526,7 +626,6 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         try { return Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(value), null, DataProtectionScope.LocalMachine)); }
         catch (CryptographicException exception) { throw new InvalidOperationException("Las credenciales de Mercado Pago pertenecen a otro equipo o ya no son válidas. Vuelve a conectar la cuenta en esta caja principal.", exception); }
     }
-    private static string Base64Url(byte[] value) => Convert.ToBase64String(value).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
     private async Task<RegisterRecord?> CurrentRegisterAsync(string token, bool configure, CancellationToken cancellationToken)
     {

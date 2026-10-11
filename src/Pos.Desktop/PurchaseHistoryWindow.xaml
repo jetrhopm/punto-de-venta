@@ -1,0 +1,65 @@
+<Window x:Class="Pos.Desktop.PurchaseHistoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
+        Title="Historial de compras" Width="1180" Height="760" MinWidth="900" MinHeight="560"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource AppBackgroundBrush}" Loaded="OnLoaded" PreviewKeyDown="OnPreviewKeyDown">
+    <Grid Margin="22">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="220"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel Orientation="Horizontal">
+            <Border Width="46" Height="46" Background="#E4F2EC" CornerRadius="6"><icons:PackIconMaterial Kind="History" Width="26" Height="26" Foreground="#238A68" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+            <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                <TextBlock Text="Historial de compras a proveedores" FontSize="22" FontWeight="SemiBold" Foreground="#17324D"/>
+                <TextBlock Text="Consulta qué recibió cada cajero, a qué proveedor y cuánto efectivo salió de caja." Foreground="#637589"/>
+            </StackPanel>
+        </StackPanel>
+
+        <WrapPanel Grid.Row="1" Margin="0,16,0,0">
+            <StackPanel Margin="0,0,12,8"><TextBlock Text="Desde" FontWeight="SemiBold"/><DatePicker x:Name="FromPicker" Width="150" Height="34" Margin="0,4,0,0" SelectedDateFormat="Short"/></StackPanel>
+            <StackPanel Margin="0,0,12,8"><TextBlock Text="Hasta" FontWeight="SemiBold"/><DatePicker x:Name="ToPicker" Width="150" Height="34" Margin="0,4,0,0" SelectedDateFormat="Short"/></StackPanel>
+            <StackPanel Margin="0,0,12,8"><TextBlock Text="Cajero" FontWeight="SemiBold"/><ComboBox x:Name="CashierPicker" Width="200" Height="34" Margin="0,4,0,0" DisplayMemberPath="Name"/></StackPanel>
+            <StackPanel Margin="0,0,12,8"><TextBlock Text="Proveedor" FontWeight="SemiBold"/><ComboBox x:Name="SupplierPicker" Width="200" Height="34" Margin="0,4,0,0" DisplayMemberPath="Name"/></StackPanel>
+            <CheckBox x:Name="CashOnlyCheckBox" Content="Sólo pagadas con efectivo de caja" VerticalAlignment="Bottom" Margin="0,0,12,16"/>
+            <Button Style="{StaticResource PrimaryButtonStyle}" Height="36" Padding="16,0" VerticalAlignment="Bottom" Margin="0,0,0,8" Click="OnSearchClick">
+                <StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="Magnify" Width="17" Height="17" Margin="0,0,6,0"/><TextBlock Text="Buscar"/></StackPanel>
+            </Button>
+        </WrapPanel>
+
+        <UniformGrid Grid.Row="2" Columns="3" Margin="0,4,0,12">
+            <Border Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="7" Padding="12" Margin="0,0,8,0"><StackPanel><TextBlock Text="Compras" Foreground="#637589"/><TextBlock x:Name="CountText" Text="0" FontSize="22" FontWeight="Bold" Foreground="#17324D"/></StackPanel></Border>
+            <Border Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="7" Padding="12" Margin="0,0,8,0"><StackPanel><TextBlock Text="Total comprado" Foreground="#637589"/><TextBlock x:Name="TotalText" Text="$0.00" FontSize="22" FontWeight="Bold" Foreground="#156EA8"/></StackPanel></Border>
+            <Border Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="7" Padding="12"><StackPanel><TextBlock Text="Efectivo retirado de caja" Foreground="#637589"/><TextBlock x:Name="WithdrawnText" Text="$0.00" FontSize="22" FontWeight="Bold" Foreground="#B54708"/></StackPanel></Border>
+        </UniformGrid>
+
+        <DataGrid Grid.Row="3" x:Name="PurchasesGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" CanUserAddRows="False" SelectionChanged="OnPurchaseSelected">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Fecha" Binding="{Binding DateText}" Width="140"/>
+                <DataGridTextColumn Header="Cajero" Binding="{Binding Cashier}" Width="150"/>
+                <DataGridTextColumn Header="Proveedor" Binding="{Binding Supplier}" Width="170"/>
+                <DataGridTextColumn Header="Productos" Binding="{Binding LineCount}" Width="80"/>
+                <DataGridTextColumn Header="Piezas" Binding="{Binding PiecesText}" Width="80"/>
+                <DataGridTextColumn Header="Total" Binding="{Binding TotalText}" Width="100"/>
+                <DataGridTextColumn Header="Pago" Binding="{Binding PaymentText}" Width="110"/>
+                <DataGridTextColumn Header="Retirado de caja" Binding="{Binding WithdrawnText}" Width="115"/>
+                <DataGridTextColumn Header="Diferencia" Binding="{Binding DifferenceText}" Width="95"/>
+                <DataGridTextColumn Header="Nota" Binding="{Binding NotesText}" Width="*"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <TextBlock Grid.Row="4" x:Name="DetailTitleText" Text="Selecciona una compra para ver sus productos." FontWeight="SemiBold" Foreground="#17324D" Margin="0,14,0,6"/>
+        <DataGrid Grid.Row="5" x:Name="LinesGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Código" Binding="{Binding Code}" Width="150"/>
+                <DataGridTextColumn Header="Descripción" Binding="{Binding Description}" Width="*"/>
+                <DataGridTextColumn Header="Piezas" Binding="{Binding QuantityText}" Width="100"/>
+                <DataGridTextColumn Header="Precio proveedor" Binding="{Binding UnitCostText}" Width="130"/>
+                <DataGridTextColumn Header="Importe" Binding="{Binding LineTotalText}" Width="120"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <DockPanel Grid.Row="6" Margin="0,12,0,0">
+            <Button DockPanel.Dock="Right" Width="120" Height="38" Style="{StaticResource CancelButtonStyle}" Click="OnCloseClick">Cerrar</Button>
+            <TextBlock x:Name="StatusText" Foreground="#637589" VerticalAlignment="Center" TextWrapping="Wrap"/>
+        </DockPanel>
+    </Grid>
+</Window>

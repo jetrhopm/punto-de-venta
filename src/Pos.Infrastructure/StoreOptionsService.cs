@@ -6,6 +6,7 @@ namespace Pos.Infrastructure;
 
 public sealed record StoreOptionsResult(
     bool InventoryEnabled,
+    bool BlockSalesWithoutStock,
     string InventoryCostMethod,
     bool CreditSalesEnabled,
     bool CommonProductsEnabled,
@@ -18,6 +19,7 @@ public sealed record StoreOptionsResult(
 
 public sealed record SetStoreOptionsCommand(
     bool InventoryEnabled,
+    bool BlockSalesWithoutStock,
     string InventoryCostMethod,
     bool CreditSalesEnabled,
     bool CommonProductsEnabled,
@@ -43,6 +45,7 @@ public sealed class StoreOptionsService(PosDbContext database)
         Validate(command);
         var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
         store.InventoryEnabled = command.InventoryEnabled;
+        store.BlockSalesWithoutStock = command.BlockSalesWithoutStock;
         store.InventoryCostMethod = command.InventoryCostMethod.Trim();
         store.CreditSalesEnabled = command.CreditSalesEnabled;
         store.CommonProductsEnabled = command.CommonProductsEnabled;
@@ -75,5 +78,5 @@ public sealed class StoreOptionsService(PosDbContext database)
         if (command.OccasionalNoticeEverySales is < 1 or > 100000) throw new ArgumentException("La frecuencia del aviso debe estar entre 1 y 100000 ventas.");
     }
 
-    private static StoreOptionsResult ToResult(StoreRecord store) => new(store.InventoryEnabled, store.InventoryCostMethod, store.CreditSalesEnabled, store.CommonProductsEnabled, store.AutoPriceWithProfit, store.DefaultProfitPercent, store.RoundSaleAmounts, store.RoundingMode, store.OccasionalNotice, store.OccasionalNoticeEverySales);
+    private static StoreOptionsResult ToResult(StoreRecord store) => new(store.InventoryEnabled, store.BlockSalesWithoutStock, store.InventoryCostMethod, store.CreditSalesEnabled, store.CommonProductsEnabled, store.AutoPriceWithProfit, store.DefaultProfitPercent, store.RoundSaleAmounts, store.RoundingMode, store.OccasionalNotice, store.OccasionalNoticeEverySales);
 }

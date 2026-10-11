@@ -8,6 +8,51 @@ namespace Pos.IntegrationTests;
 public sealed class SaleWithoutStockIntegrationTests
 {
     [Fact]
+    public async Task RejectsSaleWhenStoreBlocksSalesWithoutStock()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync();
+        var originalBlockSalesWithoutStock = store.BlockSalesWithoutStock;
+        store.BlockSalesWithoutStock = true;
+        var user = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "BLOQUEO_" + suffix, DisplayName = "Venta bloqueada", PasswordHash = "test", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = store.Id, Name = "Caja " + suffix, IsActive = true };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, RegisterId = register.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        var product = new ProductRecord { Id = Guid.NewGuid(), Code = "BLOQUEO-" + suffix, NormalizedCode = "BLOQUEO-" + suffix.ToUpperInvariant(), Description = "Producto sin existencia", Price = 25m, Stock = 0m, IsActive = true };
+
+        database.AddRange(user, register, session, product);
+        await database.SaveChangesAsync();
+
+        try
+        {
+            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(0m), CancellationToken.None));
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => new SaleService(database, new PromotionService(database), new KitService(database)).CompleteAsync(
+                token,
+                new CompleteSaleCommand(Guid.NewGuid(), [new SaleLineCommand(product.Id, 1m)], 25m),
+                CancellationToken.None));
+
+            Assert.Contains("No hay existencia suficiente", exception.Message);
+            Assert.Equal(0m, await database.Products.Where(item => item.Id == product.Id).Select(item => item.Stock).SingleAsync());
+            Assert.Empty(await database.InventoryMovements.Where(item => item.ProductId == product.Id).ToListAsync());
+        }
+        finally
+        {
+            var shiftIds = await database.Shifts.Where(item => item.RegisterId == register.Id).Select(item => item.Id).ToListAsync();
+            database.Shifts.RemoveRange(database.Shifts.Where(item => shiftIds.Contains(item.Id)));
+            database.Sessions.RemoveRange(database.Sessions.Where(item => item.UserId == user.Id));
+            database.Products.Remove(product);
+            database.Registers.Remove(register);
+            database.Users.Remove(user);
+            store.BlockSalesWithoutStock = originalBlockSalesWithoutStock;
+            await database.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
     public async Task CompletesSaleAndRecordsNegativeStockWhenProductHasNoInventory()
     {
         await using var database = new PosDbContextFactory().CreateDbContext([]);

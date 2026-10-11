@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Http;
 using System.Net.Http.Json;
 using System.Windows;
 
@@ -6,6 +7,9 @@ namespace Pos.Desktop;
 
 public partial class MercadoPagoSettingsWindow : Window
 {
+    private const string CredentialsUrl = "https://www.mercadopago.com.mx/developers/panel/app";
+    private const string TerminalGuideUrl = "https://www.mercadopago.com.mx/developers/es/docs/mp-point/configure-terminal";
+    private const string PointManualUrl = "https://www.mercadopago.com.mx/developers/es/docs/mp-point/payment-processing";
     private bool _enabled;
     private CancellationTokenSource? _oauthPolling;
     public MercadoPagoSettingsWindow() { InitializeComponent(); Loaded += async (_, _) => await LoadAsync(); }
@@ -23,8 +27,9 @@ public partial class MercadoPagoSettingsWindow : Window
             EnabledButton.IsEnabled = settings.AccountConnected;
             DisconnectButton.Visibility = settings.AccountConnected ? Visibility.Visible : Visibility.Collapsed;
             DisconnectButton.ToolTip = "Quita de JetVenta los tokens, la cuenta y las terminales asociadas. No borra ventas ni cobros históricos.";
-            AuthorizeButton.IsEnabled = true;
-            AuthorizeButton.ToolTip = settings.OAuthAvailable ? "Abrir Mercado Pago para autorizar JetVenta" : "La API todavía necesita la aplicación OAuth y su callback HTTPS";
+            AuthorizeButton.IsEnabled = settings.OAuthAvailable;
+            AuthorizeButton.ToolTip = settings.OAuthAvailable ? "Abrir Mercado Pago para autorizar JetVenta" : "Falta configurar el intermediario de JetVenta (MercadoPago:BrokerUrl) en el servidor";
+            TestTokenPanel.Visibility = settings.TestTokenAllowed ? Visibility.Visible : Visibility.Collapsed;
             StatusText.Text = settings.WebhookConfigured
                 ? settings.TerminalLabel
                 : string.IsNullOrWhiteSpace(settings.TerminalLabel) ? "Webhook HTTPS pendiente de configurar en el servidor." : $"{settings.TerminalLabel}\nWebhook HTTPS pendiente de configurar en el servidor.";
@@ -62,6 +67,20 @@ public partial class MercadoPagoSettingsWindow : Window
         }
     }
 
+    private void OnOpenCredentialsClick(object sender, RoutedEventArgs e) => OpenGuide(CredentialsUrl);
+    private void OnOpenTerminalGuideClick(object sender, RoutedEventArgs e) => OpenGuide(TerminalGuideUrl);
+    private void OnOpenManualClick(object sender, RoutedEventArgs e) => OpenGuide(PointManualUrl);
+
+    private void OpenGuide(string url)
+    {
+        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+        catch (Exception exception)
+        {
+            StatusText.Text = "No se pudo abrir la guía: " + exception.Message;
+            OperationFeedback.Show(this, "Mercado Pago Point", StatusText.Text, OperationResultKind.Error);
+        }
+    }
+
     private async void OnAuthorizeClick(object sender, RoutedEventArgs e)
     {
         _oauthPolling?.Cancel();
@@ -94,24 +113,42 @@ public partial class MercadoPagoSettingsWindow : Window
         }
     }
 
+    // Consulta al servidor de JetVenta, que a su vez recoge los tokens del intermediario
+    // una sola vez. El intento vence a los 10 minutos.
     private async Task WaitForOAuthAsync(CancellationToken cancellationToken)
     {
-        for (var attempt = 0; attempt < 90; attempt++)
+        for (var attempt = 0; attempt < 300; attempt++)
         {
             await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
-            var settings = await ApiClient.Client.GetFromJsonAsync<SettingsResult>("api/integrations/mercado-pago/settings", cancellationToken);
-            if (settings?.AccountConnected == true && string.Equals(settings.Environment, "Production", StringComparison.OrdinalIgnoreCase))
+            HttpResponseMessage response;
+            try { response = await ApiClient.Client.GetAsync("api/integrations/mercado-pago/oauth/status", cancellationToken); }
+            catch (HttpRequestException) { StatusText.Text = "Sin conexión con el servidor de JetVenta. Se volverá a intentar."; continue; }
+            using var _ = response;
+            if (!response.IsSuccessStatusCode)
             {
-                ConnectionTitle.Text = "Cuenta conectada (Producción)";
-                ConnectionMessage.Text = "Cuenta autorizada. Cargando las terminales asociadas...";
-                await RefreshTerminalsAsync(cancellationToken);
-                StatusText.Text = "Cuenta autorizada. Selecciona la terminal de esta caja.";
-                OperationFeedback.Show(this, "Cuenta autorizada", StatusText.Text, OperationResultKind.Success);
-                return;
+                StatusText.Text = await ConfigurationFeedback.ReadErrorAsync(response, "No se pudo confirmar la autorización. Se volverá a intentar.");
+                continue;
+            }
+            var status = await response.Content.ReadFromJsonAsync<OAuthStatusResult>(cancellationToken);
+            switch (status?.Status)
+            {
+                case "pending":
+                    continue;
+                case "completed":
+                    ConnectionTitle.Text = "Cuenta conectada (Producción)";
+                    ConnectionMessage.Text = "Cuenta autorizada. Cargando las terminales asociadas...";
+                    await LoadAsync();
+                    StatusText.Text = "Cuenta autorizada. Selecciona la terminal de esta caja.";
+                    OperationFeedback.Show(this, "Cuenta autorizada", StatusText.Text, OperationResultKind.Success);
+                    return;
+                default:
+                    StatusText.Text = status?.Message ?? "La autorización no se completó. Vuelve a intentarlo.";
+                    OperationFeedback.Show(this, "Autorización no completada", StatusText.Text, OperationResultKind.Warning);
+                    return;
             }
         }
 
-        StatusText.Text = "La autorización no terminó todavía. Si ya aceptaste en Mercado Pago, espera unos segundos y pulsa Actualizar terminales.";
+        StatusText.Text = "La autorización venció sin completarse. Pulsa Autorizar cuenta para intentarlo de nuevo.";
         OperationFeedback.Show(this, "Autorización pendiente", StatusText.Text, OperationResultKind.Warning);
     }
 
@@ -246,7 +283,8 @@ public partial class MercadoPagoSettingsWindow : Window
         }
     }
 
-    private sealed record SettingsResult(bool Enabled, string Environment, bool AccountConnected, long? AccountUserId, string TerminalId, string TerminalLabel, bool OAuthAvailable, bool WebhookConfigured, string RegisterName, string Message);
+    private sealed record SettingsResult(bool Enabled, string Environment, bool AccountConnected, long? AccountUserId, string TerminalId, string TerminalLabel, bool OAuthAvailable, bool WebhookConfigured, string RegisterName, string Message, bool TestTokenAllowed);
+    private sealed record OAuthStatusResult(string Status, string Message);
     private sealed record TerminalResult(string Id, string Label, string OperatingMode, bool Selected);
     private sealed record OAuthStartResult(string Url);
 }

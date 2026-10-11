@@ -1026,11 +1026,24 @@ namespace Pos.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<decimal?>("CashWithdrawn")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Notes")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
                     b.Property<Guid>("OperationId")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("PaidFromCashRegister")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1049,10 +1062,14 @@ namespace Pos.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CreatedAtUtc");
+
                     b.HasIndex("OperationId")
                         .IsUnique();
 
                     b.HasIndex("SupplierId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("purchase", "pos");
                 });
@@ -1466,11 +1483,65 @@ namespace Pos.Infrastructure.Migrations
                     b.ToTable("session", "pos");
                 });
 
+            modelBuilder.Entity("Pos.Infrastructure.ShiftHandoffRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("DeliveredCash")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("ExpectedCash")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("FromShiftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("ReceivedCash")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("RegisterId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("ToShiftId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RegisterId", "Status")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 'Pending'");
+
+                    b.ToTable("shift_handoff", "pos");
+                });
+
             modelBuilder.Entity("Pos.Infrastructure.ShiftRecord", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("CloseReason")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Cut");
 
                     b.Property<DateTimeOffset?>("ClosedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -1480,6 +1551,10 @@ namespace Pos.Infrastructure.Migrations
 
                     b.Property<decimal?>("Difference")
                         .HasColumnType("numeric");
+
+                    b.Property<decimal?>("ExpectedCashAtClose")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<decimal>("InitialCash")
                         .HasPrecision(18, 2)
@@ -1530,6 +1605,11 @@ namespace Pos.Infrastructure.Migrations
                         .HasDefaultValue(true);
 
                     b.Property<bool>("BlockSalesWhenCashLimitReached")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("BlockSalesWithoutStock")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
@@ -1956,7 +2036,6 @@ namespace Pos.Infrastructure.Migrations
                         .HasForeignKey("MercadoPagoOrderId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
                 });
 
             modelBuilder.Entity("Pos.Infrastructure.PairingCodeRecord", b =>
@@ -2192,6 +2271,15 @@ namespace Pos.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.ShiftHandoffRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.RegisterRecord", null)
+                        .WithMany()
+                        .HasForeignKey("RegisterId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

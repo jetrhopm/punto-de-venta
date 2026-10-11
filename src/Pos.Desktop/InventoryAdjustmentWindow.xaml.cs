@@ -95,9 +95,9 @@ public partial class InventoryAdjustmentWindow : Window
     {
         if (SearchTextBox.IsKeyboardFocusWithin) return;
         var reason = ReasonTextBox.Text.Trim();
-        if (_selected is null || !TryParseDecimal(QuantityTextBox.Text, out var quantity) || quantity == 0m || reason.Length == 0)
+        if (_selected is null || !TryParseDecimal(QuantityTextBox.Text, out var quantity) || quantity == 0m)
         {
-            MessageText.Text = "Selecciona producto, indica una cantidad distinta de cero y escribe un motivo.";
+            MessageText.Text = "Selecciona un producto e indica una cantidad distinta de cero.";
             return;
         }
         if (reason.Length > 80)

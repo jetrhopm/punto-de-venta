@@ -33,6 +33,7 @@ public partial class ConfigurationWindow : UserControl
     private async void OnPrinterClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigurePrinters", "Configurar impresoras", () => new PrinterSettingsWindow(), ConfigurationScope.CurrentRegister);
     private async void OnScannerClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar lector de códigos", () => new BarcodeScannerSettingsWindow(), ConfigurationScope.CurrentRegister);
     private async void OnTicketClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar tickets", () => new TicketSettingsWindow(), ConfigurationScope.StoreAndCurrentRegister);
+    private async void OnDisplayClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar el tamaño de pantalla", () => new DisplaySettingsWindow(), ConfigurationScope.CurrentRegister);
     private async void OnCashDrawerClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar cajón de dinero", () => new CashDrawerSettingsWindow(), ConfigurationScope.CurrentRegister);
     private async void OnScaleClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar báscula", () => new ScaleSettingsWindow(), ConfigurationScope.CurrentRegister);
     private async void OnSystemDetailsClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Consultar detalles del sistema", () => new SystemDetailsWindow(), ConfigurationScope.CurrentRegister);

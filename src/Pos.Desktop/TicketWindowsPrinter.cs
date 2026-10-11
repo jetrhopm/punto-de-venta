@@ -11,10 +11,12 @@ using System.Windows.Media;
 namespace Pos.Desktop;
 
 public sealed record TicketPrintProfile(string FontFamily, double FontSize, bool UseNormalTotals, int WidthMm, int HorizontalOffsetCharacters = 0);
+public sealed record ProductLabelData(string Code, string Description, decimal Price, string CurrencySymbol = "$");
 
 public static class TicketWindowsPrinter
 {
     private const double DipsPerMillimeter = 96d / 25.4d;
+    private const double ThermalDotDips = 96d / 203d;
 
     public static TicketPrintProfile CurrentProfile => new(
         ApiClient.PrinterFontFamily,
@@ -159,11 +161,49 @@ public static class TicketWindowsPrinter
 
     public static void Print(string printerName, TicketPdfData ticket, TicketPrintProfile profile, string jobName)
     {
+        var visual = CreateTicketVisual(ticket, profile);
+        PrintVisual(printerName, visual, profile.WidthMm, jobName);
+    }
+
+    public static FrameworkElement CreateProductLabelsVisual(ProductLabelData label, int quantity, TicketPrintProfile profile)
+    {
+        if (!Code128Barcode.TryEncode(label.Code, out var widths, out var error)) throw new InvalidOperationException(error);
+        var widthMm = profile.WidthMm == 58 ? 58 : 80;
+        var printableWidth = GetPrintableWidthMm(widthMm) * DipsPerMillimeter;
+        var padding = widthMm == 58 ? 4d : 7d;
+        var root = new StackPanel { Width = printableWidth - (padding * 2d), Background = Brushes.White };
+        var family = new FontFamily(string.IsNullOrWhiteSpace(profile.FontFamily) ? "Consolas" : profile.FontFamily);
+        TextElement.SetFontFamily(root, family);
+
+        for (var copy = 0; copy < quantity; copy++)
+        {
+            var content = new StackPanel();
+            content.Children.Add(Text(label.Description.Trim(), Math.Max(8d, profile.FontSize * 96d / 72d), FontWeights.SemiBold, TextAlignment.Center, new Thickness(2, 2, 2, 1)));
+            var barcodeWidth = printableWidth - (padding * 2d) - 12d;
+            // Horizontal por defecto; sólo códigos muy largos que no caben a 2 puntos por módulo se imprimen verticales.
+            content.Children.Add(FitsHorizontalCode128(widths, barcodeWidth)
+                ? CreateCode128Canvas(widths, barcodeWidth)
+                : CreateVerticalCode128Canvas(widths, barcodeWidth));
+            content.Children.Add(Text(label.Code.Trim(), Math.Max(7d, profile.FontSize * 96d / 72d - 1d), FontWeights.Normal, TextAlignment.Center, new Thickness(2, 1, 2, 0)));
+            content.Children.Add(Text(Money(label.CurrencySymbol, label.Price), Math.Max(15d, profile.FontSize * 96d / 72d + 8d), FontWeights.Bold, TextAlignment.Center, new Thickness(2, 0, 2, 3)));
+            root.Children.Add(new Border { BorderBrush = Brushes.Black, BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(2, 2, 2, 4), Child = content });
+        }
+
+        return CreateTicketPage(printableWidth, root, padding);
+    }
+
+    public static void PrintProductLabels(string printerName, ProductLabelData label, int quantity, TicketPrintProfile profile)
+    {
+        if (quantity is < 1 or > 200) throw new InvalidOperationException("La cantidad de etiquetas debe estar entre 1 y 200.");
+        PrintVisual(printerName, CreateProductLabelsVisual(label, quantity, profile), profile.WidthMm, $"Etiquetas {label.Code} {DateTime.Now:yyyyMMddHHmmss}");
+    }
+
+    private static void PrintVisual(string printerName, FrameworkElement visual, int widthMm, string jobName)
+    {
         if (string.IsNullOrWhiteSpace(printerName)) throw new InvalidOperationException("Selecciona una impresora de Windows.");
         using var server = new LocalPrintServer();
         using var queue = server.GetPrintQueue(printerName);
-        var visual = CreateTicketVisual(ticket, profile);
-        var pageWidth = (profile.WidthMm == 58 ? 58d : 80d) * DipsPerMillimeter;
+        var pageWidth = (widthMm == 58 ? 58d : 80d) * DipsPerMillimeter;
         visual.Measure(new Size(pageWidth, double.PositiveInfinity));
         var pageHeight = Math.Max(300d, visual.DesiredSize.Height);
         visual.Arrange(new Rect(0, 0, pageWidth, pageHeight));
@@ -284,6 +324,79 @@ public static class TicketWindowsPrinter
 
     private static double GetPrintableWidthMm(int widthMm) => widthMm == 58 ? 48d : 72d;
 
+    private const int HorizontalQuietZoneModules = 10;
+
+    private static bool FitsHorizontalCode128(IReadOnlyList<int> widths, double availableWidth) =>
+        (widths.Sum() + (HorizontalQuietZoneModules * 2)) * 2d * ThermalDotDips <= availableWidth;
+
+    private static Canvas CreateCode128Canvas(IReadOnlyList<int> widths, double availableWidth)
+    {
+        const int quietZoneModules = HorizontalQuietZoneModules;
+        var modules = widths.Sum() + (quietZoneModules * 2);
+        // El módulo se ajusta a puntos enteros de la térmica (mínimo 2) para no deformar la proporción de las barras.
+        var moduleWidth = Math.Max(2, Math.Floor(availableWidth / modules / ThermalDotDips)) * ThermalDotDips;
+        var canvas = new Canvas { Width = availableWidth, Height = 46d, Margin = new Thickness(0, 3, 0, 0), SnapsToDevicePixels = false, UseLayoutRounding = false };
+        // Centrado: el sobrante se reparte a ambos lados sin alterar el ancho de los módulos.
+        var x = Math.Max(0d, (availableWidth - (modules * moduleWidth)) / 2d) + (quietZoneModules * moduleWidth);
+        var black = true;
+        foreach (var width in widths)
+        {
+            var actualWidth = width * moduleWidth;
+            if (black)
+            {
+                var bar = new Border { Width = actualWidth, Height = 44d, Background = Brushes.Black, SnapsToDevicePixels = false, UseLayoutRounding = false };
+                Canvas.SetLeft(bar, x);
+                Canvas.SetTop(bar, 1d);
+                canvas.Children.Add(bar);
+            }
+            x += actualWidth;
+            black = !black;
+        }
+        return canvas;
+    }
+
+    private static Canvas CreateVerticalCode128Canvas(IReadOnlyList<int> widths, double barLength)
+    {
+        const int quietZoneModules = 12;
+        // 3 puntos de una térmica de 203 dpi (≈0.375 mm). Antes era 1.4 DIP con redondeo a píxeles de 96 dpi,
+        // lo que convertía los anchos 1:2:3:4 en 1:3:5:6 y el lector no podía leer la mayoría de los códigos.
+        const double moduleHeight = 3d * ThermalDotDips;
+        var barcodeHeight = (widths.Sum() + (quietZoneModules * 2)) * moduleHeight;
+        var canvas = new Canvas
+        {
+            Width = barLength,
+            Height = barcodeHeight,
+            Margin = new Thickness(0, 4, 0, 2),
+            // Explícitamente desactivado: UseLayoutRounding se hereda y redondearía cada barra a píxeles enteros.
+            SnapsToDevicePixels = false,
+            UseLayoutRounding = false
+        };
+
+        var y = quietZoneModules * moduleHeight;
+        var black = true;
+        foreach (var width in widths)
+        {
+            var actualHeight = width * moduleHeight;
+            if (black)
+            {
+                var bar = new Border
+                {
+                    Width = barLength,
+                    Height = actualHeight,
+                    Background = Brushes.Black,
+                    SnapsToDevicePixels = false,
+                    UseLayoutRounding = false
+                };
+                Canvas.SetLeft(bar, 0d);
+                Canvas.SetTop(bar, y);
+                canvas.Children.Add(bar);
+            }
+            y += actualHeight;
+            black = !black;
+        }
+        return canvas;
+    }
+
     private static Grid ProductHeader(double size, bool compactLayout)
     {
         var grid = compactLayout ? CompactProductGrid() : ProductGrid();
@@ -392,6 +505,7 @@ public static class TicketWindowsPrinter
     private static string FormatShiftNumber(long shiftNumber) => shiftNumber > 0 ? shiftNumber.ToString("N0", CultureInfo.CurrentCulture) : "N/D";
     private static string FormatFolio(long folio, Guid saleId) => folio > 0 ? folio.ToString("N0", CultureInfo.CurrentCulture) : "N/D";
     private static string Money(TicketPdfData ticket, decimal value) => (string.IsNullOrWhiteSpace(ticket.CurrencySymbol) ? "$" : ticket.CurrencySymbol.Trim()) + value.ToString("#,##0.00", CultureInfo.InvariantCulture);
+    private static string Money(string currencySymbol, decimal value) => (string.IsNullOrWhiteSpace(currencySymbol) ? "$" : currencySymbol.Trim()) + value.ToString("#,##0.00", CultureInfo.InvariantCulture);
     private static string NegativeMoney(TicketPdfData ticket, decimal value) => "-" + Money(ticket, Math.Abs(value));
     private static string PaymentLabel(string method) => method.ToUpperInvariant() switch
     {
