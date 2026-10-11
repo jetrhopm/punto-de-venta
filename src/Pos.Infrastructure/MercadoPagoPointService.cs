@@ -15,11 +15,12 @@ public sealed record ActivateMercadoPagoTerminalCommand(string TerminalId);
 public sealed record SetMercadoPagoEnabledCommand(bool Enabled);
 public sealed record CreateMercadoPagoOrderCommand(Guid SaleOperationId, Guid AttemptId, decimal Amount, string Description);
 public sealed record MercadoPagoOrderResult(Guid OperationId, string OrderId, string Status, string StatusDetail, decimal Amount, bool Approved, bool Finished);
+public sealed record MercadoPagoPendingOrderResult(Guid OperationId, Guid SaleOperationId, int? TicketNumber, decimal Amount, string Status, string StatusDetail, DateTimeOffset CreatedAtUtc, bool SaleConfirmed);
 public sealed record MercadoPagoCheckoutStatus(bool Enabled, string RegisterName);
 public sealed record MercadoPagoWebhookReceipt(bool Accepted, string Message);
 public sealed record MercadoPagoRefundResult(Guid OperationId, decimal Amount, string Status, string StatusDetail, bool Confirmed);
 
-public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPointClient client, JetVentaBrokerClient broker, IConfiguration configuration)
+public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPointClient client, JetVentaBrokerClient broker, IConfiguration configuration, SaleService sales)
 {
     private static readonly SemaphoreSlim TokenRefreshGate = new(1, 1);
     public async Task<MercadoPagoSettingsResult?> GetSettingsAsync(string token, CancellationToken cancellationToken)
@@ -92,7 +93,8 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         var register = await CurrentRegisterAsync(token, configure: true, cancellationToken);
         if (register is null) return null;
         if (string.IsNullOrWhiteSpace(command.TerminalId)) throw new ArgumentException("Selecciona una terminal antes de activar el modo PDV.");
-        if (!IsPdvCompatible(command.TerminalId)) throw new InvalidOperationException("Este modelo de terminal no admite la integración PDV de Mercado Pago. La API oficial solo permite activar terminales NEWLAND_N950 y PAX_A910.");
+        // Mercado Pago decide qué modelos admiten el modo PDV (incluye modelos nuevos como
+        // Point Smart 2); si no es compatible, su respuesta se muestra al usuario.
         var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
         await client.ActivatePdvAsync(await GetAccessTokenAsync(store, cancellationToken), command.TerminalId.Trim(), cancellationToken);
         return true;
@@ -218,7 +220,7 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
     {
         var existing = ReadBrokerInstallation(store);
         if (existing is not null) return existing;
-        var version = typeof(MercadoPagoPointService).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        var version = typeof(MercadoPagoPointService).Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
         var installation = await broker.RegisterAsync(LicenseService.GetMachineFingerprint(), version, cancellationToken);
         store.MercadoPagoOAuthVerifierProtected = Protect(System.Text.Json.JsonSerializer.Serialize(installation));
         await database.SaveChangesAsync(cancellationToken);
@@ -249,6 +251,7 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
         var register = await CurrentRegisterAsync(token, configure: false, cancellationToken);
         if (register is null) return null;
         if (command.SaleOperationId == Guid.Empty || command.AttemptId == Guid.Empty || command.Amount <= 0m) throw new ArgumentException("La venta, el intento y el importe del cobro son obligatorios.");
+        if (decimal.Round(command.Amount, 2) < 5m) throw new ArgumentException("El importe mínimo para cobrar con Mercado Pago Point es $5.00.");
         var existing = await database.MercadoPagoOrders.SingleOrDefaultAsync(item => item.OperationId == command.AttemptId, cancellationToken);
         if (existing is not null && existing.RegisterId != register.Id) throw new InvalidOperationException("El cobro pertenece a otra caja.");
         if (existing?.Status == "CreationPending" && existing.Amount != decimal.Round(command.Amount, 2)) throw PendingAmountChanged(existing.Amount);
@@ -325,6 +328,71 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
             await database.SaveChangesAsync(cancellationToken);
         }
         return ToResult(record);
+    }
+
+    // Devuelve únicamente órdenes que podrían requerir una acción humana. Las aprobadas
+    // sólo aparecen si la venta local todavía no se confirmó.
+    public async Task<IReadOnlyList<MercadoPagoPendingOrderResult>?> ListPendingOrdersAsync(string token, CancellationToken cancellationToken)
+    {
+        var register = await CurrentRegisterAsync(token, configure: false, cancellationToken);
+        if (register is null) return null;
+
+        var orders = await database.MercadoPagoOrders.AsNoTracking()
+            .Where(item => item.RegisterId == register.Id)
+            .OrderByDescending(item => item.UpdatedAtUtc)
+            .Take(40)
+            .ToListAsync(cancellationToken);
+        var operationIds = orders.Select(item => item.SaleOperationId).Distinct().ToArray();
+        var confirmedSales = operationIds.Length == 0
+            ? []
+            : (await database.Sales.AsNoTracking().Where(item => operationIds.Contains(item.OperationId)).Select(item => item.OperationId).ToListAsync(cancellationToken)).ToHashSet();
+        var ticketNumbers = operationIds.Length == 0
+            ? new Dictionary<Guid, int>()
+            : await database.SaleDrafts.AsNoTracking()
+                .Where(item => operationIds.Contains(item.OperationId) && item.Status == "Open")
+                .ToDictionaryAsync(item => item.OperationId, item => item.TicketNumber, cancellationToken);
+
+        return orders
+            .Where(item => !IsFinished(item.Status) || (item.Status == "Approved" && !confirmedSales.Contains(item.SaleOperationId)))
+            .Select(item => new MercadoPagoPendingOrderResult(
+                item.OperationId,
+                item.SaleOperationId,
+                ticketNumbers.GetValueOrDefault(item.SaleOperationId),
+                item.Amount,
+                item.Status,
+                item.StatusDetail,
+                item.CreatedAtUtc,
+                confirmedSales.Contains(item.SaleOperationId)))
+            .ToArray();
+    }
+
+    // Recupera una venta cuyo pago Point fue aprobado mientras el escritorio no podía
+    // terminar el flujo. SaleService vuelve a validar ticket, turno, precios e inventario.
+    public async Task<CompleteSaleResult?> CompleteApprovedOrderAsync(string token, Guid operationId, CancellationToken cancellationToken)
+    {
+        var register = await CurrentRegisterAsync(token, configure: false, cancellationToken);
+        if (register is null) return null;
+        var order = await database.MercadoPagoOrders.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == operationId, cancellationToken)
+            ?? throw new KeyNotFoundException("No se encontró el cobro Point.");
+        if (order.RegisterId != register.Id) throw new InvalidOperationException("El cobro pertenece a otra caja.");
+        if (order.Status != "Approved") throw new InvalidOperationException("Sólo se puede finalizar una venta cuando Mercado Pago la marque como aprobada.");
+
+        var existing = await database.Sales.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == order.SaleOperationId, cancellationToken);
+        if (existing is not null) return new CompleteSaleResult(existing.Id, existing.OperationId, existing.Total, 0m, 0m, true);
+
+        var draft = await database.SaleDrafts.AsNoTracking().Include(item => item.Lines)
+            .SingleOrDefaultAsync(item => item.OperationId == order.SaleOperationId && item.Status == "Open", cancellationToken)
+            ?? throw new InvalidOperationException("No se encontró el ticket original. No se registrará una venta automática; revisa el cobro y el historial antes de continuar.");
+        if (draft.Lines.Count == 0) throw new InvalidOperationException("El ticket original no tiene productos. No es seguro finalizar esta venta automáticamente.");
+
+        return await sales.CompleteAsync(token, new CompleteSaleCommand(
+            draft.OperationId,
+            draft.Lines.Select(line => new SaleLineCommand(line.ProductId, line.Quantity)).ToArray(),
+            CashReceived: 0m,
+            PaymentMethod: "Card",
+            CardAmount: order.Amount,
+            DraftId: draft.Id,
+            PrintRequested: true), cancellationToken);
     }
 
     // Se invoca desde cancelaciones y devoluciones antes de alterar inventario o caja.
@@ -550,7 +618,6 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
     private static bool IsFinished(string status) => status is "Approved" or "Rejected" or "Canceled" or "Expired" or "Refunded" or "AmountMismatch" or "CreationFailed";
     private static MercadoPagoOrderResult ToResult(MercadoPagoOrderRecord item) => new(item.OperationId, item.ProviderOrderId ?? string.Empty, item.Status, item.StatusDetail, item.Amount, item.Status == "Approved", IsFinished(item.Status));
     private static string BuildTerminalLabel(MercadoPagoTerminal item) => $"{item.Id} | Caja {item.ExternalPosId} | {item.OperatingMode}";
-    private static bool IsPdvCompatible(string terminalId) => terminalId.StartsWith("NEWLAND_N950__", StringComparison.OrdinalIgnoreCase) || terminalId.StartsWith("PAX_A910__", StringComparison.OrdinalIgnoreCase);
     private static void ScheduleRetry(MercadoPagoWebhookRecord webhook, DateTimeOffset now, string error)
     {
         if (webhook.AttemptCount >= 12)

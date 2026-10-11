@@ -3,7 +3,7 @@
 Generación:
 
 ```powershell
-.\scripts\build-installer.ps1 -Version 2.3.0
+.\scripts\build-installer.ps1 -Version 3.4.0.0
 ```
 
 Resultado:

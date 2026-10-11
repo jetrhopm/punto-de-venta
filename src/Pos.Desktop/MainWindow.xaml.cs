@@ -40,6 +40,7 @@ public partial class MainWindow : Window
     private ApiAvailabilityState? _lastApiAvailabilityState;
     private bool _maintenanceRecoveryRequired;
     private bool _maintenanceActive;
+    private bool _pointRecoveryDialogOpen;
     public MainWindow()
     {
         InitializeComponent();
@@ -112,6 +113,7 @@ public partial class MainWindow : Window
                 StatusText.Text = _licenseReminder ?? "API y base de datos locales conectadas.";
                 await LoadSalePricingOptionsAsync();
                 await EnsureShiftOpenAfterLoginAsync();
+                await ShowPointRecoveryIfNeededAsync();
                 FocusProductInput();
             }
             else
@@ -135,7 +137,7 @@ public partial class MainWindow : Window
     private async Task OpenSectionAsync(string section)
     {
         if (_maintenanceActive) return;
-        if (section == "Ventas") { ShowSalesWorkspace(); return; }
+        if (section == "Ventas") { ShowSalesWorkspace(); await ShowPointRecoveryIfNeededAsync(); return; }
 
         ReleaseModulePermission();
         var requiredPermission = PermissionFor(section);
@@ -351,6 +353,8 @@ public partial class MainWindow : Window
         if (authorization is null) return;
         new ProductLabelWindow { Owner = this }.ShowDialog();
     }
+
+    private async void OnProductLabelsClick(object sender, RoutedEventArgs e) => await OpenProductLabelsAsync();
 
     private async void OnFindCustomerClick(object sender, RoutedEventArgs e) => await SelectCustomerForActiveTicketAsync();
     private async void OnSelectCustomerClick(object sender, RoutedEventArgs e) => await SelectCustomerForActiveTicketAsync();
@@ -1475,6 +1479,7 @@ public partial class MainWindow : Window
     private sealed record CutSettingsResponse(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, bool BlockSalesWhenCashLimitReached, decimal CashLimit, string CashLimitMessage);
     private sealed record CashCutResponse(decimal InitialCash, decimal TotalSales, int SalesCount, decimal CashSales, decimal CardSales, decimal TransferSales, decimal CreditSales, decimal CashIn, decimal CashOut, decimal CashReturns, decimal Profit, decimal ExpectedCash);
     private sealed record MercadoPagoCheckoutStatus(bool Enabled, string RegisterName);
+    private sealed record MercadoPagoPendingOrderSnapshot(Guid OperationId);
     private sealed record CurrentShiftResponse(Guid ShiftId, Guid RegisterId, Guid UserId, decimal InitialCash, DateTimeOffset OpenedAtUtc);
     private sealed record PendingHandoffResponse(Guid HandoffId, string FromUser, decimal ExpectedCash, decimal DeliveredCash, decimal Difference, DateTimeOffset DeliveredAtUtc);
     private sealed record ShiftHandoffResponse(Guid HandoffId, Guid FromShiftId, string FromUser, decimal ExpectedCash, decimal DeliveredCash, decimal Difference, DateTimeOffset DeliveredAtUtc);
@@ -1509,6 +1514,39 @@ public partial class MainWindow : Window
         catch (HttpRequestException)
         {
             StatusText.Text = ConnectionHelp.ApiUnavailableRetry;
+        }
+    }
+
+    private async Task ShowPointRecoveryIfNeededAsync()
+    {
+        if (_pointRecoveryDialogOpen || string.IsNullOrWhiteSpace(SessionContext.AccessToken)) return;
+        try
+        {
+            var pending = await Client.GetFromJsonAsync<List<MercadoPagoPendingOrderSnapshot>>("/api/integrations/mercado-pago/orders/pending") ?? [];
+            if (pending.Count == 0) return;
+            _pointRecoveryDialogOpen = true;
+            var recovery = new MercadoPagoRecoveryWindow { Owner = this };
+            recovery.ShowDialog();
+            if (recovery.RecoveredSaleId is Guid saleId)
+            {
+                await LoadSaleDraftsAsync();
+                var message = "Mercado Pago ya había aprobado el cobro. El ticket se confirmó sin enviar un segundo cargo.";
+                if (ApiClient.IsTicketPrintingAvailable)
+                {
+                    try { message += " " + await OutputTicketAsync(saleId); }
+                    catch (Exception exception) { message += $" La venta quedó registrada, pero no se pudo imprimir: {exception.Message}"; }
+                }
+                else message += " La impresión de tickets no está habilitada en esta caja.";
+                new OperationResultWindow("Cobro recuperado y venta confirmada", message, OperationResultKind.Success) { Owner = this }.ShowDialog();
+            }
+        }
+        catch (HttpRequestException)
+        {
+            // La disponibilidad de la API se informa por el monitor global; no interrumpe ventas por esta comprobación preventiva.
+        }
+        finally
+        {
+            _pointRecoveryDialogOpen = false;
         }
     }
 
@@ -1706,10 +1744,20 @@ public partial class MainWindow : Window
         try
         {
             var pointAmount = cashWindow.PaymentMethod == "Card" ? ticketTotal : cashWindow.PaymentMethod == "Mixed" ? cashWindow.CardAmount : 0m;
-            if (pointAmount > 0m && await IsMercadoPagoEnabledAsync())
+            var reusedApprovedPointPayment = false;
+            var pointPaymentApproved = false;
+            var pointEnabled = pointAmount > 0m && await IsMercadoPagoEnabledAsync();
+            if (pointEnabled && pointAmount < 5m)
+            {
+                new OperationResultWindow("Importe mínimo para tarjeta", "Mercado Pago Point acepta cobros desde $5.00. Ajusta el importe con tarjeta o elige otra forma de pago.", OperationResultKind.Warning) { Owner = this }.ShowDialog();
+                return;
+            }
+            if (pointEnabled)
             {
                 var point = new MercadoPagoPaymentWindow(ticket.OperationId, Guid.NewGuid(), pointAmount) { Owner = this };
                 if (point.ShowDialog() != true || !point.Approved) { StatusText.Text = "La venta sigue abierta porque el cobro con Mercado Pago no fue aprobado."; return; }
+                reusedApprovedPointPayment = point.ReusedApprovedPayment;
+                pointPaymentApproved = true;
             }
             var cashReceived = cashWindow.CreditRequested || cashWindow.PaymentMethod is not ("Cash" or "Mixed") ? 0m : cashWindow.Received.Value;
             var command = new { operationId = ticket.OperationId, draftId = ticket.Id, lines = ticket.Lines.Select(item => new { productId = item.ProductId, quantity = item.Quantity, useWholesale = item.IsManualWholesale }).ToArray(), cashReceived, cardAmount = cashWindow.CreditRequested ? 0m : cashWindow.CardAmount, transferAmount = cashWindow.CreditRequested ? 0m : cashWindow.TransferAmount, customerId = cashWindow.CustomerId ?? ticket.CustomerId, paymentMethod = cashWindow.PaymentMethod, printRequested = cashWindow.PrintRequested, manualWholesaleAuthorizationGrantId = ticket.ManualWholesaleAuthorization?.GrantId };
@@ -1721,7 +1769,7 @@ public partial class MainWindow : Window
             _tickets.Remove(ticket);
             if (_tickets.Count == 0) await CreateNewTicketAsync();
             else { TicketTabs.SelectedIndex = 0; ActivateTicket(_tickets[0]); }
-            StatusText.Text = result is null ? "Venta confirmada." : result.Existing ? "La venta ya estaba confirmada; no se registró un cobro duplicado." : cashWindow.CreditRequested ? "Venta a crédito confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
+            StatusText.Text = result is null ? "Venta confirmada." : result.Existing ? "La venta ya estaba confirmada; no se registró un cobro duplicado." : reusedApprovedPointPayment ? "Venta confirmada con un cobro Point que ya estaba aprobado. No se envió un segundo cargo a la terminal." : cashWindow.CreditRequested ? "Venta a crédito confirmada." : $"Venta confirmada. Cambio: ${result.Change:0.00}";
             if (result is { Existing: false, InventoryAttentionRequired: true }) StatusText.Text += " Inventario por revisar: una o más existencias quedaron por debajo de cero.";
             if (result is not null && !result.Existing) await NotifyCashLimitAsync();
             if (result is not null && !result.Existing && !cashWindow.CreditRequested && cashWindow.PaymentMethod is "Cash" or "Mixed")
@@ -1734,6 +1782,13 @@ public partial class MainWindow : Window
             else if (result is not null && !result.Existing && !cashWindow.PrintRequested)
             {
                 StatusText.Text += " Venta confirmada sin imprimir ticket.";
+            }
+            if (pointPaymentApproved && result is { Existing: false })
+            {
+                var paymentMessage = reusedApprovedPointPayment
+                    ? $"El cobro Point por ${pointAmount:0.00} ya estaba aprobado y la venta quedó confirmada sin enviar un segundo cargo."
+                    : $"Mercado Pago aprobó el cobro por ${pointAmount:0.00}. La venta quedó registrada correctamente.";
+                new OperationResultWindow("Cobro con tarjeta aprobado", paymentMessage, OperationResultKind.Success) { Owner = this }.ShowDialog();
             }
             FocusProductInput();
         }

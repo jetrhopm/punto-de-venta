@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.4.0.0 - 2026-10-11
+- Mercado Pago Point queda listo para operación asistida: autorización OAuth mediante el
+  intermediario HTTPS, selección de terminal PDV por caja, cancelación remota de órdenes en
+  terminal y confirmación visible de pagos aprobados.
+- JetVenta protege cobros menores a $5.00 y recupera órdenes Point pendientes después de una
+  interrupción. Un pago aprobado puede confirmar su ticket original e imprimirlo sin generar un
+  segundo cargo.
+- Se documenta el despliegue y recuperación del intermediario OAuth en Hostinger, incluyendo el
+  dominio `mp.gocentersuplementos.com.mx` y el manejo seguro de credenciales.
+
 ## Sin liberar
 - Compras multiproducto (plan `docs/plans/3.4.0-compras-multiproducto.md`): la recepción funciona como una venta, con escaneo a una lista, suma de piezas al reescanear y edición de piezas y precio del proveedor. Al confirmar se revisan los precios de venta: actualizar con el % de ganancia, conservar o capturar uno nuevo, y nunca por debajo del precio del proveedor. Después se captura el efectivo realmente retirado de caja, que puede diferir del total, con una nota. Se agrega el historial de compras por cajero y el corte desglosa los pagos a proveedores. Ventas F1 permite elegir partidas con ↑/↓ y editarlas o quitarlas sin mouse. Punto de retorno: tag `punto-retorno-3.3.58-antes-compras`.
 - Se prepara la versión 2.5.16: al cerrar la importación desde Inventario F4 se recargan productos y departamentos, por lo que los departamentos creados por el archivo quedan disponibles inmediatamente sin salir de la pantalla. La confirmación de importación explica que el movimiento se registra cuando el control de inventario está habilitado; las filas desmarcadas continúan omitiéndose individualmente.

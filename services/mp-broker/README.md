@@ -5,7 +5,7 @@ iniciando sesión y aceptando. Es el único lugar donde vive el **Client Secret*
 aplicación de JetVenta. Los cobros **no** pasan por aquí: cada caja habla directo con
 Mercado Pago.
 
-- Dominio: `https://mp.gocentersuplementos.com`
+- Dominio: `https://mp.gocentersuplementos.com.mx`
 - Node.js 20 o superior. Única dependencia: `mysql2`.
 - Pruebas: `npm test` (no necesitan MySQL ni Mercado Pago).
 
@@ -31,8 +31,10 @@ La renovación no guarda nada.
 
 ## Despliegue en Hostinger (plan Business)
 
+> Manual completo (SSH, cambio de dominio o host, errores conocidos): `docs/MANUAL_HOSTING_Y_DOMINIO.md`.
+
 ### 1. Subdominio y SSL
-1. hPanel → **Dominios** → crear el subdominio `mp.gocentersuplementos.com`.
+1. hPanel → **Dominios** → crear el subdominio `mp.gocentersuplementos.com.mx`.
 2. **Seguridad → SSL**: instalar el certificado gratuito para el subdominio.
 
 ### 2. Base de datos
@@ -45,14 +47,14 @@ La renovación no guarda nada.
 2. Origen: repositorio de GitHub con **directorio raíz** `services/mp-broker`, o subir un
    `.zip` de esta carpeta **sin** `node_modules`.
 3. Versión de Node: 20 o 22. Comando de instalación: `npm install --omit=dev`.
-   Comando de inicio: `npm start`. Archivo de entrada: `src/server.js`.
+   Comando de inicio: `npm start`. Archivo de entrada: `app.cjs`.
 4. **Variables de entorno** (ver `.env.example`):
 
 | Variable | Valor |
 | --- | --- |
 | `MP_CLIENT_ID` | App ID de la aplicación JetVenta en Mercado Pago |
 | `MP_CLIENT_SECRET` | Client Secret de producción |
-| `MP_REDIRECT_URI` | `https://mp.gocentersuplementos.com/v1/oauth/callback` |
+| `MP_REDIRECT_URI` | `https://mp.gocentersuplementos.com.mx/v1/oauth/callback` |
 | `TOKEN_ENC_KEY` | 32 bytes aleatorios en base64 (ver abajo) |
 | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | Los de la base del paso 2 |
 | `TRUST_PROXY` | `1` |
@@ -67,20 +69,20 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 Si se pierde o se cambia `TOKEN_ENC_KEY`, las instalaciones registradas dejan de validar
 su firma y deberán registrarse otra vez (JetVenta lo hace solo al pulsar "Autorizar cuenta").
 
-5. Desplegar y abrir `https://mp.gocentersuplementos.com/v1/health`. Debe responder
+5. Desplegar y abrir `https://mp.gocentersuplementos.com.mx/v1/health`. Debe responder
    `{"ok":true}`.
 
 ### 4. Aplicación en Mercado Pago
 1. [Tus integraciones](https://www.mercadopago.com.mx/developers/panel/app) → crear la
    aplicación "JetVenta" para pagos presenciales / Point, como integrador.
-2. URL de redireccionamiento: `https://mp.gocentersuplementos.com/v1/oauth/callback`
+2. URL de redireccionamiento: `https://mp.gocentersuplementos.com.mx/v1/oauth/callback`
    (exacta, igual que `MP_REDIRECT_URI`).
 3. Activar **PKCE** y el permiso **offline_access** (necesario para el refresh token).
 4. Activar credenciales de producción y copiar App ID y Client Secret a las variables
    de entorno. Nunca al repositorio.
 
 ### 5. JetVenta
-En `appsettings.json` de la API: `"MercadoPago": { "BrokerUrl": "https://mp.gocentersuplementos.com/" }`.
+En `appsettings.json` de la API: `"MercadoPago": { "BrokerUrl": "https://mp.gocentersuplementos.com.mx/" }`.
 Después, en **Configuración → Mercado Pago Point → Autorizar cuenta**.
 
 ## Operación

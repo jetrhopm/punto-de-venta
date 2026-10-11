@@ -26,7 +26,7 @@ public partial class StartupWindow : Window
     public StartupWindow()
     {
         InitializeComponent();
-        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0";
+        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0.0";
         VersionText.Text = $"Version {version}";
     }
 

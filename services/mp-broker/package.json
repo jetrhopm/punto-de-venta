@@ -4,10 +4,13 @@
   "private": true,
   "description": "Intermediario OAuth de JetVenta para Mercado Pago Point. Guarda el Client Secret y entrega tokens a cada instalación una sola vez.",
   "type": "module",
-  "main": "src/server.js",
-  "engines": { "node": ">=20" },
+  "main": "app.cjs",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "start": "node src/server.js",
+    "start": "node app.cjs",
+    "build": "echo \"Sin paso de compilación\"",
     "test": "node --test",
     "migrate": "node src/migrate.js"
   },

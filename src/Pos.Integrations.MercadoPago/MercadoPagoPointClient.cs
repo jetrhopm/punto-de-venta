@@ -81,6 +81,9 @@ public sealed class MercadoPagoPointClient(HttpClient client)
     {
         using var request = CreateRequest(HttpMethod.Post, $"v1/orders/{Uri.EscapeDataString(orderId)}/cancel", accessToken);
         request.Headers.Add("X-Idempotency-Key", cancellationId.ToString());
+        // Point exige este encabezado para retirar una orden que ya se encuentra
+        // en pantalla (at_terminal), sin obligar al cajero a hacerlo en el equipo.
+        request.Headers.Add("x-allow-cancelable-status", "at_terminal");
         request.Content = JsonContent.Create(new { }, options: JsonOptions);
         using var response = await client.SendAsync(request, cancellationToken);
         var body = await ReadBodyAsync(response, cancellationToken);
@@ -183,12 +186,57 @@ public sealed class MercadoPagoPointClient(HttpClient client)
         {
             using var json = JsonDocument.Parse(body);
             var root = json.RootElement;
-            if (root.TryGetProperty("code", out var codeElement)) code = codeElement.ToString();
-            if (root.TryGetProperty("message", out var messageElement)) message = messageElement.ToString();
-            if (string.IsNullOrWhiteSpace(message) && root.TryGetProperty("error", out var errorElement)) message = errorElement.ToString();
+            if (root.TryGetProperty("code", out var codeElement)) code = JsonText(codeElement);
+            if (root.TryGetProperty("message", out var messageElement)) message = JsonText(messageElement);
+            if (string.IsNullOrWhiteSpace(message) && root.TryGetProperty("error", out var errorElement)) message = JsonText(errorElement);
+            if (string.IsNullOrWhiteSpace(message) && root.TryGetProperty("error_description", out var descriptionElement)) message = JsonText(descriptionElement);
+            if (string.IsNullOrWhiteSpace(message) && root.TryGetProperty("detail", out var detailElement)) message = JsonText(detailElement);
+            if (string.IsNullOrWhiteSpace(message) && root.TryGetProperty("cause", out var causeElement)) message = FirstCauseMessage(causeElement);
         }
         catch (JsonException) { }
-        throw new MercadoPagoPointException(message ?? $"Mercado Pago respondió con HTTP {(int)response.StatusCode}.", (int)response.StatusCode, code);
+        throw new MercadoPagoPointException(TrimProviderMessage(message) ?? $"Mercado Pago respondió con HTTP {(int)response.StatusCode}.", (int)response.StatusCode, code);
+    }
+
+    private static string? FirstCauseMessage(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in value.EnumerateArray())
+            {
+                var message = FirstCauseMessage(item);
+                if (!string.IsNullOrWhiteSpace(message)) return message;
+            }
+            return null;
+        }
+
+        if (value.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in new[] { "description", "message", "code" })
+            {
+                if (value.TryGetProperty(property, out var propertyValue))
+                {
+                    var message = JsonText(propertyValue);
+                    if (!string.IsNullOrWhiteSpace(message)) return message;
+                }
+            }
+        }
+
+        return JsonText(value);
+    }
+
+    private static string? JsonText(JsonElement value) => value.ValueKind switch
+    {
+        JsonValueKind.String => value.GetString(),
+        JsonValueKind.Number => value.ToString(),
+        _ => null
+    };
+
+    // El proveedor no debe poder convertir una respuesta extensa o HTML en texto de interfaz.
+    private static string? TrimProviderMessage(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var compact = string.Join(' ', value.Split(['\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return compact[..Math.Min(compact.Length, 240)];
     }
 
     private sealed record TerminalListResponse(TerminalData? Data);

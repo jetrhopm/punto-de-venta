@@ -4,7 +4,16 @@ import { loadConfig } from './config.js';
 import { createMercadoPagoClient } from './mercadopago.js';
 import { MySqlStore } from './store/mysql.js';
 
-const config = loadConfig();
+const log = (event, data = {}) => console.log(JSON.stringify({ at: new Date().toISOString(), event, ...data }));
+
+let config;
+try { config = loadConfig(); }
+catch (error) {
+  // Mensaje claro en los registros de Hostinger cuando falta o está mal una variable.
+  log('config_error', { error: error.message });
+  throw error;
+}
+
 const store = await MySqlStore.connect(config.db);
 const handler = createApp({ config, store, mercadoPago: createMercadoPagoClient(config) });
 
@@ -13,7 +22,7 @@ const server = http.createServer((req, res) => {
 });
 server.requestTimeout = 30_000;
 server.headersTimeout = 20_000;
-server.listen(config.port, () => console.log(JSON.stringify({ at: new Date().toISOString(), event: 'listening', port: config.port })));
+server.listen(config.port, () => log('listening', { port: config.port }));
 
 async function shutdown() {
   server.close();

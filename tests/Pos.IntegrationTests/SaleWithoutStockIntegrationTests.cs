@@ -8,6 +8,54 @@ namespace Pos.IntegrationTests;
 public sealed class SaleWithoutStockIntegrationTests
 {
     [Fact]
+    public async Task CompletesSaleUsingTheStoreOwnedByTheSessionRegister()
+    {
+        await using var database = new PosDbContextFactory().CreateDbContext([]);
+        await database.Database.MigrateAsync();
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var legacyStore = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda anterior " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow.AddDays(-1) };
+        var currentStore = new StoreRecord { Id = Guid.NewGuid(), Name = "Tienda actual " + suffix, BusinessType = "Pruebas", CreatedAtUtc = DateTimeOffset.UtcNow };
+        var user = new UserRecord { Id = Guid.NewGuid(), NormalizedUserName = "CAJA_TIENDA_" + suffix, DisplayName = "Caja de tienda actual", PasswordHash = "test", IsAdministrator = true, IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow };
+        var register = new RegisterRecord { Id = Guid.NewGuid(), StoreId = currentStore.Id, Name = "Caja " + suffix, IsActive = true };
+        var session = new SessionRecord { Id = Guid.NewGuid(), UserId = user.Id, RegisterId = register.Id, TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))), CreatedAtUtc = DateTimeOffset.UtcNow, ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10) };
+        var product = new ProductRecord { Id = Guid.NewGuid(), Code = "CAJA-TIENDA-" + suffix, NormalizedCode = "CAJA-TIENDA-" + suffix.ToUpperInvariant(), Description = "Producto de caja actual", Price = 15m, Stock = 2m, IsActive = true };
+        database.AddRange(legacyStore, currentStore, user, register, session, product);
+        await database.SaveChangesAsync();
+
+        try
+        {
+            Assert.NotNull(await new ShiftService(database).OpenAsync(token, new OpenShiftCommand(0m), CancellationToken.None));
+
+            var result = await new SaleService(database, new PromotionService(database), new KitService(database)).CompleteAsync(
+                token,
+                new CompleteSaleCommand(Guid.NewGuid(), [new SaleLineCommand(product.Id, 1m)], 15m),
+                CancellationToken.None);
+
+            Assert.NotNull(result);
+            Assert.Equal(15m, result!.Total);
+        }
+        finally
+        {
+            var shiftIds = await database.Shifts.Where(item => item.RegisterId == register.Id).Select(item => item.Id).ToListAsync();
+            var saleIds = await database.Sales.Where(item => shiftIds.Contains(item.ShiftId)).Select(item => item.Id).ToListAsync();
+            database.PrintJobs.RemoveRange(database.PrintJobs.Where(item => saleIds.Contains(item.SaleId)));
+            database.Payments.RemoveRange(database.Payments.Where(item => saleIds.Contains(item.SaleId)));
+            database.InventoryMovements.RemoveRange(database.InventoryMovements.Where(item => saleIds.Contains(item.SaleId ?? Guid.Empty)));
+            database.SaleLines.RemoveRange(database.SaleLines.Where(item => saleIds.Contains(item.SaleId)));
+            database.Sales.RemoveRange(database.Sales.Where(item => saleIds.Contains(item.Id)));
+            database.Shifts.RemoveRange(database.Shifts.Where(item => shiftIds.Contains(item.Id)));
+            database.Sessions.RemoveRange(database.Sessions.Where(item => item.UserId == user.Id));
+            database.Products.Remove(product);
+            database.Registers.Remove(register);
+            database.Users.Remove(user);
+            database.Stores.RemoveRange(legacyStore, currentStore);
+            await database.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
     public async Task RejectsSaleWhenStoreBlocksSalesWithoutStock()
     {
         await using var database = new PosDbContextFactory().CreateDbContext([]);

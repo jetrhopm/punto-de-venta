@@ -210,7 +210,7 @@ public partial class DiagnosticWindow : Window
         builder.AppendLine("JETVENTA - REPORTE DE DIAGNÓSTICO");
         builder.AppendLine("=================================");
         builder.AppendLine($"Versión API: {report.ApiVersion}");
-        builder.AppendLine($"Versión cliente: {Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "No disponible"}");
+        builder.AppendLine($"Versión cliente: {Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "No disponible"}");
         builder.AppendLine($"Equipo: {Environment.MachineName}");
         builder.AppendLine($"Sistema operativo: {RuntimeInformation.OSDescription}");
         builder.AppendLine($"Arquitectura: {RuntimeInformation.ProcessArchitecture}");

@@ -14,6 +14,7 @@ public partial class MercadoPagoPaymentWindow : Window
     private readonly CancellationTokenSource _polling = new();
     private bool _finished;
     public bool Approved { get; private set; }
+    public bool ReusedApprovedPayment { get; private set; }
 
     public MercadoPagoPaymentWindow(Guid operationId, Guid attemptId, decimal amount)
     {
@@ -30,6 +31,7 @@ public partial class MercadoPagoPaymentWindow : Window
             if (state is null) { await FailAsync("JetVenta no recibió el estado del cobro Point. No se confirmó la venta."); return; }
             var resumed = state.OperationId != _attemptId;
             _attemptId = state.OperationId;
+            ReusedApprovedPayment = resumed && state.Approved;
             if (resumed) StatusText.Text = "Se retomó un cobro Point pendiente de este ticket. Consultando la terminal...";
             while (state is not null && !state.Finished)
             {
@@ -37,7 +39,15 @@ public partial class MercadoPagoPaymentWindow : Window
                 await Task.Delay(TimeSpan.FromSeconds(2), _polling.Token);
                 state = await RefreshWithRetryAsync();
             }
-            if (state?.Approved == true) { Approved = true; _finished = true; StatusText.Text = "Pago aprobado. Confirmando la venta en JetVenta..."; DialogResult = true; }
+            if (state?.Approved == true)
+            {
+                Approved = true;
+                _finished = true;
+                StatusText.Text = ReusedApprovedPayment
+                    ? "Este ticket ya tenía un cobro aprobado. Se confirmará la venta sin enviar otro cobro a la terminal..."
+                    : "Pago aprobado. Confirmando la venta en JetVenta...";
+                DialogResult = true;
+            }
             else if (state is not null) await FailAsync(StatusMessage(state));
         }
         catch (OperationCanceledException) { }
@@ -93,7 +103,11 @@ public partial class MercadoPagoPaymentWindow : Window
         try
         {
             using var response = await ApiClient.Client.PostAsync($"api/integrations/mercado-pago/orders/{_attemptId}/cancel", null);
-            if (!response.IsSuccessStatusCode) { StatusText.Text = "Mercado Pago no confirmó la cancelación. Revisa la terminal antes de volver a cobrar."; return; }
+            if (!response.IsSuccessStatusCode)
+            {
+                StatusText.Text = ReadableError(await response.Content.ReadAsStringAsync());
+                return;
+            }
             var state = await response.Content.ReadFromJsonAsync<OrderResult>();
             if (state?.Status == "Canceled") { StatusText.Text = "Cobro cancelado. Puedes intentar otra tarjeta."; _finished = true; _polling.Cancel(); CancelButton.Content = "Cerrar"; }
             else StatusText.Text = "Mercado Pago no confirmó la cancelación. Revisa la terminal antes de volver a cobrar.";

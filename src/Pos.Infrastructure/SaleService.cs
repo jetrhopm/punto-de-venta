@@ -21,9 +21,13 @@ public sealed class SaleService(PosDbContext database, PromotionService promotio
         if (session?.RegisterId is not Guid registerId) return null;
         var user = await database.Users.AsNoTracking().SingleAsync(item => item.Id == session.UserId, cancellationToken);
         if (!user.IsAdministrator && !await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "Sell", cancellationToken)) return null;
-        var store = await database.Stores.OrderBy(item => item.CreatedAtUtc).FirstAsync(cancellationToken);
-        var register = await database.Registers.AsNoTracking().SingleOrDefaultAsync(item => item.Id == registerId && item.StoreId == store.Id && item.IsActive, cancellationToken)
+        // La sesión ya identifica una caja. Su tienda es la configuración
+        // autoritativa para completar la venta, incluso si la base conserva
+        // tiendas de instalaciones o pruebas anteriores.
+        var register = await database.Registers.AsNoTracking().SingleOrDefaultAsync(item => item.Id == registerId && item.IsActive, cancellationToken)
             ?? throw new InvalidOperationException("La caja de esta sesión ya no está disponible.");
+        var store = await database.Stores.SingleOrDefaultAsync(item => item.Id == register.StoreId, cancellationToken)
+            ?? throw new InvalidOperationException("La tienda de esta caja ya no está disponible.");
         var manualWholesaleGrant = await GetManualWholesaleAuthorizationAsync(user, command, cancellationToken);
         if (command.PaymentMethod == "Credit" && !store.CreditSalesEnabled) throw new InvalidOperationException("Las ventas a crédito están deshabilitadas en Opciones habilitadas.");
         if (command.PaymentMethod == "Credit" && !user.IsAdministrator && !await database.Permissions.AnyAsync(item => item.UserId == user.Id && item.Code == "SellOnCredit", cancellationToken)) throw new UnauthorizedAccessException("El usuario no tiene permiso para cobrar a credito.");

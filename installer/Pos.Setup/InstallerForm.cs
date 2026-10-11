@@ -936,7 +936,7 @@ public sealed class InstallerForm : Form
 
     private void RegisterInstallation()
     {
-        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
+        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0.0";
         using var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PuntoDeVenta");
         key?.SetValue("DisplayName", ProductTitle);
         key?.SetValue("DisplayVersion", version);
@@ -1143,7 +1143,7 @@ public sealed class InstallerForm : Form
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
             .InformationalVersion;
         return string.IsNullOrWhiteSpace(informationalVersion)
-            ? Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0"
+            ? Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0.0"
             : informationalVersion.Split('+')[0];
     }
 

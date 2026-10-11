@@ -1,10 +1,17 @@
 // Configuración del intermediario. Todo sale de variables de entorno;
 // ningún valor sensible vive en el repositorio.
 
+// Algunos paneles guardan los valores entre comillas; se retiran si vienen así.
+function clean(value) {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  return /^(['"]).*\1$/.test(trimmed) ? trimmed.slice(1, -1).trim() : trimmed;
+}
+
 function required(env, name) {
-  const value = env[name];
-  if (!value || !value.trim()) throw new Error(`Falta la variable de entorno ${name}.`);
-  return value.trim();
+  const value = clean(env[name]);
+  if (!value) throw new Error(`Falta la variable de entorno ${name}.`);
+  return value;
 }
 
 export function loadConfig(env = process.env) {
@@ -15,21 +22,21 @@ export function loadConfig(env = process.env) {
   if (!redirectUri.startsWith('https://')) throw new Error('MP_REDIRECT_URI debe ser HTTPS.');
 
   return {
-    port: Number(env.PORT || 3000),
+    port: Number(clean(env.PORT) || 3000),
     clientId: required(env, 'MP_CLIENT_ID'),
     clientSecret: required(env, 'MP_CLIENT_SECRET'),
     redirectUri,
     tokenKey,
-    trustProxy: env.TRUST_PROXY === '1',
-    allowOpenRegistration: env.ALLOW_OPEN_REGISTRATION !== '0',
-    mpApiBase: env.MP_API_BASE || 'https://api.mercadopago.com',
-    mpAuthBase: env.MP_AUTH_BASE || 'https://auth.mercadopago.com',
+    trustProxy: clean(env.TRUST_PROXY) === '1',
+    allowOpenRegistration: clean(env.ALLOW_OPEN_REGISTRATION) !== '0',
+    mpApiBase: clean(env.MP_API_BASE) || 'https://api.mercadopago.com',
+    mpAuthBase: clean(env.MP_AUTH_BASE) || 'https://auth.mercadopago.com',
     db: {
-      host: env.DB_HOST || 'localhost',
-      port: Number(env.DB_PORT || 3306),
-      user: env.DB_USER || '',
-      password: env.DB_PASSWORD || '',
-      database: env.DB_NAME || ''
+      host: clean(env.DB_HOST) || 'localhost',
+      port: Number(clean(env.DB_PORT) || 3306),
+      user: clean(env.DB_USER),
+      password: clean(env.DB_PASSWORD),
+      database: clean(env.DB_NAME)
     }
   };
 }

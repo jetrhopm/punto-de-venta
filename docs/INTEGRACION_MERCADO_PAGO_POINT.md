@@ -22,13 +22,13 @@ La impresión ocurre después de confirmar la venta local. Un fallo de impresora
 ## Intermediario OAuth central
 
 Desde esta versión la autorización pasa por el intermediario `services/mp-broker`
-(Node.js en `https://mp.gocentersuplementos.com`). Es el único que conoce el Client
+(Node.js en `https://mp.gocentersuplementos.com.mx`). Es el único que conoce el Client
 Secret; la API local de cada tienda ya no expone callback ni webhook a Internet.
 
 1. **Autorizar cuenta** → la API local se registra una vez en el intermediario
    (`installation_id` + secreto, guardados con DPAPI) y pide `POST /v1/oauth/start`.
 2. El navegador abre Mercado Pago; al aceptar, Mercado Pago regresa a
-   `https://mp.gocentersuplementos.com/v1/oauth/callback`.
+   `https://mp.gocentersuplementos.com.mx/v1/oauth/callback`.
 3. La ventana de configuración consulta `GET /api/integrations/mercado-pago/oauth/status`;
    la API recoge los tokens con `POST /v1/oauth/pickup` una sola vez y los cifra con DPAPI.
 4. Cuando faltan menos de 30 días para que venza el Access Token (dura 180), la API lo
@@ -40,7 +40,7 @@ Secret; la API local de cada tienda ya no expone callback ni webhook a Internet.
 Configuración de la API local (`appsettings.json`):
 
 ```json
-"MercadoPago": { "BrokerUrl": "https://mp.gocentersuplementos.com/" }
+"MercadoPago": { "BrokerUrl": "https://mp.gocentersuplementos.com.mx/" }
 ```
 
 Columnas reutilizadas en `store` (sin migración): `MercadoPagoOAuthState` guarda el id del
@@ -52,8 +52,19 @@ El despliegue del intermediario está en `services/mp-broker/README.md`.
 ### Solo pruebas de desarrollo
 
 El campo para pegar un Access Token de prueba (`APP_USR-` en la documentación actual de Point, o `TEST-` en integraciones sandbox anteriores) sólo aparece si la API tiene
-`"MercadoPago": { "AllowTestToken": true }` (ya incluido en `appsettings.Development.json`).
-En producción queda oculto y el endpoint lo rechaza.
+`"MercadoPago": { "AllowTestToken": true }`. Debe habilitarse temporalmente y sólo en un
+entorno de desarrollo; la configuración actual lo mantiene desactivado. En producción el campo
+permanece oculto y el endpoint lo rechaza.
+
+### Recuperación ante interrupciones
+
+- JetVenta no envía cobros Point menores a **$5.00**.
+- Si JetVenta o la red se interrumpen, la orden permanece ligada al ticket por su `SaleOperationId`.
+  Al iniciar sesión o volver a Ventas, la caja muestra **Cobros Point que requieren revisión**.
+- Desde esa ventana se actualiza el estado, se cancela una orden pendiente en la terminal o, si
+  Mercado Pago ya la aprobó, se confirma el ticket original e imprime el comprobante configurado.
+  La recuperación sólo finaliza pagos de tarjeta que cubren exactamente el ticket; los pagos
+  mixtos, tickets alterados o sin ticket original quedan protegidos para revisión manual.
 
 ### Webhooks
 
