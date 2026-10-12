@@ -20,16 +20,24 @@ WriteStartupLog("Iniciando API.");
 var webOptions = new WebApplicationOptions
 {
     Args = args,
-    ContentRootPath = WindowsServiceHelpers.IsWindowsService() ? AppContext.BaseDirectory : default
+    // Como servicio, o cuando se arranca desde otra carpeta (la API de desarrollo que inicia JetVenta,
+    // dev-up.ps1 o dotnet run desde la raíz), la configuración se lee junto al ejecutable. Si no,
+    // appsettings.json no se carga y faltan valores como MercadoPago:BrokerUrl.
+    ContentRootPath = WindowsServiceHelpers.IsWindowsService() || !File.Exists(Path.Combine(Directory.GetCurrentDirectory(), "appsettings.json"))
+        ? AppContext.BaseDirectory
+        : default
 };
 var builder = WebApplication.CreateBuilder(webOptions);
 builder.Host.UseWindowsService(options => options.ServiceName = "PuntoDeVentaApi");
-builder.WebHost.UseUrls(builder.Configuration["Pos:Urls"] ?? Environment.GetEnvironmentVariable("POS_API_URLS") ?? "http://127.0.0.1:5000");
+builder.WebHost.UseUrls(builder.Configuration["Pos:Urls"] ?? Environment.GetEnvironmentVariable("POS_API_URLS") ?? "http://0.0.0.0:5000");
 var connectionString = PosDbContextFactory.ReadConfiguredConnectionString(builder.Configuration["Pos:ConnectionFile"]);
 builder.Services.AddDbContext<PosDbContext>(options => options.UseNpgsql(connectionString).ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning)));
 builder.Services.AddScoped<PasswordHasher<UserRecord>>();
 builder.Services.AddScoped<InitialSetupService>();
 builder.Services.AddScoped<AuthenticationService>();
+builder.Services.AddScoped<MobileAccessService>();
+builder.Services.AddScoped<MobileInventoryCountService>();
+builder.Services.AddScoped<MobilePurchaseRequestService>();
 builder.Services.AddScoped<ShiftService>();
 builder.Services.AddScoped<ProductCatalogService>();
 builder.Services.AddScoped<SaleService>();
@@ -74,6 +82,7 @@ builder.Services.AddHttpClient<Pos.Integrations.MercadoPago.MercadoPagoPointClie
 });
 builder.Services.AddScoped<ProductImportService>();
 builder.Services.AddScoped<DatabaseMaintenanceService>();
+builder.Services.AddGoogleDriveBackups();
 builder.Services.AddScoped<RegisterAdministrationService>();
 builder.Services.AddScoped<MaintenanceModeService>();
 builder.Services.AddScoped<LicenseService>();
@@ -166,6 +175,13 @@ app.Use(async (context, next) =>
             await context.Response.WriteAsJsonAsync(new { code = "license_required", message = "Esta instalación requiere una licencia válida. Abre Configuración > Licencia para activarla." });
             return;
         }
+
+        if (path.StartsWithSegments("/api/mobile") && !license.IncludesMobile)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new { code = "mobile_license_required", message = "Esta licencia es JetVenta Desktop. Para utilizar JetVenta Móvil, activa la modalidad Desktop + Móvil." });
+            return;
+        }
     }
 
     await next();
@@ -241,8 +257,11 @@ app.Use(async (context, next) =>
         path.StartsWithSegments("/api/license/activation-import") ||
         path.StartsWithSegments("/api/lan/info") ||
         path.StartsWithSegments("/api/lan/pair") ||
-        path.StartsWithSegments("/api/maintenance/status");
-    var requiresProtocol = path.StartsWithSegments("/api/auth/login") || path.StartsWithSegments("/api/lan/pair") || (!allowsAnonymous && path.StartsWithSegments("/api"));
+        path.StartsWithSegments("/api/maintenance/status") ||
+        path.StartsWithSegments("/api/mobile/pair") ||
+        path.StartsWithSegments("/api/mobile/login");
+    var isMobileSessionRoute = path.StartsWithSegments("/api/mobile") && !path.StartsWithSegments("/api/mobile/pairing-codes");
+    var requiresProtocol = path.StartsWithSegments("/api/auth/login") || path.StartsWithSegments("/api/lan/pair") || path.StartsWithSegments("/api/mobile") || (!allowsAnonymous && path.StartsWithSegments("/api"));
     if (requiresProtocol && context.Request.Headers["X-JetVenta-Lan-Protocol"].ToString() != LanNetworkPolicy.ProtocolVersion.ToString())
     {
         context.Response.StatusCode = StatusCodes.Status426UpgradeRequired;
@@ -250,7 +269,7 @@ app.Use(async (context, next) =>
         return;
     }
 
-    if (!allowsAnonymous && path.StartsWithSegments("/api"))
+    if (!allowsAnonymous && path.StartsWithSegments("/api") && !isMobileSessionRoute)
     {
         var accessToken = context.Request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
         var deviceToken = context.Request.Headers["X-JetVenta-Device-Token"].ToString();
@@ -388,6 +407,7 @@ app.MapDelete("/api/maintenance/restore-session", async (HttpRequest request, Ma
     var result = await maintenance.EndRestoreAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
     return result ? Results.NoContent() : Results.Unauthorized();
 });
+app.MapGoogleDriveEndpoints();
 app.MapGet("/api/ticket-settings", async (HttpRequest request, TicketSettingsService settings, CancellationToken cancellationToken) => { var result = await settings.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { result.Name, result.LegalName, result.TaxId, result.Address, result.Phone, result.TicketHeader, result.TicketFooter }); });
 app.MapPut("/api/ticket-settings", async (HttpRequest request, TicketSettingsCommand command, TicketSettingsService settings, CancellationToken cancellationToken) => { try { var result = await settings.UpdateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(new { result.Name, result.LegalName, result.TaxId, result.Address, result.Phone, result.TicketHeader, result.TicketFooter }); } catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["ticket"] = [exception.Message] }); } });
 app.MapGet("/api/currency-settings", async (HttpRequest request, CurrencySettingsService settings, CancellationToken cancellationToken) => { var result = await settings.GetAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); });
@@ -644,6 +664,42 @@ app.MapPost("/api/suppliers", async (HttpRequest request, SupplierCommand comman
     try { var result = await suppliers.CreateSupplierAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Created($"/api/suppliers/{result.Id}", result); }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["supplier"] = [exception.Message] }); }
 });
+app.MapGet("/api/purchases/mobile-requests", async (HttpRequest request, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
+{
+    var result = await purchases.PendingMobileRequestsAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapGet("/api/purchases/mobile-requests/{requestId:guid}", async (Guid requestId, HttpRequest request, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await purchases.GetMobileRequestForReviewAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), requestId, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+});
+app.MapPost("/api/purchases/mobile-requests/{requestId:guid}/approve", async (Guid requestId, HttpRequest request, ApproveMobilePurchaseRequestCommand command, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await purchases.ApproveMobileRequestAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), requestId, command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["purchase"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+app.MapPost("/api/purchases/mobile-requests/{requestId:guid}/reject", async (Guid requestId, HttpRequest request, RejectMobilePurchaseRequestCommand command, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await purchases.RejectMobileRequestAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), requestId, command.Reason, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok();
+    }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["purchase"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
 app.MapPost("/api/purchases/receive", async (HttpRequest request, ReceivePurchaseCommand command, SupplierPurchaseService purchases, CancellationToken cancellationToken) =>
 {
     try { var result = await purchases.ReceiveAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), command, cancellationToken); return result is null ? Results.Unauthorized() : Results.Ok(result); }
@@ -700,6 +756,15 @@ app.MapGet("/api/products/catalog", async (string? q, Guid? departmentId, decima
 {
     var result = await catalog.CatalogAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), q, departmentId, minimumPrice, maximumPrice, minimumProfit, includeInactive == true, sort ?? "description", descending, page ?? 1, 500, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapGet("/api/products/{id:guid}/edit-context", async (Guid id, ProductCatalogService catalog, HttpRequest request, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await catalog.GetEditContextAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), id, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
 });
 app.MapGet("/api/departments", async (bool? includeInactive, ProductCatalogService catalog, HttpRequest request, CancellationToken cancellationToken) =>
 {
@@ -937,6 +1002,18 @@ app.MapPost("/api/sales/cancel", async (HttpRequest request, CancelSaleCommand c
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["sale"] = [exception.Message] }); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+    catch (Pos.Integrations.MercadoPago.MercadoPagoPointException exception) when (exception.StatusCode == 428)
+    {
+        return Results.Conflict(new
+        {
+            code = "point_refund_insufficient_funds",
+            message = "Mercado Pago no pudo devolver el cobro porque la cuenta no tiene saldo disponible suficiente. La venta sigue activa y no se modificaron el inventario ni la caja. Agrega saldo disponible en Mercado Pago y vuelve a intentar la cancelación."
+        });
+    }
+    catch (Pos.Integrations.MercadoPago.MercadoPagoPointException)
+    {
+        return Results.Problem("Mercado Pago no confirmó el reembolso. La venta sigue activa y no se modificaron el inventario ni la caja. Revisa el estado del cobro e inténtalo de nuevo.", statusCode: StatusCodes.Status502BadGateway);
+    }
 });
 app.MapGet("/api/sales/history", async (DateTimeOffset from, DateTimeOffset to, Guid? userId, string? q, HttpRequest request, SalesHistoryService history, CancellationToken cancellationToken) =>
 {
@@ -967,6 +1044,18 @@ app.MapPost("/api/sales/return", async (HttpRequest request, ReturnSaleCommand c
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["return"] = [exception.Message] }); }
     catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
     catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+    catch (Pos.Integrations.MercadoPago.MercadoPagoPointException exception) when (exception.StatusCode == 428)
+    {
+        return Results.Conflict(new
+        {
+            code = "point_refund_insufficient_funds",
+            message = "Mercado Pago no pudo devolver el cobro porque la cuenta no tiene saldo disponible suficiente. La venta sigue activa y no se modificaron el inventario ni la caja. Agrega saldo disponible en Mercado Pago y vuelve a intentar la devolución."
+        });
+    }
+    catch (Pos.Integrations.MercadoPago.MercadoPagoPointException)
+    {
+        return Results.Problem("Mercado Pago no confirmó el reembolso. La venta sigue activa y no se modificaron el inventario ni la caja. Revisa el estado del cobro e inténtalo de nuevo.", statusCode: StatusCodes.Status502BadGateway);
+    }
 });
 app.MapGet("/api/sales/latest-ticket", async (HttpRequest request, TicketService tickets, CancellationToken cancellationToken) =>
 {
@@ -1035,9 +1124,9 @@ app.MapGet("/api/inventory/export", async (HttpRequest request, InventoryService
     var result = await inventory.ExportCsvAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), cancellationToken);
     return result is null ? Results.Unauthorized() : Results.File(result, "text/csv", $"inventario-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
 });
-app.MapGet("/api/inventory/movements", async (string? q, int? page, HttpRequest request, InventoryService inventory, CancellationToken cancellationToken) =>
+app.MapGet("/api/inventory/movements", async (string? q, string? type, DateTimeOffset? from, DateTimeOffset? to, int? page, HttpRequest request, InventoryService inventory, CancellationToken cancellationToken) =>
 {
-    var result = await inventory.MovementsAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), q, page ?? 1, cancellationToken);
+    var result = await inventory.MovementsAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), q, type, from, to, page ?? 1, cancellationToken);
     return result is null ? Results.Unauthorized() : Results.Ok(result);
 });
 app.MapPost("/api/inventory/limits", async (HttpRequest request, InventoryLimitChangeCommand command, InventoryService inventory, CancellationToken cancellationToken) =>
@@ -1160,6 +1249,137 @@ app.MapPost("/api/auth/login", async (HttpRequest request, LoginCommand command,
     };
     return Results.Json(new { code = attempt.FailureCode, message = attempt.FailureMessage }, statusCode: statusCode);
 }).RequireRateLimiting("lan-auth");
+app.MapPost("/api/mobile/pairing-codes", async (HttpRequest request, MobileAccessService mobile, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    var result = await mobile.CreatePairingCodeAsync(token, cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapPost("/api/mobile/pair", async (MobilePairCommand command, MobileAccessService mobile, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await mobile.PairAsync(command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["pairing"] = [exception.Message] }); }
+}).RequireRateLimiting("lan-auth");
+app.MapPost("/api/mobile/login", async (HttpRequest request, MobileLoginCommand command, MobileAccessService mobile, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await mobile.LoginAsync(request.Headers["X-JetVenta-Mobile-Token"].ToString(), command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (InvalidOperationException exception) { return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status403Forbidden); }
+}).RequireRateLimiting("lan-auth");
+app.MapDelete("/api/mobile/session", async (HttpRequest request, MobileAccessService mobile, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    return await mobile.LogoutAsync(token, request.Headers["X-JetVenta-Mobile-Token"].ToString(), cancellationToken) ? Results.NoContent() : Results.Unauthorized();
+});
+app.MapGet("/api/mobile/products/by-code", async (HttpRequest request, string? code, MobileAccessService mobile, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    try
+    {
+        var product = await mobile.ByCodeAsync(token, request.Headers["X-JetVenta-Mobile-Token"].ToString(), code ?? string.Empty, cancellationToken);
+        return product is null ? Results.NotFound() : Results.Ok(product);
+    }
+    catch (UnauthorizedAccessException) { return Results.Unauthorized(); }
+});
+app.MapGet("/api/mobile/products/search", async (HttpRequest request, string? q, MobileAccessService mobile, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    var products = await mobile.SearchAsync(token, request.Headers["X-JetVenta-Mobile-Token"].ToString(), q ?? string.Empty, cancellationToken);
+    return products is null ? Results.Unauthorized() : Results.Ok(products);
+});
+app.MapGet("/api/mobile/purchases/suppliers", async (HttpRequest request, MobilePurchaseRequestService purchases, CancellationToken cancellationToken) =>
+{
+    var result = await purchases.SuppliersAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), request.Headers["X-JetVenta-Mobile-Token"].ToString(), cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapGet("/api/mobile/purchases/products/by-code", async (HttpRequest request, string? code, MobilePurchaseRequestService purchases, CancellationToken cancellationToken) =>
+{
+    var result = await purchases.FindProductAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), request.Headers["X-JetVenta-Mobile-Token"].ToString(), code ?? string.Empty, cancellationToken);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+app.MapPost("/api/mobile/purchases/requests", async (HttpRequest request, CreateMobilePurchaseRequestCommand command, MobilePurchaseRequestService purchases, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await purchases.CreateAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), request.Headers["X-JetVenta-Mobile-Token"].ToString(), command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["purchase"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+app.MapGet("/api/mobile/purchases/requests/{requestId:guid}", async (Guid requestId, HttpRequest request, MobilePurchaseRequestService purchases, CancellationToken cancellationToken) =>
+{
+    var result = await purchases.GetMyRequestAsync(request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase), request.Headers["X-JetVenta-Mobile-Token"].ToString(), requestId, cancellationToken);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+app.MapGet("/api/mobile/session/capabilities", async (HttpRequest request, MobileAccessService mobile, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    var result = await mobile.GetCapabilitiesAsync(token, request.Headers["X-JetVenta-Mobile-Token"].ToString(), cancellationToken);
+    return result is null ? Results.Unauthorized() : Results.Ok(result);
+});
+app.MapGet("/api/mobile/inventory", async (HttpRequest request, string? q, string? status, MobileAccessService mobile, CancellationToken cancellationToken) =>
+{
+    var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+    try
+    {
+        var result = await mobile.BrowseInventoryAsync(token, request.Headers["X-JetVenta-Mobile-Token"].ToString(), q, status, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (InvalidOperationException exception) { return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status403Forbidden); }
+});
+app.MapPost("/api/mobile/inventory-count-sessions", async (HttpRequest request, MobileInventoryCountService counts, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+        var result = await counts.StartSessionAsync(token, request.Headers["X-JetVenta-Mobile-Token"].ToString(), cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (UnauthorizedAccessException exception) { return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status403Forbidden); }
+});
+app.MapPost("/api/mobile/inventory-count-sessions/{sessionId:guid}/close", async (Guid sessionId, HttpRequest request, MobileInventoryCountService counts, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+        var result = await counts.CloseSessionAsync(token, request.Headers["X-JetVenta-Mobile-Token"].ToString(), sessionId, cancellationToken);
+        return result is null ? Results.Unauthorized() : result.Value ? Results.NoContent() : Results.NotFound();
+    }
+    catch (UnauthorizedAccessException exception) { return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status403Forbidden); }
+});
+app.MapPost("/api/mobile/inventory-counts", async (MobileCountCommand command, HttpRequest request, MobileInventoryCountService counts, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+        var result = await counts.RegisterCountAsync(token, request.Headers["X-JetVenta-Mobile-Token"].ToString(), command, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (MobileCountStockChangedException exception) { return Results.Conflict(new { message = exception.Message, currentStock = exception.CurrentStock }); }
+    catch (UnauthorizedAccessException exception) { return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status403Forbidden); }
+    catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["count"] = [exception.Message] }); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { message = exception.Message }); }
+    catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+});
+app.MapGet("/api/mobile/inventory-counts/history", async (HttpRequest request, int? limit, bool? differencesOnly, MobileInventoryCountService counts, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+        var result = await counts.HistoryAsync(token, request.Headers["X-JetVenta-Mobile-Token"].ToString(), limit ?? 100, differencesOnly == true, cancellationToken);
+        return result is null ? Results.Unauthorized() : Results.Ok(result);
+    }
+    catch (UnauthorizedAccessException exception) { return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status403Forbidden); }
+});
 app.MapPost("/api/auth/temporary-permission", async (HttpRequest request, TemporaryPermissionAuthorizationCommand command, AuthenticationService authentication, CancellationToken cancellationToken) =>
 {
     var token = request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);

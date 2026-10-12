@@ -1,5 +1,88 @@
 # Changelog
 
+## JetVenta 3.5.0.13 - 2026-10-11
+- Setup permite seleccionar y activar una licencia `.jv` durante la instalación o actualización.
+- Si ya está activa la modalidad Desktop, sólo acepta una licencia válida Desktop + Móvil como actualización.
+- La licencia se conserva al actualizar si no se selecciona otra; las cajas adicionales siguen usando la licencia del servidor.
+- La API carga su configuración desde la carpeta de publicación al iniciarse desde otro directorio; queda corregida la carga del broker HTTPS de Mercado Pago en desarrollo.
+- La pantalla Mercado Pago bloquea la autorización si no puede verificar primero el estado de la cuenta y muestra instrucciones de recuperación.
+
+## JetVenta 3.5.0.12 - 2026-10-11
+- El emisor permite generar licencias firmadas JetVenta Desktop o Desktop + Móvil.
+- La API valida la modalidad antes de permitir emparejar teléfonos o usar funciones móviles.
+- La prueba de 30 días mantiene todas las funciones; las licencias anteriores siguen siendo válidas como Desktop.
+- Se excluyen carpetas `artifacts` y `output` anidadas de la compilación de proyectos .NET.
+
+## JetVenta Móvil 1.0.15 - 2026-10-11
+- El selector de proveedor muestra su nombre legible.
+- El campo de piezas recibidas inicia vacío, también después de cada escaneo.
+- APK móvil compilación 17.
+
+## JetVenta Móvil 1.0.14 - 2026-10-11
+- Corrige el cierre al iniciar causado por el valor de teclado decimal inválido en los campos de compras.
+- APK móvil compilación 16.
+
+## JetVenta Móvil 1.0.13 / JetVenta 3.5.0.11 - 2026-10-11
+- JetVenta Móvil permite escanear productos, capturar piezas y costo del proveedor y enviar una
+  solicitud de recepción a la caja, sin aplicar cambios a existencias ni efectivo desde el teléfono.
+- Compras en escritorio agrega bandeja para revisar y rechazar solicitudes. La recepción autorizada
+  reutiliza la revisión de precios y la confirmación del pago/retiro; existencias, costo y caja sólo
+  se actualizan al aprobar. El teléfono puede consultar el estado.
+- APK móvil compilación 15.
+
+## JetVenta Móvil 1.0.12 - 2026-10-11
+- Agrega una lista de compras local al teléfono: busca artículos, define cantidades, marca los
+  surtidos y elimina elementos. No modifica el inventario ni sincroniza todavía con otras cajas.
+- APK móvil compilación 14.
+
+## JetVenta Móvil 1.0.11 - 2026-10-11
+- La cámara trasera queda como selección predeterminada; el cliente puede cambiar a la frontal
+  manualmente. Se conserva el fallback para equipos sin cámara trasera.
+- APK móvil compilación 13.
+
+## JetVenta Móvil 1.0.10 - 2026-10-11
+- Asigna el icono JetVenta al acceso principal de Android y su variante redonda.
+- No modifica el funcionamiento de las cámaras.
+- APK móvil compilación 12.
+
+## JetVenta Móvil 1.0.9 - 2026-10-11
+- Verificador, Conteo e Inventario comparten una sola vista de cámara, que se mueve al módulo
+  activo para evitar que varios controles nativos compitan por la cámara del teléfono.
+- Al volver desde Ajustes o reanudar la app, vuelve a comprobar el permiso y reinicia la cámara.
+- Libera la cámara al salir a segundo plano, reintenta su inicialización y distingue falta de
+  permiso de un fallo de cámara; ofrece abrir Ajustes o reintentar según corresponda.
+- APK móvil compilación 11.
+
+## 3.5.0.10 - 2026-10-11
+- Mejora visual del conteo de inventario móvil: campo de cantidad y botón de registro en filas
+  separadas, ficha del artículo con existencia destacada y resumen de sesión más claro.
+- APK móvil actualizado a `1.0.7` (compilación 9).
+
+## 3.5.0.9 - 2026-10-11
+- JetVenta Móvil activa sólo una cámara a la vez, reinicia la captura al cambiar de módulo o
+  volver a la aplicación, selecciona la cámara frontal cuando está disponible y permite alternar
+  entre cámaras frontal y trasera. La pantalla indica cuando no hay permiso o cámara detectable.
+- APK móvil actualizado a `1.0.6` (compilación 8).
+
+## 3.5.0.8 - 2026-10-11
+- Corrección de inicio de JetVenta Móvil: reemplaza un teclado XAML no compatible que provocaba
+  el cierre inmediato en Android. APK móvil actualizado a `1.0.5` (compilación 7).
+
+## 3.5.0.7 - 2026-10-11
+- JetVenta Móvil agrega menú de Verificador, Conteo e Inventario con permisos del usuario.
+- El conteo actualiza existencias en el momento, detecta cambios concurrentes, conserva bitácora
+  de diferencias y permite consultar el historial; el APK usa icono propio de JetVenta.
+
+## 3.5.0.0 - 2026-10-11
+- Respaldos en Google Drive del propio dueño: cada cierre correcto de JetVenta en la caja
+  principal crea un respaldo y lo sube a la carpeta `JetVenta Respaldos`. Del día en curso se
+  conservan todos; al cambiar de día queda sólo el último de cada día, durante 7 días.
+- Tras un apagón o cierre forzado, el siguiente inicio crea un respaldo de recuperación y sube
+  los pendientes en segundo plano. "Omitir por hoy" deja el respaldo pendiente.
+- Contraseña opcional (AES-256-GCM, PBKDF2 600 000) con advertencia de pérdida irrecuperable.
+- Restaurar desde Google Drive descarga, descifra y verifica el respaldo y lo entrega al proceso
+  de restauración existente. Requiere `GoogleDrive:ClientId` y `ClientSecret` (app de escritorio).
+
 ## 3.4.0.0 - 2026-10-11
 - Mercado Pago Point queda listo para operación asistida: autorización OAuth mediante el
   intermediario HTTPS, selección de terminal PDV por caja, cancelación remota de órdenes en

@@ -13,6 +13,7 @@ public sealed record ProductResult(Guid Id, string Code, string Description, dec
 public sealed record CatalogProductResult(Guid Id, string Code, string Description, string Department, Guid? DepartmentId, decimal Cost, decimal Price, decimal ProfitPercent, decimal ProfitAmount, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleProfitAmount, decimal WholesaleMinimumQuantity, decimal Stock, decimal MinimumStock, decimal MaximumStock, string UnitOfMeasure, bool IsKit, bool IsActive);
 public sealed record CatalogPageResult(IReadOnlyList<CatalogProductResult> Items, int Page, int PageSize, int TotalCount, int TotalPages);
 public sealed record DepartmentResult(Guid Id, string Name, bool IsActive);
+public sealed record ProductEditContextResult(CatalogProductResult Product, IReadOnlyList<DepartmentResult> Departments);
 
 public sealed class ProductCatalogService(PosDbContext database)
 {
@@ -62,7 +63,7 @@ public sealed class ProductCatalogService(PosDbContext database)
     public static string NormalizeCode(string code) => code.Trim().ToUpperInvariant();
     public async Task<IReadOnlyList<DepartmentResult>?> ListDepartmentsAsync(string accessToken, bool includeInactive, CancellationToken cancellationToken)
     {
-        if (await GetAuthorizedUserAsync(accessToken, "ViewProducts", cancellationToken) is null) return null;
+        if (!await HasCatalogAccessAsync(accessToken, cancellationToken)) return null;
         await DepartmentDefaults.EnsureAsync(database, cancellationToken);
         var departments = database.Departments.AsNoTracking();
         if (!includeInactive) departments = departments.Where(item => item.IsActive);
@@ -108,14 +109,29 @@ public sealed class ProductCatalogService(PosDbContext database)
     }
     public async Task<CatalogPageResult?> CatalogAsync(string accessToken, string? query, Guid? departmentId, decimal? minimumPrice, decimal? maximumPrice, decimal? minimumProfit, bool includeInactive, string sort, bool descending, int page, int pageSize, CancellationToken cancellationToken)
     {
-        if (await GetAuthorizedUserAsync(accessToken, "ViewProducts", cancellationToken) is null) return null;
+        if (!await HasCatalogAccessAsync(accessToken, cancellationToken)) return null;
         page = Math.Max(1, page); pageSize = 500; var products = database.Products.AsNoTracking().Where(item => (includeInactive || item.IsActive) && !item.IsTemporary).Include(item => item.Department).AsQueryable();
         var text = query?.Trim().ToUpperInvariant(); if (!string.IsNullOrWhiteSpace(text)) products = products.Where(item => item.NormalizedCode.Contains(text) || item.Description.ToUpper().Contains(text));
         if (departmentId is not null) products = products.Where(item => item.DepartmentId == departmentId); if (minimumPrice is not null) products = products.Where(item => item.Price >= minimumPrice); if (maximumPrice is not null) products = products.Where(item => item.Price <= maximumPrice); if (minimumProfit is not null) products = products.Where(item => item.ProfitPercent >= minimumProfit);
         products = (sort.ToLowerInvariant()) switch { "code" => descending ? products.OrderByDescending(item => item.Code) : products.OrderBy(item => item.Code), "department" => descending ? products.OrderByDescending(item => item.Department!.Name) : products.OrderBy(item => item.Department!.Name), "cost" => descending ? products.OrderByDescending(item => item.Cost) : products.OrderBy(item => item.Cost), "price" => descending ? products.OrderByDescending(item => item.Price) : products.OrderBy(item => item.Price), "wholesale" => descending ? products.OrderByDescending(item => item.WholesalePrice) : products.OrderBy(item => item.WholesalePrice), "profit" => descending ? products.OrderByDescending(item => item.ProfitPercent) : products.OrderBy(item => item.ProfitPercent), "stock" => descending ? products.OrderByDescending(item => item.Stock) : products.OrderBy(item => item.Stock), "minimumstock" => descending ? products.OrderByDescending(item => item.MinimumStock) : products.OrderBy(item => item.MinimumStock), "maximumstock" => descending ? products.OrderByDescending(item => item.MaximumStock) : products.OrderBy(item => item.MaximumStock), _ => descending ? products.OrderByDescending(item => item.Description) : products.OrderBy(item => item.Description) };
         var total = await products.CountAsync(cancellationToken); var rows = await products.Skip((page - 1) * pageSize).Take(pageSize).Select(item => new CatalogProductResult(item.Id, item.Code, item.Description, item.Department == null ? string.Empty : item.Department.Name, item.DepartmentId, item.Cost, item.Price, item.ProfitPercent, item.Price - item.Cost, item.WholesalePrice, item.WholesaleProfitPercent, item.WholesalePrice > 0m ? item.WholesalePrice - item.Cost : 0m, item.WholesaleMinimumQuantity, item.Stock, item.MinimumStock, item.MaximumStock, item.UnitOfMeasure, item.IsKit, item.IsActive)).ToListAsync(cancellationToken); return new CatalogPageResult(rows, page, pageSize, total, Math.Max(1, (int)Math.Ceiling(total / (double)pageSize)));
     }
+    public async Task<ProductEditContextResult?> GetEditContextAsync(string accessToken, Guid productId, CancellationToken cancellationToken)
+    {
+        if (await GetAuthorizedUserAsync(accessToken, "ManageProducts", cancellationToken) is null) return null;
+        await DepartmentDefaults.EnsureAsync(database, cancellationToken);
+        var product = await database.Products.AsNoTracking().Include(item => item.Department)
+            .SingleOrDefaultAsync(item => item.Id == productId && !item.IsTemporary, cancellationToken)
+            ?? throw new KeyNotFoundException("El producto ya no existe en el catálogo.");
+        var productResult = new CatalogProductResult(product.Id, product.Code, product.Description, product.Department?.Name ?? string.Empty, product.DepartmentId, product.Cost, product.Price, product.ProfitPercent, product.Price - product.Cost, product.WholesalePrice, product.WholesaleProfitPercent, product.WholesalePrice > 0m ? product.WholesalePrice - product.Cost : 0m, product.WholesaleMinimumQuantity, product.Stock, product.MinimumStock, product.MaximumStock, product.UnitOfMeasure, product.IsKit, product.IsActive);
+        var departments = await database.Departments.AsNoTracking().Where(item => item.IsActive).OrderBy(item => item.Name)
+            .Select(item => new DepartmentResult(item.Id, item.Name, item.IsActive)).ToListAsync(cancellationToken);
+        return new ProductEditContextResult(productResult, departments);
+    }
     private ProductRecord CreateRecord(ProductCommand command, string normalizedCode, StoreRecord store) => new() { Id = Guid.NewGuid(), Code = command.Code.Trim(), NormalizedCode = normalizedCode, Description = command.Description.Trim(), Price = ResolvePrice(command.Price, command.Cost, command.ProfitPercent, store), Cost = decimal.Round(command.Cost, 2), ProfitPercent = decimal.Round(command.ProfitPercent, 2), WholesalePrice = ResolveWholesalePrice(command.WholesalePrice, command.Cost, command.WholesaleProfitPercent, store), WholesaleProfitPercent = decimal.Round(command.WholesaleProfitPercent, 2), WholesaleMinimumQuantity = decimal.Round(command.WholesaleMinimumQuantity, 3), Stock = decimal.Round(command.InitialStock, 3), MinimumStock = decimal.Round(command.MinimumStock, 3), MaximumStock = decimal.Round(command.MaximumStock, 3), DepartmentId = command.DepartmentId, UnitOfMeasure = NormalizeUnit(command.UnitOfMeasure), IsKit = command.IsKit, IsCommonProduct = command.IsCommonProduct, IsActive = true };
+    private async Task<bool> HasCatalogAccessAsync(string accessToken, CancellationToken cancellationToken) =>
+        await GetAuthorizedUserAsync(accessToken, "ViewProducts", cancellationToken) is not null ||
+        await GetAuthorizedUserAsync(accessToken, "ManageProducts", cancellationToken) is not null;
     private async Task ValidateDepartmentAsync(Guid? id, CancellationToken cancellationToken) { if (id is not null && !await database.Departments.AnyAsync(item => item.Id == id && item.IsActive, cancellationToken)) throw new ArgumentException("El departamento no existe o esta inactivo."); }
     private static decimal ResolvePrice(decimal price, decimal cost, decimal profit, StoreRecord store) => price > 0m || !store.AutoPriceWithProfit ? decimal.Round(price, 2) : decimal.Round(cost * (1m + (profit > 0m ? profit : store.DefaultProfitPercent) / 100m), 2, MidpointRounding.AwayFromZero);
     private static decimal ResolveWholesalePrice(decimal price, decimal cost, decimal profit, StoreRecord store) => price > 0m || !store.AutoPriceWithProfit ? decimal.Round(price, 2) : profit > 0m ? decimal.Round(cost * (1m + profit / 100m), 2, MidpointRounding.AwayFromZero) : 0m;

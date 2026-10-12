@@ -46,6 +46,9 @@
                 </StackPanel>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Margin="0,0,8,0" Padding="14,8" Click="OnMobileRequestsClick" ToolTip="Revisar, recibir o rechazar compras enviadas desde JetVenta Móvil">
+                    <StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="CellphoneArrowDown" Width="18" Height="18" Margin="0,0,7,0"/><TextBlock Text="Solicitudes móvil"/></StackPanel>
+                </Button>
                 <Button Margin="0,0,8,0" Padding="14,8" Click="OnHistoryClick" ToolTip="Compras recibidas por cada cajero">
                     <StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="History" Width="18" Height="18" Margin="0,0,7,0"/><TextBlock Text="Historial de compras"/></StackPanel>
                 </Button>

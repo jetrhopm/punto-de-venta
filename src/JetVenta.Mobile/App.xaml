@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Application xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="JetVenta.Mobile.App">
+    <Application.Resources>
+        <ResourceDictionary>
+        <Color x:Key="Navy">#0A2040</Color>
+        <Color x:Key="Primary">#0878E5</Color>
+        <Color x:Key="Success">#148A4B</Color>
+        <Color x:Key="Warning">#C58A09</Color>
+        <Color x:Key="Danger">#C44343</Color>
+        <Color x:Key="Muted">#64748B</Color>
+        <LinearGradientBrush x:Key="MenuBlueGradient" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#154A91" Offset="0" /><GradientStop Color="#0A2348" Offset="1" /></LinearGradientBrush>
+        <LinearGradientBrush x:Key="IconBlueGradient" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#0878E5" Offset="0" /><GradientStop Color="#0A2D65" Offset="1" /></LinearGradientBrush>
+        <Shadow x:Key="MenuShadow" Brush="#2363C8" Offset="0,4" Radius="10" Opacity="0.28" />
+        <Style x:Key="SecondaryActionButton" TargetType="Button"><Setter Property="TextColor" Value="#CDEBFF" /><Setter Property="BackgroundColor" Value="#12385A" /><Setter Property="HeightRequest" Value="40" /><Setter Property="Padding" Value="12,0" /><Setter Property="FontSize" Value="13" /></Style>
+        <Style TargetType="Button">
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="FontAttributes" Value="Bold" />
+            <Setter Property="HeightRequest" Value="48" />
+        </Style>
+        <Style TargetType="Entry">
+            <Setter Property="HeightRequest" Value="48" />
+            <Setter Property="BackgroundColor" Value="White" />
+            <Setter Property="TextColor" Value="#172B3A" />
+        </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

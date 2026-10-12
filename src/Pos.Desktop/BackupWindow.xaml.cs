@@ -164,6 +164,13 @@ public partial class BackupWindow : Window
         }
     }
 
+    private async void OnGoogleDriveClick(object sender, RoutedEventArgs e)
+    {
+        var window = new GoogleDriveBackupWindow { Owner = this };
+        window.ShowDialog();
+        if (window.DownloadedBackup && InstallationRoleContext.IsServer) await LoadAsync();
+    }
+
     private async void OnRestoreClick(object sender, RoutedEventArgs e)
     {
         if (!EnsureServer()) return;

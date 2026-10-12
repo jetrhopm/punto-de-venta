@@ -2,6 +2,12 @@
 
 JetVenta usa activación local firmada. El programa muestra un código de solicitud en `Configuración > Licencia`; el emisor autorizado lo pega en `JetVenta.LicenseIssuer.exe` y genera el archivo `licencia.jv`. La tienda carga ese archivo desde la misma pantalla.
 
+## Modalidades
+
+El emisor permite crear licencias **JetVenta Desktop** y **JetVenta Desktop + Móvil**. La modalidad queda incluida en el contenido firmado: no puede cambiarse editando el archivo. Desktop habilita el programa de Windows; Desktop + Móvil habilita además el emparejamiento y las funciones móviles, sin límite de teléfonos emparejados para la tienda. La API local valida esta modalidad antes de atender cualquier endpoint móvil.
+
+La demostración de 30 días incluye todas las funciones, incluida JetVenta Móvil. Las licencias emitidas con el protocolo anterior (versión 1) siguen siendo válidas como Desktop. Para ampliar una compra Desktop a Móvil se genera un nuevo archivo firmado para el mismo equipo, seleccionando Desktop + Móvil, y se importa desde Configuración > Licencia.
+
 ## Periodo de prueba
 
 Las instalaciones sin `licencia.jv` comienzan automáticamente en modo de prueba y pueden operar con normalidad durante **30 días**. El inicio, la última hora observada y la huella del equipo se guardan cifrados localmente para impedir que cerrar el programa o retroceder el reloj reinicie el periodo.

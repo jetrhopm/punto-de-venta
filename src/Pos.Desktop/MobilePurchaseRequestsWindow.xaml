@@ -1,0 +1,61 @@
+<Window x:Class="Pos.Desktop.MobilePurchaseRequestsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
+        Title="Solicitudes de compra móvil" Width="1040" Height="680" MinWidth="850" MinHeight="540"
+        WindowStartupLocation="CenterOwner" Background="{StaticResource AppBackgroundBrush}">
+    <Grid Margin="20">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <DockPanel Margin="0,0,0,14">
+            <Button DockPanel.Dock="Right" Padding="12,7" Click="OnRefreshClick" ToolTip="Actualizar solicitudes">
+                <StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="Refresh" Width="17" Height="17" Margin="0,0,6,0"/><TextBlock Text="Actualizar"/></StackPanel>
+            </Button>
+            <StackPanel>
+                <TextBlock Text="Solicitudes de compra" FontSize="23" FontWeight="Bold" Foreground="#17324D"/>
+                <TextBlock Text="Las solicitudes móviles no modifican existencias ni caja hasta que confirmes la recepción." Foreground="#637589" Margin="0,3,0,0"/>
+            </StackPanel>
+        </DockPanel>
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="1.05*"/><ColumnDefinition Width="1.3*"/></Grid.ColumnDefinitions>
+            <DataGrid x:Name="RequestsGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" SelectionChanged="OnSelectionChanged" Margin="0,0,10,0">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Fecha" Binding="{Binding CreatedAtUtc, StringFormat={}{0:dd/MM HH:mm}}" Width="105"/>
+                    <DataGridTextColumn Header="Proveedor" Binding="{Binding Supplier}" Width="*"/>
+                    <DataGridTextColumn Header="Total" Binding="{Binding Total, StringFormat=C2}" Width="100"/>
+                </DataGrid.Columns>
+            </DataGrid>
+            <Border Grid.Column="1" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="6" Padding="16">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <StackPanel x:Name="DetailHeader">
+                        <TextBlock x:Name="RequestTitle" Text="Selecciona una solicitud" FontSize="18" FontWeight="SemiBold" Foreground="#17324D"/>
+                        <TextBlock x:Name="RequestMeta" Foreground="#637589" TextWrapping="Wrap" Margin="0,4,0,10"/>
+                    </StackPanel>
+                    <DataGrid Grid.Row="1" x:Name="LinesGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Código" Binding="{Binding Code}" Width="100"/>
+                            <DataGridTextColumn Header="Producto" Binding="{Binding Description}" Width="*"/>
+                            <DataGridTextColumn Header="Piezas" Binding="{Binding Quantity}" Width="70"/>
+                            <DataGridTextColumn Header="Costo" Binding="{Binding UnitCost, StringFormat=C2}" Width="90"/>
+                            <DataGridTextColumn Header="Importe" Binding="{Binding LineTotal, StringFormat=C2}" Width="95"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <StackPanel Grid.Row="2" Margin="0,10,0,0">
+                        <TextBlock x:Name="ProposalText" Foreground="#526577" TextWrapping="Wrap"/>
+                        <TextBox x:Name="RejectReasonBox" Margin="0,8,0,0" Height="36" MaxLength="300" Padding="8,5" ToolTip="Motivo opcional para informar al usuario móvil"/>
+                    </StackPanel>
+                    <DockPanel Grid.Row="3" LastChildFill="False" Margin="0,12,0,0">
+                        <TextBlock x:Name="StatusText" DockPanel.Dock="Left" VerticalAlignment="Center" Foreground="#637589" TextWrapping="Wrap" Width="210"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button x:Name="RejectButton" Style="{StaticResource CancelButtonStyle}" Padding="12,8" Margin="0,0,8,0" Click="OnRejectClick" IsEnabled="False">Rechazar</Button>
+                            <Button x:Name="ReviewButton" Style="{StaticResource ConfirmButtonStyle}" Padding="14,8" Click="OnReviewClick" IsEnabled="False">
+                                <StackPanel Orientation="Horizontal"><icons:PackIconMaterial Kind="PackageDown" Width="17" Height="17" Margin="0,0,6,0"/><TextBlock Text="Usar en recepción"/></StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </DockPanel>
+                </Grid>
+            </Border>
+        </Grid>
+        <TextBlock Grid.Row="2" Text="Rechazar conserva la solicitud en el historial como rechazada. Usar en recepción carga los artículos para revisar precios y pago." Foreground="#637589" TextWrapping="Wrap" Margin="0,12,0,0"/>
+    </Grid>
+</Window>

@@ -65,7 +65,14 @@ public partial class MercadoPagoSettingsWindow : Window
             if (!_settings.OAuthAvailable) StatusText.Text = "La conexión con Mercado Pago no está disponible en este servidor. Contacta a soporte de JetVenta.";
             UpdateActiveState();
         }
-        catch (Exception exception) { StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo consultar Mercado Pago"); }
+        catch (Exception exception)
+        {
+            // Sin datos de la conexión no se sabe si la cuenta está conectada: no se deja conectar a ciegas.
+            ConnectionTitle.Text = "No se pudo revisar la conexión";
+            ConnectionMessage.Text = "Cierra esta ventana y vuelve a abrirla. Si sigue igual, reinicia JetVenta en la caja principal.";
+            AuthorizeButton.IsEnabled = false;
+            StatusText.Text = ConnectionHelp.FromException(exception, "No se pudo consultar Mercado Pago");
+        }
     }
 
     // ---------- Paso 1: cuenta ----------

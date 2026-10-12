@@ -15,7 +15,12 @@ public sealed record JetVentaLicenseClaims(
     string MachineFingerprint,
     DateTimeOffset IssuedAtUtc,
     DateTimeOffset? ExpiresAtUtc,
-    string StoreName);
+    string StoreName,
+    bool IncludesMobile = false)
+{
+    [JsonIgnore]
+    public bool HasMobileEntitlement => Version >= JetVentaLicensing.ProtocolVersion && IncludesMobile;
+}
 
 public sealed record JetVentaSignedLicense(JetVentaLicenseClaims License, string Signature);
 
@@ -25,7 +30,8 @@ public sealed record JetVentaSignedLicense(JetVentaLicenseClaims License, string
 public static class JetVentaLicensing
 {
     public const string Product = "JetVenta";
-    public const int ProtocolVersion = 1;
+    public const int LegacyProtocolVersion = 1;
+    public const int ProtocolVersion = 2;
 
     // ECDSA P-256 public key. The matching private key exists only in the local issuer vault.
     public const string IssuerPublicKeyBase64 = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE1VgsdG8RqdNWHvlZHHyt/D2t3OPICXgrqotG1hgiBG5x5RkFsV9SxZDxtOewysmgSyWh9Z2HFNaOK7t08A03sA==";
@@ -52,7 +58,7 @@ public static class JetVentaLicensing
         {
             var json = Encoding.UTF8.GetString(Convert.FromBase64String(requestCode.Trim()));
             request = JsonSerializer.Deserialize<JetVentaLicenseRequest>(json, JsonOptions);
-            if (request is null || request.Version != ProtocolVersion || !string.Equals(request.Product, Product, StringComparison.Ordinal) || string.IsNullOrWhiteSpace(request.MachineFingerprint))
+            if (request is null || !IsSupportedVersion(request.Version) || !string.Equals(request.Product, Product, StringComparison.Ordinal) || string.IsNullOrWhiteSpace(request.MachineFingerprint))
             {
                 error = "El código de solicitud no corresponde a JetVenta.";
                 request = null;
@@ -119,7 +125,8 @@ public static class JetVentaLicensing
     {
         var expiration = claims.ExpiresAtUtc?.UtcDateTime.ToString("O", CultureInfo.InvariantCulture) ?? string.Empty;
         var store = Convert.ToBase64String(Encoding.UTF8.GetBytes(claims.StoreName ?? string.Empty));
-        var payload = string.Join("\n",
+        var fields = new List<string>
+        {
             "JetVenta-Licencia",
             claims.Version.ToString(CultureInfo.InvariantCulture),
             claims.Product,
@@ -127,14 +134,18 @@ public static class JetVentaLicensing
             claims.MachineFingerprint,
             claims.IssuedAtUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
             expiration,
-            store);
+            store
+        };
+        if (claims.Version >= ProtocolVersion) fields.Add(claims.IncludesMobile ? "1" : "0");
+        var payload = string.Join("\n", fields);
         return Encoding.UTF8.GetBytes(payload);
     }
 
     private static bool IsValidClaims(JetVentaLicenseClaims claims, out string error)
     {
         error = string.Empty;
-        if (claims.Version != ProtocolVersion || !string.Equals(claims.Product, Product, StringComparison.Ordinal)) { error = "La licencia no corresponde a esta versión de JetVenta."; return false; }
+        if (!IsSupportedVersion(claims.Version) || !string.Equals(claims.Product, Product, StringComparison.Ordinal)) { error = "La licencia no corresponde a esta versión de JetVenta."; return false; }
+        if (claims.Version == LegacyProtocolVersion && claims.IncludesMobile) { error = "La modalidad de esta licencia no tiene una firma válida."; return false; }
         if (!Guid.TryParse(claims.LicenseId, out _)) { error = "La licencia no tiene un identificador válido."; return false; }
         if (!IsValidMachineFingerprint(claims.MachineFingerprint)) { error = "La licencia no contiene un identificador de equipo válido."; return false; }
         if (claims.IssuedAtUtc == default) { error = "La licencia no contiene una fecha de emisión válida."; return false; }
@@ -158,4 +169,6 @@ public static class JetVentaLicensing
         fingerprint is { Length: 28 } &&
         fingerprint.StartsWith("JV1-", StringComparison.Ordinal) &&
         fingerprint.AsSpan(4).IndexOfAnyExcept("0123456789ABCDEF") < 0;
+
+    private static bool IsSupportedVersion(int version) => version is LegacyProtocolVersion or ProtocolVersion;
 }

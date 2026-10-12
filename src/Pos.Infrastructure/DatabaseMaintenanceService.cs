@@ -31,6 +31,11 @@ public sealed class DatabaseMaintenanceService(PosDbContext database)
         return await CreateCoreAsync(cancellationToken);
     }
 
+    // Respaldo para Google Drive: mismo formato y verificación que los manuales.
+    public Task<BackupResult> CreateForCloudAsync(CancellationToken cancellationToken) => CreateCoreAsync(cancellationToken);
+
+    internal static string BackupDirectoryPath => BackupDirectory();
+
     public async Task<bool> EnsureDailyAutomaticBackupAsync(CancellationToken cancellationToken)
     {
         if (!await database.Stores.AsNoTracking().AnyAsync(cancellationToken)) return false;

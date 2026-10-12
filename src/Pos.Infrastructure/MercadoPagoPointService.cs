@@ -151,7 +151,7 @@ public sealed class MercadoPagoPointService(PosDbContext database, MercadoPagoPo
     {
         var register = await CurrentRegisterAsync(token, configure: true, cancellationToken);
         if (register is null) return null;
-        if (!broker.IsConfigured) throw new InvalidOperationException("Falta configurar la dirección del intermediario de JetVenta (MercadoPago:BrokerUrl).");
+        if (!broker.IsConfigured) throw new InvalidOperationException("La conexión con Mercado Pago no está configurada en la caja principal. Actualiza o reinstala JetVenta en la caja principal y vuelve a intentarlo.");
         var store = await database.Stores.SingleAsync(item => item.Id == register.StoreId, cancellationToken);
         var installation = await EnsureBrokerInstallationAsync(store, cancellationToken);
         BrokerOAuthStart started;

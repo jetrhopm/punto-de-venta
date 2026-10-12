@@ -15,6 +15,14 @@ public sealed record PurchaseSupplier(Guid? Id, string Name, string? Phone, stri
 }
 
 public sealed record PurchasePricingDefaults(decimal DefaultProfitPercent, bool AutoPriceWithProfit);
+public sealed record MobilePurchaseRequestQueueItem(Guid Id, string Supplier, string CreatedBy, string DeviceName, decimal Total, int LineCount, DateTimeOffset CreatedAtUtc, bool ProposedPayFromCashRegister, decimal? ProposedCashWithdrawn)
+{
+    public string Summary => $"{CreatedAtUtc.ToLocalTime():g} · {CreatedBy} · {DeviceName} · {LineCount} producto(s) · {Total:C2}";
+}
+public sealed record MobilePurchaseRequestLineReview(Guid ProductId, string Code, string Description, string UnitOfMeasure, decimal Quantity, decimal UnitCost, decimal LineTotal, decimal Price, decimal Cost, decimal Stock, decimal ProfitPercent);
+public sealed record MobilePurchaseRequestReview(Guid Id, Guid OperationId, Guid? SupplierId, string Supplier, string CreatedBy, string DeviceName, decimal Total, DateTimeOffset CreatedAtUtc, bool ProposedPayFromCashRegister, decimal? ProposedCashWithdrawn, IReadOnlyList<MobilePurchaseRequestLineReview> Lines);
+public sealed record MobilePurchaseApprovalResult(Guid RequestId, PurchaseReceiveApiResult Purchase);
+public sealed record PurchaseReceiveApiResult(Guid PurchaseId, Guid OperationId, decimal Total, bool Existing, bool PaidFromCashRegister, decimal? CashWithdrawn);
 
 /// <summary>Partida de la lista de recepción. Piezas y precio del proveedor se editan en la lista.</summary>
 public sealed class PurchaseReceiptLine : INotifyPropertyChanged

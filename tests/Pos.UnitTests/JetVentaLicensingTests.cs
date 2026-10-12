@@ -16,6 +16,57 @@ public sealed class JetVentaLicensingTests
         Assert.NotNull(request);
         Assert.Equal("JV1-0123456789ABCDEF01234567", request!.MachineFingerprint);
         Assert.Equal(JetVentaLicensing.Product, request.Product);
+        Assert.Equal(JetVentaLicensing.ProtocolVersion, request.Version);
+    }
+
+    [Fact]
+    public void Legacy_request_codes_remain_accepted_by_the_issuer()
+    {
+        const string legacyJson = "{\"version\":1,\"product\":\"JetVenta\",\"machineFingerprint\":\"JV1-0123456789ABCDEF01234567\"}";
+        var code = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(legacyJson));
+
+        var valid = JetVentaLicensing.TryReadRequestCode(code, out var request, out var error);
+
+        Assert.True(valid, error);
+        Assert.Equal(JetVentaLicensing.LegacyProtocolVersion, request!.Version);
+    }
+
+    [Fact]
+    public void Legacy_license_signature_payload_is_unchanged()
+    {
+        var claims = new JetVentaLicenseClaims(
+            JetVentaLicensing.LegacyProtocolVersion,
+            JetVentaLicensing.Product,
+            "00000000-0000-0000-0000-000000000001",
+            "JV1-0123456789ABCDEF01234567",
+            new DateTimeOffset(2026, 9, 5, 12, 0, 0, TimeSpan.Zero),
+            null,
+            "Tienda");
+        var expected = string.Join("\n", "JetVenta-Licencia", "1", "JetVenta", claims.LicenseId, claims.MachineFingerprint,
+            "2026-09-05T12:00:00.0000000Z", "", "VGllbmRh");
+
+        Assert.Equal(expected, System.Text.Encoding.UTF8.GetString(JetVentaLicensing.CanonicalPayload(claims)));
+        Assert.False(claims.HasMobileEntitlement);
+    }
+
+    [Fact]
+    public void Mobile_entitlement_is_part_of_the_version_two_signature_payload()
+    {
+        var claims = new JetVentaLicenseClaims(
+            JetVentaLicensing.ProtocolVersion,
+            JetVentaLicensing.Product,
+            "00000000-0000-0000-0000-000000000001",
+            "JV1-0123456789ABCDEF01234567",
+            new DateTimeOffset(2026, 9, 5, 12, 0, 0, TimeSpan.Zero),
+            null,
+            "Tienda",
+            IncludesMobile: true);
+
+        var payload = System.Text.Encoding.UTF8.GetString(JetVentaLicensing.CanonicalPayload(claims));
+
+        Assert.EndsWith("\n1", payload);
+        Assert.True(claims.HasMobileEntitlement);
+        Assert.False((claims with { IncludesMobile = false }).HasMobileEntitlement);
     }
 
     [Fact]

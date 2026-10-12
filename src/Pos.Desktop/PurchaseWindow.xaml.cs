@@ -25,6 +25,7 @@ public partial class PurchaseWindow : UserControl
     private bool _apiSupportsReception = true;
     // Se conserva hasta que la API confirma, para que un reintento no duplique la compra.
     private Guid _operationId = Guid.NewGuid();
+    private MobilePurchaseRequestReview? _mobileRequest;
     private bool _submitting;
 
     public PurchaseWindow()
@@ -287,6 +288,7 @@ public partial class PurchaseWindow : UserControl
         var answer = MessageBox.Show($"¿Vaciar la lista de {_lines.Count} producto(s)? No se registrará nada.", "Vaciar lista", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (answer != MessageBoxResult.Yes) return;
         _lines.Clear();
+        _mobileRequest = null;
         _operationId = Guid.NewGuid();
         ShowMessage("Lista vacía. Escanea el primer producto.", MessageKind.Info);
         FocusSearch();
@@ -340,7 +342,8 @@ public partial class PurchaseWindow : UserControl
         var total = _lines.Sum(item => item.LineTotal);
         var pieces = _lines.Sum(item => item.Quantity ?? 0m);
         List<PurchaseSupplier> suppliers = (SupplierComboBox.ItemsSource as IEnumerable<PurchaseSupplier>)?.ToList() ?? [PurchaseSupplier.None];
-        var payment = new PurchasePaymentWindow(suppliers, SupplierComboBox.SelectedItem as PurchaseSupplier ?? PurchaseSupplier.None, total, _lines.Count, pieces) { Owner = owner };
+        var payment = new PurchasePaymentWindow(suppliers, SupplierComboBox.SelectedItem as PurchaseSupplier ?? PurchaseSupplier.None, total, _lines.Count, pieces,
+            _mobileRequest?.ProposedPayFromCashRegister ?? true, _mobileRequest?.ProposedCashWithdrawn) { Owner = owner };
         if (payment.ShowDialog() != true) { ShowMessage("Recepción pendiente: no se registró nada.", MessageKind.Info); return; }
         // El proveedor pudo elegirse en la ventana de pago.
         var supplier = payment.SelectedSupplier;
@@ -356,15 +359,24 @@ public partial class PurchaseWindow : UserControl
         ConfirmButton.IsEnabled = false;
         try
         {
-            using var response = await Client.PostAsJsonAsync("/api/purchases/receive", new
-            {
-                operationId = _operationId,
-                supplierId = supplier.Id,
-                payFromCashRegister = payment.PayFromCashRegister,
-                cashWithdrawn = payment.CashWithdrawn,
-                notes = payment.Notes,
-                lines
-            });
+            using var response = _mobileRequest is null
+                ? await Client.PostAsJsonAsync("/api/purchases/receive", new
+                {
+                    operationId = _operationId,
+                    supplierId = supplier.Id,
+                    payFromCashRegister = payment.PayFromCashRegister,
+                    cashWithdrawn = payment.CashWithdrawn,
+                    notes = payment.Notes,
+                    lines
+                })
+                : await Client.PostAsJsonAsync($"/api/purchases/mobile-requests/{_mobileRequest.Id}/approve", new
+                {
+                    supplierId = supplier.Id,
+                    payFromCashRegister = payment.PayFromCashRegister,
+                    cashWithdrawn = payment.CashWithdrawn,
+                    notes = payment.Notes,
+                    lines
+                });
             if (!response.IsSuccessStatusCode)
             {
                 var error = await PurchasePricing.ReadErrorAsync(response);
@@ -372,13 +384,16 @@ public partial class PurchaseWindow : UserControl
                 new OperationResultWindow("No se registró la compra", error, OperationResultKind.Error) { Owner = owner }.ShowDialog();
                 return;
             }
-            var result = await response.Content.ReadFromJsonAsync<ReceiveResult>();
+            var result = _mobileRequest is null
+                ? await response.Content.ReadFromJsonAsync<PurchaseReceiveApiResult>()
+                : (await response.Content.ReadFromJsonAsync<MobilePurchaseApprovalResult>())?.Purchase;
             var culture = CultureInfo.CurrentCulture;
             var cashMessage = result?.PaidFromCashRegister == true && result.CashWithdrawn is decimal withdrawn
                 ? string.Create(culture, $" Salieron {withdrawn:C2} de caja; se restarán del efectivo esperado en el corte.")
                 : payment.PayFromCashRegister ? " No se registró salida de efectivo (retiro de $0)." : " No salió dinero de caja.";
             var summary = string.Create(culture, $"Se recibieron {_lines.Count} producto(s), {pieces:0.###} pieza(s), por {(result?.Total ?? total):C2} de {supplier.Name}.{cashMessage}");
             _lines.Clear();
+            _mobileRequest = null;
             _operationId = Guid.NewGuid();
             ShowMessage(summary, MessageKind.Success);
             new OperationResultWindow(result?.Existing == true ? "Compra ya registrada" : "Compra registrada", summary, OperationResultKind.Success) { Owner = owner }.ShowDialog();
@@ -398,6 +413,32 @@ public partial class PurchaseWindow : UserControl
     private void OnPlanningClick(object sender, RoutedEventArgs e) => new PurchasePlanningWindow { Owner = Window.GetWindow(this) }.ShowDialog();
 
     private void OnHistoryClick(object sender, RoutedEventArgs e) => new PurchaseHistoryWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+
+    private async void OnMobileRequestsClick(object sender, RoutedEventArgs e)
+    {
+        var window = new MobilePurchaseRequestsWindow { Owner = Window.GetWindow(this) };
+        if (window.ShowDialog() != true || window.SelectedRequest is not MobilePurchaseRequestReview request) return;
+        if (_lines.Count > 0 && MessageBox.Show("La lista actual se reemplazará por la solicitud móvil. Aún no se ha registrado.",
+                "Cargar solicitud", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK) return;
+
+        _lines.Clear();
+        _mobileRequest = request;
+        _operationId = request.OperationId;
+        await LoadSuppliersAsync(request.SupplierId);
+        foreach (var item in request.Lines)
+        {
+            var product = new PurchaseProduct(item.ProductId, item.Code, item.Description, item.Price, item.Cost, item.Stock, item.UnitOfMeasure, item.ProfitPercent);
+            var line = new PurchaseReceiptLine(product)
+            {
+                QuantityText = item.Quantity.ToString("0.###", CultureInfo.CurrentCulture),
+                UnitCostText = item.UnitCost.ToString("0.00", CultureInfo.CurrentCulture)
+            };
+            line.Changed += (_, _) => UpdateTotals();
+            _lines.Add(line);
+        }
+        ShowMessage($"Solicitud de {request.CreatedBy} en {request.DeviceName} cargada. Revisa las piezas y continúa con precios y pago.", MessageKind.Info);
+        UpdateTotals();
+    }
 
     // ---------- Utilidades ----------
 
@@ -429,8 +470,6 @@ public partial class PurchaseWindow : UserControl
             if (current is T match) return match;
         return null;
     }
-
-    private sealed record ReceiveResult(Guid PurchaseId, Guid OperationId, decimal Total, bool Existing, bool PaidFromCashRegister, decimal? CashWithdrawn);
 
     private sealed record ResultRow(PurchaseProduct Product)
     {

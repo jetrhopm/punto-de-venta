@@ -114,6 +114,7 @@ public partial class MainWindow : Window
                 await LoadSalePricingOptionsAsync();
                 await EnsureShiftOpenAfterLoginAsync();
                 await ShowPointRecoveryIfNeededAsync();
+                _ = GoogleDriveBackupHooks.NotifyStartupAsync(message => Dispatcher.Invoke(() => StatusText.Text = message));
                 FocusProductInput();
             }
             else
@@ -221,7 +222,24 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key is Key.D1 or Key.NumPad1)
+        if (key == Key.Tab && CanAdjustSelectedCartLine())
+        {
+            e.Handled = true;
+            await EditSelectedProductAsync();
+            return;
+        }
+
+        if (IsBulkQuantityEditorKey(key) && CanAdjustSelectedCartLine() && CartList.SelectedItem is CartLineView bulkLine && IsBulkUnit(bulkLine.UnitOfMeasure))
+        {
+            e.Handled = true;
+            await EditSelectedCartLineAsync();
+        }
+        else if (TryGetCartQuantityDelta(key, out var quantityDelta) && CanAdjustSelectedCartLine())
+        {
+            e.Handled = true;
+            await AdjustSelectedCartQuantityAsync(quantityDelta);
+        }
+        else if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key is Key.D1 or Key.NumPad1)
         {
             OnDiscardTicketClick(sender, e);
             e.Handled = true;
@@ -328,7 +346,7 @@ public partial class MainWindow : Window
         CartList.ScrollIntoView(CartList.SelectedItem);
         if (CartList.SelectedItem is CartLineView line)
         {
-            StatusText.Text = $"Partida {next + 1} de {count}: {line.Description}. Supr: eliminar · Enter: editar cantidad.";
+            StatusText.Text = $"Partida {next + 1} de {count}: {line.Description}. +/−: ajustar cantidad · Supr: eliminar · Enter: editar.";
         }
 
         if (!ReferenceEquals(Keyboard.FocusedElement, ProductSearchTextBox)) FocusProductInput();
@@ -1329,6 +1347,62 @@ public partial class MainWindow : Window
         }
     }
 
+    private static bool TryGetCartQuantityDelta(Key key, out decimal delta)
+    {
+        delta = 0m;
+        if (Keyboard.Modifiers == ModifierKeys.None && key is Key.Add or Key.Subtract)
+        {
+            delta = key == Key.Add ? 1m : -1m;
+            return true;
+        }
+
+        if (key == Key.OemPlus && Keyboard.Modifiers == ModifierKeys.Shift)
+        {
+            delta = 1m;
+            return true;
+        }
+
+        if (key == Key.OemMinus && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            delta = -1m;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsBulkQuantityEditorKey(Key key) =>
+        Keyboard.Modifiers == ModifierKeys.None && key == Key.Multiply ||
+        Keyboard.Modifiers == ModifierKeys.Shift && key == Key.D8;
+
+    private bool CanAdjustSelectedCartLine()
+    {
+        if (SalesWorkspace.Visibility != Visibility.Visible || CartList.SelectedItem is not CartLineView) return false;
+        if (ProductResultsList.Visibility == Visibility.Visible && ProductResultsList.Items.Count > 0) return false;
+        if (Keyboard.FocusedElement is TextBox textBox && !ReferenceEquals(textBox, ProductSearchTextBox)) return false;
+        if (Keyboard.FocusedElement is System.Windows.Controls.Primitives.Selector selector && !ReferenceEquals(selector, CartList)) return false;
+        return true;
+    }
+
+    private async Task AdjustSelectedCartQuantityAsync(decimal delta)
+    {
+        if (CartList.SelectedItem is not CartLineView line || _activeTicket is null) return;
+
+        var quantity = line.Quantity + delta;
+        if (quantity < 1m)
+        {
+            StatusText.Text = "La cantidad mínima es 1. Usa Supr para retirar el artículo de la venta.";
+            return;
+        }
+
+        line.Quantity = quantity;
+        await ApplyPromotionQuoteAsync(line);
+        CartList.Items.Refresh();
+        UpdateSaleSummary();
+        QueueActiveTicketSave();
+        StatusText.Text = $"Cantidad actualizada: {line.Description} · {line.Quantity:0.###}.";
+    }
+
     private async void OnCartDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e) =>
         await EditSelectedCartLineAsync();
 
@@ -1344,6 +1418,43 @@ public partial class MainWindow : Window
         QueueActiveTicketSave();
         StatusText.Text = "Cantidad actualizada en el ticket.";
         FocusProductInput();
+    }
+
+    private async Task EditSelectedProductAsync()
+    {
+        if (CartList.SelectedItem is not CartLineView line || _activeTicket is null || !_activeTicket.Lines.Contains(line)) return;
+
+        await using var editAuthorization = await PermissionAuthorization.RequestAsync(this, "ManageProducts", "Editar el producto requiere autorización.");
+        if (editAuthorization is null) return;
+
+        try
+        {
+            var context = await Client.GetFromJsonAsync<ProductEditContextResponse>($"/api/products/{line.ProductId}/edit-context");
+            if (context is null)
+            {
+                new OperationResultWindow("Producto no disponible", "No se encontró el producto en el catálogo. Actualiza la lista e inténtalo de nuevo.", OperationResultKind.Warning) { Owner = this }.ShowDialog();
+                return;
+            }
+
+            var product = context.Product;
+            var model = new ProductEditorWindow.ProductEditModel(product.Id, product.Code, product.Description, product.DepartmentId, product.UnitOfMeasure, product.Cost, product.Price, product.ProfitPercent, product.WholesalePrice, product.WholesaleProfitPercent, product.WholesaleMinimumQuantity, product.Stock, product.MinimumStock, product.MaximumStock, product.IsKit);
+            var editor = new ProductEditorWindow(model, context.Departments.Select(item => new ProductEditorWindow.DepartmentOption(item.Id, item.Name)).ToArray(), "Kilogramo", false, 0m) { Owner = this };
+            if (editor.ShowDialog() != true || editor.SavedProduct is not { } saved) return;
+
+            line.ApplyProductUpdate(saved);
+            if (!line.CanUseManualWholesale) line.IsManualWholesale = false;
+            await ApplyPromotionQuoteAsync(line);
+            await _activeTicket.ClearManualWholesaleAuthorizationIfUnusedAsync();
+            CartList.Items.Refresh();
+            UpdateSaleSummary();
+            QueueActiveTicketSave();
+            StatusText.Text = $"Producto actualizado en catálogo y venta: {line.Description}.";
+        }
+        catch (Exception exception)
+        {
+            var message = ConnectionHelp.FromException(exception, "No se pudo abrir el editor del producto.");
+            new OperationResultWindow("No se pudo editar el producto", message, OperationResultKind.Error) { Owner = this }.ShowDialog();
+        }
     }
 
     private void DeleteSelectedCartLine()
@@ -1434,13 +1545,26 @@ public partial class MainWindow : Window
 
     private sealed class CartLineView(Guid productId, string code, string description, decimal unitPrice, decimal stock, decimal quantity, string unitOfMeasure = "Pieza", decimal wholesalePrice = 0m, decimal wholesaleMinimumQuantity = 0m)
     {
-        public Guid ProductId { get; } = productId; public string Code { get; } = code; public string Description { get; } = description; public string UnitOfMeasure { get; } = unitOfMeasure; public decimal RetailUnitPrice { get; } = unitPrice; public decimal WholesalePrice { get; } = wholesalePrice; public decimal WholesaleMinimumQuantity { get; } = wholesaleMinimumQuantity;
+        public Guid ProductId { get; } = productId; public string Code { get; private set; } = code; public string Description { get; private set; } = description; public string UnitOfMeasure { get; private set; } = unitOfMeasure; public decimal RetailUnitPrice { get; private set; } = unitPrice; public decimal WholesalePrice { get; private set; } = wholesalePrice; public decimal WholesaleMinimumQuantity { get; private set; } = wholesaleMinimumQuantity;
         public bool CanUseManualWholesale => WholesalePrice > 0m;
         public bool IsManualWholesale { get; set; }
         public bool UsesWholesalePrice => IsManualWholesale || WholesalePrice > 0m && WholesaleMinimumQuantity > 0m && Quantity >= WholesaleMinimumQuantity;
         public string PricingModeText => IsManualWholesale ? "Mayoreo manual" : UsesWholesalePrice ? "Mayoreo por cantidad" : "Menudeo";
         public Brush PricingModeBrush => new SolidColorBrush((Color)ColorConverter.ConvertFromString(IsManualWholesale ? "#A96300" : UsesWholesalePrice ? "#1D7651" : "#637589"));
-        public decimal BaseUnitPrice => UsesWholesalePrice ? WholesalePrice : RetailUnitPrice; public decimal UnitPrice { get; set; } = unitPrice; public decimal Stock { get; } = stock; public decimal Quantity { get; set; } = quantity; public decimal DiscountTotal { get; set; } public decimal? PromotionalTotal { get; set; } public decimal Total => PromotionalTotal ?? decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Code} | {Description} x {Quantity:0.###} · {PricingModeText} = ${Total:0.00}";
+        public decimal BaseUnitPrice => UsesWholesalePrice ? WholesalePrice : RetailUnitPrice; public decimal UnitPrice { get; set; } = unitPrice; public decimal Stock { get; private set; } = stock; public decimal Quantity { get; set; } = quantity; public decimal DiscountTotal { get; set; } public decimal? PromotionalTotal { get; set; } public decimal Total => PromotionalTotal ?? decimal.Round(UnitPrice * Quantity, 2); public string DisplayText => $"{Code} | {Description} x {Quantity:0.###} · {PricingModeText} = ${Total:0.00}";
+        public void ApplyProductUpdate(ProductEditorWindow.ProductEditModel product)
+        {
+            Code = product.Code;
+            Description = product.Description;
+            UnitOfMeasure = product.UnitOfMeasure;
+            RetailUnitPrice = product.Price;
+            WholesalePrice = product.WholesalePrice;
+            WholesaleMinimumQuantity = product.WholesaleMinimumQuantity;
+            Stock = product.Stock;
+            UnitPrice = UsesWholesalePrice ? WholesalePrice : RetailUnitPrice;
+            PromotionalTotal = null;
+            DiscountTotal = 0m;
+        }
     }
 
     private sealed class TicketTabView(Guid id, Guid operationId, int ticketNumber, IEnumerable<CartLineView>? lines = null)
@@ -1475,6 +1599,9 @@ public partial class MainWindow : Window
     private sealed record SaleResponse(Guid SaleId, decimal Total, decimal Change, bool Existing, bool InventoryAttentionRequired = false);
     private sealed record LicenseStatusResponse(bool IsActive, string State, string Message);
     private sealed record StoreOptionsResponse(bool InventoryEnabled, bool BlockSalesWithoutStock, string InventoryCostMethod, bool CreditSalesEnabled, bool CommonProductsEnabled, bool AutoPriceWithProfit, decimal DefaultProfitPercent, bool RoundSaleAmounts, string RoundingMode, string OccasionalNotice, int OccasionalNoticeEverySales);
+    private sealed record CatalogProductResponse(Guid Id, string Code, string Description, string Department, Guid? DepartmentId, decimal Cost, decimal Price, decimal ProfitPercent, decimal ProfitAmount, decimal WholesalePrice, decimal WholesaleProfitPercent, decimal WholesaleProfitAmount, decimal WholesaleMinimumQuantity, decimal Stock, decimal MinimumStock, decimal MaximumStock, string UnitOfMeasure, bool IsKit, bool IsActive);
+    private sealed record DepartmentOptionResponse(Guid Id, string Name, bool IsActive);
+    private sealed record ProductEditContextResponse(CatalogProductResponse Product, List<DepartmentOptionResponse> Departments);
     private sealed record ShiftSummaryResponse(Guid ShiftId, decimal ExpectedCash, decimal CountedCash, decimal Difference, DateTimeOffset? ClosedAtUtc);
     private sealed record CutSettingsResponse(bool RequireCashCountOnClose, bool AutoAdjustCashDifference, bool CashLimitEnabled, bool BlockSalesWhenCashLimitReached, decimal CashLimit, string CashLimitMessage);
     private sealed record CashCutResponse(decimal InitialCash, decimal TotalSales, int SalesCount, decimal CashSales, decimal CardSales, decimal TransferSales, decimal CreditSales, decimal CashIn, decimal CashOut, decimal CashReturns, decimal Profit, decimal ExpectedCash);
@@ -2009,6 +2136,8 @@ public partial class MainWindow : Window
                     }
                 }
             }
+            // Respaldo en Google Drive al cerrar correctamente (sólo caja principal y si está conectado).
+            await GoogleDriveBackupHooks.RunOnExitAsync(this);
             await EndSessionAsync();
             CompleteExit();
         }

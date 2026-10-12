@@ -13,6 +13,7 @@ public partial class ConfigurationWindow : UserControl
             BackupButton.Visibility = Visibility.Collapsed;
             RegistersButton.Visibility = Visibility.Collapsed;
             ConnectRegisterButton.Visibility = Visibility.Collapsed;
+            MobileButton.Visibility = Visibility.Collapsed;
             FacturamaButton.Visibility = Visibility.Collapsed;
             StatusText.Text = "Caja adicional: los respaldos, PostgreSQL y administración de cajas se realizan desde el servidor.";
         }
@@ -30,6 +31,7 @@ public partial class ConfigurationWindow : UserControl
     private async void OnUsersClick(object sender, RoutedEventArgs e) => await OpenAsync("ManageUsers", "Administrar cajeros y permisos", () => new UserAdministrationWindow(), ConfigurationScope.AllRegisters);
     private async void OnRegistersClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Administrar cajas y equipos", () => new RegisterAdministrationWindow(), ConfigurationScope.ServerOnly);
     private async void OnConnectRegisterClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Conectar una caja adicional", () => new PairingCodeWindow(), ConfigurationScope.ServerOnly);
+    private async void OnMobileClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Conectar JetVenta Móvil", () => new MobilePairingWindow(), ConfigurationScope.ServerOnly);
     private async void OnPrinterClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigurePrinters", "Configurar impresoras", () => new PrinterSettingsWindow(), ConfigurationScope.CurrentRegister);
     private async void OnScannerClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar lector de códigos", () => new BarcodeScannerSettingsWindow(), ConfigurationScope.CurrentRegister);
     private async void OnTicketClick(object sender, RoutedEventArgs e) => await OpenAsync("ConfigureStore", "Configurar tickets", () => new TicketSettingsWindow(), ConfigurationScope.StoreAndCurrentRegister);

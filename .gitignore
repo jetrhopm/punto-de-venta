@@ -25,6 +25,9 @@ publish/
 *.db
 *.db-shm
 *.db-wal
+*.dump
+*.dump.sha256
+/output/
 
 # Secretos y configuracion local
 .env
@@ -43,3 +46,4 @@ logs/
 # Windows
 Thumbs.db
 Desktop.ini
+services/mp-broker-hostinger.zip

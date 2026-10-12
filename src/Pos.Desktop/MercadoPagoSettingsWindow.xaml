@@ -38,7 +38,7 @@
           <TextBlock x:Name="ConnectionMessage" TextWrapping="Wrap" Foreground="#526577" Margin="0,5,15,0"/>
         </StackPanel>
         <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
-          <Button x:Name="AuthorizeButton" Content="Conectar con Mercado Pago" Style="{StaticResource PrimaryButton}" Click="OnAuthorizeClick"/>
+          <Button x:Name="AuthorizeButton" Content="Conectar con Mercado Pago" Style="{StaticResource PrimaryButton}" IsEnabled="False" Click="OnAuthorizeClick"/>
           <Button x:Name="DisconnectButton" Content="Desconectar cuenta" Style="{StaticResource LinkButton}" Foreground="#B42318" HorizontalAlignment="Right" Margin="0,4,0,0" Visibility="Collapsed" Click="OnDisconnectClick"/>
         </StackPanel>
       </Grid>

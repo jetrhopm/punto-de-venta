@@ -13,18 +13,19 @@ public partial class PurchasePaymentWindow : Window
 {
     private readonly decimal _total;
 
-    public PurchasePaymentWindow(IReadOnlyList<PurchaseSupplier> suppliers, PurchaseSupplier selected, decimal total, int lineCount, decimal pieces)
+    public PurchasePaymentWindow(IReadOnlyList<PurchaseSupplier> suppliers, PurchaseSupplier selected, decimal total, int lineCount, decimal pieces, bool payFromCashInitially = true, decimal? initialCashWithdrawn = null)
     {
         InitializeComponent();
         _total = total;
         TotalText.Text = total.ToString("C2", CultureInfo.CurrentCulture);
         LinesText.Text = $"{lineCount} producto(s)\n{pieces:0.###} pieza(s)";
-        WithdrawnBox.Text = total.ToString("0.00", CultureInfo.CurrentCulture);
+        WithdrawnBox.Text = (initialCashWithdrawn ?? total).ToString("0.00", CultureInfo.CurrentCulture);
         List<PurchaseSupplier> items = suppliers.Count > 0 ? suppliers.ToList() : [PurchaseSupplier.None];
         SupplierPicker.ItemsSource = items;
         SupplierPicker.SelectedItem = items.FirstOrDefault(item => item.Id == selected.Id) ?? items[0];
         // Por defecto se paga con caja: es el caso más común al recibir mercancía.
-        CashRadio.IsChecked = true;
+        CashRadio.IsChecked = payFromCashInitially;
+        NoCashRadio.IsChecked = !payFromCashInitially;
         Loaded += (_, _) =>
         {
             WithdrawnBox.Focus();

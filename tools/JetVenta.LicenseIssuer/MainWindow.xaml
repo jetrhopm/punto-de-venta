@@ -7,6 +7,12 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="16">
                     <TextBlock Text="Código de solicitud del cliente" FontWeight="SemiBold"/><TextBox x:Name="RequestCodeTextBox" MinHeight="88" Margin="0,6,0,0" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"/>
                     <TextBlock Text="Nombre de tienda o titular" FontWeight="SemiBold" Margin="0,18,0,0"/><TextBox x:Name="StoreNameTextBox" Margin="0,6,0,0"/>
+                    <TextBlock Text="Modalidad de licencia" FontWeight="SemiBold" Margin="0,18,0,0"/>
+                    <ComboBox x:Name="EditionComboBox" Margin="0,6,0,0" SelectedIndex="0">
+                        <ComboBoxItem Content="JetVenta Desktop" Tag="Desktop"/>
+                        <ComboBoxItem Content="JetVenta Desktop + Móvil" Tag="Mobile"/>
+                    </ComboBox>
+                    <TextBlock Text="Desktop + Móvil incluye todas las funciones móviles y permite emparejar teléfonos sin límite para esta tienda." TextWrapping="Wrap" Foreground="#566B7A" Margin="0,5,0,0"/>
                     <CheckBox x:Name="ExpirationCheckBox" Content="Definir vencimiento" Margin="0,18,0,0" Checked="OnExpirationChanged" Unchecked="OnExpirationChanged"/>
                     <DatePicker x:Name="ExpirationPicker" IsEnabled="False" Margin="0,6,0,0" SelectedDate="{x:Static sys:DateTime.Today}" xmlns:sys="clr-namespace:System;assembly=mscorlib"/>
                     <Border Background="#FFF7E2" BorderBrush="#E9C770" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,20,0,0"><TextBlock TextWrapping="Wrap"><Run FontWeight="SemiBold" Text="Uso restringido. "/><Run Text="Este programa solo emite archivos licencia.jv cuando el equipo fue autorizado. No distribuyas la herramienta ni los archivos de recuperación."/></TextBlock></Border>

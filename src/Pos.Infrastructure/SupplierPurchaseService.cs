@@ -31,6 +31,14 @@ public sealed record PurchaseOrderCommand(Guid OperationId, Guid? SupplierId, st
 public sealed record PurchaseOrderResult(Guid Id, Guid OperationId, Guid? SupplierId, string? Supplier, string Status, string? Notes, decimal Total, int LineCount, DateTimeOffset CreatedAtUtc, DateTimeOffset? ClosedAtUtc);
 public sealed record PurchaseOrderPrintLine(string Code, string Description, decimal Quantity, decimal UnitCost, decimal Total);
 public sealed record PurchaseOrderPrintResult(Guid Id, string? Supplier, string Status, string? Notes, decimal Total, DateTimeOffset CreatedAtUtc, IReadOnlyList<PurchaseOrderPrintLine> Lines);
+public sealed record MobilePurchasePriceDecision(Guid ProductId, decimal? SalePrice, decimal? ProfitPercentToApply);
+public sealed record MobilePurchaseApprovalLineCommand(Guid ProductId, decimal Quantity, decimal UnitCost, decimal? SalePrice, decimal? ProfitPercentToApply);
+public sealed record ApproveMobilePurchaseRequestCommand(Guid? SupplierId, bool PayFromCashRegister, decimal? CashWithdrawn, string? Notes, IReadOnlyList<MobilePurchaseApprovalLineCommand> Lines);
+public sealed record RejectMobilePurchaseRequestCommand(string? Reason);
+public sealed record MobilePurchaseRequestQueueItem(Guid Id, string Supplier, string CreatedBy, string DeviceName, decimal Total, int LineCount, DateTimeOffset CreatedAtUtc, bool ProposedPayFromCashRegister, decimal? ProposedCashWithdrawn);
+public sealed record MobilePurchaseRequestLineReview(Guid ProductId, string Code, string Description, string UnitOfMeasure, decimal Quantity, decimal UnitCost, decimal LineTotal, decimal Price, decimal Cost, decimal Stock, decimal ProfitPercent);
+public sealed record MobilePurchaseRequestReview(Guid Id, Guid OperationId, Guid? SupplierId, string Supplier, string CreatedBy, string DeviceName, decimal Total, DateTimeOffset CreatedAtUtc, bool ProposedPayFromCashRegister, decimal? ProposedCashWithdrawn, IReadOnlyList<MobilePurchaseRequestLineReview> Lines);
+public sealed record MobilePurchaseApprovalResult(Guid RequestId, ReceivePurchaseResult Purchase);
 
 public sealed class SupplierPurchaseService(PosDbContext database)
 {
@@ -55,11 +63,18 @@ public sealed class SupplierPurchaseService(PosDbContext database)
         var user = await UserAsync(token, cancellationToken);
         if (user is null) return null;
         var session = await SessionAsync(token, cancellationToken);
+        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        var result = await ReceiveInsideTransactionAsync(user, session, command, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return result;
+    }
+
+    private async Task<ReceivePurchaseResult> ReceiveInsideTransactionAsync(UserRecord user, SessionRecord? session, ReceivePurchaseCommand command, CancellationToken cancellationToken)
+    {
         if (command.OperationId == Guid.Empty || command.Lines is null || command.Lines.Count == 0) throw new ArgumentException("La compra requiere operación y partidas.");
         if (command.Lines.Select(item => item.ProductId).Distinct().Count() != command.Lines.Count) throw new ArgumentException("Un producto aparece más de una vez en la compra; suma sus piezas en una sola partida.");
         if (command.CashWithdrawn is < 0m) throw new ArgumentException("El efectivo retirado de caja no puede ser negativo.");
         if (command.Notes?.Trim().Length > 300) throw new ArgumentException("La nota de la compra no puede exceder 300 caracteres.");
-        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         var existing = await database.Purchases.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == command.OperationId, cancellationToken);
         if (existing is not null) return new ReceivePurchaseResult(existing.Id, existing.OperationId, existing.Total, true, existing.PaidFromCashRegister, existing.CashWithdrawn);
         // El proveedor es opcional también al pagar con caja (decisión 2026-10-10): sin él se usa "Sin proveedor".
@@ -132,8 +147,120 @@ public sealed class SupplierPurchaseService(PosDbContext database)
                 database.CashMovements.Add(new CashMovementRecord { Id = Guid.NewGuid(), ShiftId = shift.Id, Type = "Out", Amount = withdrawn, Reason = reason, CreatedAtUtc = purchase.CreatedAtUtc });
             }
         }
-        database.Purchases.Add(purchase); await database.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken);
+        database.Purchases.Add(purchase);
+        await database.SaveChangesAsync(cancellationToken);
         return new ReceivePurchaseResult(purchase.Id, purchase.OperationId, purchase.Total, false, purchase.PaidFromCashRegister, purchase.CashWithdrawn);
+    }
+
+    public async Task<IReadOnlyList<MobilePurchaseRequestQueueItem>?> PendingMobileRequestsAsync(string token, CancellationToken cancellationToken)
+    {
+        var user = await UserAsync(token, cancellationToken);
+        if (user is null) return null;
+        var storeId = await database.Stores.OrderBy(item => item.CreatedAtUtc).Select(item => item.Id).FirstAsync(cancellationToken);
+        var rows = await (from request in database.MobilePurchaseRequests.AsNoTracking()
+                          join creator in database.Users.AsNoTracking() on request.UserId equals creator.Id
+                          join device in database.MobileDevices.AsNoTracking() on request.MobileDeviceId equals device.Id
+                          join supplierRecord in database.Suppliers.AsNoTracking() on request.SupplierId equals supplierRecord.Id into supplierRows
+                          from supplier in supplierRows.DefaultIfEmpty()
+                          where request.StoreId == storeId && request.Status == "Pending"
+                          orderby request.CreatedAtUtc
+                          select new { request, creator, device, Supplier = supplier == null ? "Sin proveedor" : supplier.Name })
+            .Take(100).ToListAsync(cancellationToken);
+        return rows.Select(row => new MobilePurchaseRequestQueueItem(row.request.Id, row.Supplier, row.creator.DisplayName, row.device.Name,
+            row.request.Total, database.MobilePurchaseRequestLines.Count(line => line.RequestId == row.request.Id), row.request.CreatedAtUtc,
+            row.request.ProposedPayFromCashRegister, row.request.ProposedCashWithdrawn)).ToList();
+    }
+
+    public async Task<MobilePurchaseRequestReview?> GetMobileRequestForReviewAsync(string token, Guid requestId, CancellationToken cancellationToken)
+    {
+        if (await UserAsync(token, cancellationToken) is null) return null;
+        var header = await (from request in database.MobilePurchaseRequests.AsNoTracking()
+                            join creator in database.Users.AsNoTracking() on request.UserId equals creator.Id
+                            join device in database.MobileDevices.AsNoTracking() on request.MobileDeviceId equals device.Id
+                            join supplierRecord in database.Suppliers.AsNoTracking() on request.SupplierId equals supplierRecord.Id into supplierRows
+                            from supplier in supplierRows.DefaultIfEmpty()
+                            where request.Id == requestId
+                            select new { request.Id, request.OperationId, request.SupplierId, Supplier = supplier == null ? "Sin proveedor" : supplier.Name,
+                                CreatedBy = creator.DisplayName, DeviceName = device.Name, request.Total, request.CreatedAtUtc,
+                                request.ProposedPayFromCashRegister, request.ProposedCashWithdrawn, request.Status })
+            .SingleOrDefaultAsync(cancellationToken) ?? throw new KeyNotFoundException("La solicitud de compra no existe.");
+        if (header.Status != "Pending") throw new InvalidOperationException("La solicitud ya fue procesada en otra caja.");
+        var lines = await (from line in database.MobilePurchaseRequestLines.AsNoTracking()
+                           join product in database.Products.AsNoTracking() on line.ProductId equals product.Id
+                           where line.RequestId == requestId
+                           orderby product.Description
+                           select new MobilePurchaseRequestLineReview(line.ProductId, line.Code, line.Description, line.UnitOfMeasure,
+                               line.Quantity, line.UnitCost, line.LineTotal, product.Price, product.Cost, product.Stock, product.ProfitPercent))
+            .ToListAsync(cancellationToken);
+        return new MobilePurchaseRequestReview(header.Id, header.OperationId, header.SupplierId, header.Supplier, header.CreatedBy,
+            header.DeviceName, header.Total, header.CreatedAtUtc, header.ProposedPayFromCashRegister, header.ProposedCashWithdrawn, lines);
+    }
+
+    public async Task<MobilePurchaseApprovalResult?> ApproveMobileRequestAsync(string token, Guid requestId, ApproveMobilePurchaseRequestCommand command, CancellationToken cancellationToken)
+    {
+        var user = await UserAsync(token, cancellationToken);
+        if (user is null) return null;
+        if (command.CashWithdrawn is < 0m || command.Notes?.Trim().Length > 300)
+            throw new ArgumentException("Revisa el efectivo retirado y la nota.");
+        var session = await SessionAsync(token, cancellationToken);
+        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        var request = await database.MobilePurchaseRequests.SingleOrDefaultAsync(item => item.Id == requestId, cancellationToken)
+            ?? throw new KeyNotFoundException("La solicitud de compra no existe.");
+        var existingPurchase = await database.Purchases.AsNoTracking().SingleOrDefaultAsync(item => item.OperationId == request.OperationId, cancellationToken);
+        if (request.Status == "Approved" && existingPurchase is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new MobilePurchaseApprovalResult(request.Id, new ReceivePurchaseResult(existingPurchase.Id, existingPurchase.OperationId,
+                existingPurchase.Total, true, existingPurchase.PaidFromCashRegister, existingPurchase.CashWithdrawn));
+        }
+        if (request.Status != "Pending") throw new InvalidOperationException("La solicitud ya fue procesada en otra caja.");
+
+        var requestLines = await database.MobilePurchaseRequestLines.Where(item => item.RequestId == requestId).ToListAsync(cancellationToken);
+        if (requestLines.Count == 0) throw new InvalidOperationException("La solicitud no contiene productos.");
+        var reviewedLines = command.Lines ?? [];
+        if (reviewedLines.Count != requestLines.Count
+            || reviewedLines.Select(item => item.ProductId).Distinct().Count() != reviewedLines.Count
+            || reviewedLines.Any(item => requestLines.All(line => line.ProductId != item.ProductId)))
+            throw new ArgumentException("La recepción debe contener exactamente los productos de la solicitud, sin duplicados.");
+
+        var purchaseCommand = new ReceivePurchaseCommand(request.OperationId, command.SupplierId,
+            reviewedLines.Select(line => new PurchaseLineCommand(line.ProductId, line.Quantity, line.UnitCost, line.SalePrice, line.ProfitPercentToApply)).ToList(),
+            command.PayFromCashRegister, command.CashWithdrawn, command.Notes);
+        var receipt = await ReceiveInsideTransactionAsync(user, session, purchaseCommand, cancellationToken);
+        request.SupplierId = command.SupplierId;
+        request.Total = receipt.Total;
+        foreach (var line in requestLines)
+        {
+            var reviewed = reviewedLines.Single(item => item.ProductId == line.ProductId);
+            line.Quantity = decimal.Round(reviewed.Quantity, 3, MidpointRounding.AwayFromZero);
+            line.UnitCost = decimal.Round(reviewed.UnitCost, 2, MidpointRounding.AwayFromZero);
+            line.LineTotal = decimal.Round(line.Quantity * line.UnitCost, 2, MidpointRounding.AwayFromZero);
+        }
+        request.Status = "Approved";
+        request.ReviewedByUserId = user.Id;
+        request.ReviewedAtUtc = DateTimeOffset.UtcNow;
+        request.RejectionReason = null;
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new MobilePurchaseApprovalResult(request.Id, receipt);
+    }
+
+    public async Task<bool?> RejectMobileRequestAsync(string token, Guid requestId, string? reason, CancellationToken cancellationToken)
+    {
+        var user = await UserAsync(token, cancellationToken);
+        if (user is null) return null;
+        if (reason?.Trim().Length > 300) throw new ArgumentException("El motivo de rechazo no puede exceder 300 caracteres.");
+        await using var transaction = await database.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        var request = await database.MobilePurchaseRequests.SingleOrDefaultAsync(item => item.Id == requestId, cancellationToken)
+            ?? throw new KeyNotFoundException("La solicitud de compra no existe.");
+        if (request.Status != "Pending") throw new InvalidOperationException("La solicitud ya fue procesada en otra caja.");
+        request.Status = "Rejected";
+        request.ReviewedByUserId = user.Id;
+        request.ReviewedAtUtc = DateTimeOffset.UtcNow;
+        request.RejectionReason = Clean(reason);
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
     }
 
     public async Task<PurchasePricingDefaults?> PricingDefaultsAsync(string token, CancellationToken cancellationToken)

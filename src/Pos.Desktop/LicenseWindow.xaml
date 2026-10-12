@@ -17,6 +17,7 @@
                     <StackPanel>
                         <TextBlock x:Name="StatusTitleText" FontSize="17" FontWeight="SemiBold" Foreground="#744F00" Text="Revisando licencia..."/>
                         <TextBlock x:Name="StatusMessageText" Margin="0,5,0,0" TextWrapping="Wrap" Foreground="#5D5D5D"/>
+                        <TextBlock x:Name="EditionText" Margin="0,6,0,0" FontWeight="SemiBold" Foreground="#5D5D5D"/>
                         <TextBlock x:Name="ExpirationText" Margin="0,8,0,0" Foreground="#5D5D5D"/>
                     </StackPanel>
                 </Border>

@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:zxing="clr-namespace:ZXing.Net.Maui.Controls;assembly=ZXing.Net.MAUI.Controls"
+             xmlns:models="clr-namespace:JetVenta.Mobile"
+             x:Class="JetVenta.Mobile.MainPage"
+             Title="JetVenta Móvil"
+             BackgroundColor="#07172D">
+    <Grid RowDefinitions="Auto,*">
+        <Grid BackgroundColor="#0A2040" Padding="16,10" ColumnDefinitions="42,*,Auto">
+            <Image Source="jetventa_icon.png" HeightRequest="38" WidthRequest="38" Aspect="AspectFit" />
+            <VerticalStackLayout Grid.Column="1" Spacing="0" Margin="10,0,0,0" VerticalOptions="Center">
+                <Label Text="JetVenta Móvil" TextColor="White" FontSize="18" FontAttributes="Bold" />
+                <Label x:Name="ConnectionLabel" Text="Configura este teléfono" TextColor="#B8D5F0" FontSize="12" />
+            </VerticalStackLayout>
+            <Button x:Name="LogoutButton" Grid.Column="2" Text="Salir" Clicked="OnLogoutClicked" IsVisible="False" TextColor="White" BackgroundColor="Transparent" Padding="8,0" HeightRequest="36" />
+        </Grid>
+
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout Padding="16,18" Spacing="15">
+                <VerticalStackLayout x:Name="PairingPanel" Spacing="12">
+                    <Label Text="Conectar teléfono" FontSize="25" FontAttributes="Bold" TextColor="White" />
+                    <Label Text="Desde JetVenta en la computadora servidor genera un código temporal en Configuración &gt; JetVenta Móvil. Escribe la IP que muestra esa pantalla; no uses 127.0.0.1." TextColor="#B8C7D8" LineBreakMode="WordWrap" />
+                    <Label Text="Dirección de la tienda" FontAttributes="Bold" TextColor="#E5EFFA" />
+                    <Entry x:Name="ServerEntry" Placeholder="192.168.1.50:5000" Keyboard="Url" />
+                    <Label Text="Nombre de este teléfono" FontAttributes="Bold" TextColor="#E5EFFA" />
+                    <Entry x:Name="DeviceEntry" Placeholder="Ej. Teléfono de compras" />
+                    <Label Text="Código temporal" FontAttributes="Bold" TextColor="#E5EFFA" />
+                    <Entry x:Name="PairingCodeEntry" Placeholder="6 dígitos" Keyboard="Numeric" MaxLength="6" />
+                    <Button x:Name="PairButton" Text="Conectar con JetVenta" Clicked="OnPairClicked" BackgroundColor="#0878E5" TextColor="White" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout x:Name="LoginPanel" IsVisible="False" Spacing="12">
+                    <Label Text="Iniciar sesión" FontSize="25" FontAttributes="Bold" TextColor="White" />
+                    <Label Text="Usa tu usuario de JetVenta. Las opciones disponibles dependen de sus permisos." TextColor="#B8C7D8" />
+                    <Label Text="Usuario" FontAttributes="Bold" TextColor="#E5EFFA" />
+                    <Entry x:Name="UserEntry" Placeholder="Usuario" />
+                    <Label Text="Contraseña" FontAttributes="Bold" TextColor="#E5EFFA" />
+                    <Entry x:Name="PasswordEntry" Placeholder="Contraseña" IsPassword="True" />
+                    <Button x:Name="LoginButton" Text="Iniciar sesión" Clicked="OnLoginClicked" BackgroundColor="#0878E5" TextColor="White" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout x:Name="HomePanel" IsVisible="False" Spacing="14">
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" Margin="2,4,2,4">
+                        <Label Text="¡Hola!" FontSize="30" FontAttributes="Bold" TextColor="White" />
+                        <Border Grid.Column="1" BackgroundColor="#0D2A3B" Stroke="#1A815E" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="9,7" VerticalOptions="Center">
+                            <HorizontalStackLayout Spacing="7"><BoxView WidthRequest="9" HeightRequest="9" CornerRadius="5" Color="#29D17D" VerticalOptions="Center" /><Label Text="Conectado a la tienda" TextColor="#D8F5E5" FontSize="12" VerticalOptions="Center" /></HorizontalStackLayout>
+                        </Border>
+                        <Label Grid.Row="1" Text="¿Qué deseas hacer hoy?" TextColor="#B8C7D8" FontSize="17" />
+                    </Grid>
+
+                    <Border x:Name="VerifierMenu" IsVisible="False" Stroke="#09AFFF" StrokeThickness="1.5" StrokeShape="RoundRectangle 7" Padding="15" Background="{StaticResource MenuBlueGradient}" Shadow="{StaticResource MenuShadow}">
+                        <Border.GestureRecognizers><TapGestureRecognizer Tapped="OnOpenVerifier" /></Border.GestureRecognizers>
+                        <Grid ColumnDefinitions="76,*,Auto" ColumnSpacing="14">
+                            <Border Background="{StaticResource IconBlueGradient}" Stroke="#28D7FF" StrokeThickness="1" StrokeShape="RoundRectangle 6" HeightRequest="68" WidthRequest="68" VerticalOptions="Center"><Image Source="barcode_scan.svg" Margin="14" Aspect="AspectFit" /></Border>
+                            <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="4"><Label Text="Verificador" FontSize="20" FontAttributes="Bold" TextColor="White" /><Label Text="Consulta productos" FontSize="14" TextColor="#C2D9F4" /></VerticalStackLayout>
+                            <Label Grid.Column="2" Text="›" FontSize="34" TextColor="#48E8FF" VerticalOptions="Center" />
+                        </Grid>
+                    </Border>
+
+                    <Border x:Name="CountMenu" IsVisible="False" Stroke="#09AFFF" StrokeThickness="1.5" StrokeShape="RoundRectangle 7" Padding="15" Background="{StaticResource MenuBlueGradient}" Shadow="{StaticResource MenuShadow}">
+                        <Border.GestureRecognizers><TapGestureRecognizer Tapped="OnOpenCount" /></Border.GestureRecognizers>
+                        <Grid ColumnDefinitions="76,*,Auto" ColumnSpacing="14">
+                            <Border Background="{StaticResource IconBlueGradient}" Stroke="#28D7FF" StrokeThickness="1" StrokeShape="RoundRectangle 6" HeightRequest="68" WidthRequest="68" VerticalOptions="Center"><Image Source="inventory_count.svg" Margin="14" Aspect="AspectFit" /></Border>
+                            <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="4"><Label Text="Conteo" FontSize="20" FontAttributes="Bold" TextColor="White" /><Label Text="Registra existencias" FontSize="14" TextColor="#C2D9F4" /></VerticalStackLayout>
+                            <Label Grid.Column="2" Text="›" FontSize="34" TextColor="#48E8FF" VerticalOptions="Center" />
+                        </Grid>
+                    </Border>
+
+                    <Border x:Name="InventoryMenu" IsVisible="False" Stroke="#09AFFF" StrokeThickness="1.5" StrokeShape="RoundRectangle 7" Padding="15" Background="{StaticResource MenuBlueGradient}" Shadow="{StaticResource MenuShadow}">
+                        <Border.GestureRecognizers><TapGestureRecognizer Tapped="OnOpenInventory" /></Border.GestureRecognizers>
+                        <Grid ColumnDefinitions="76,*,Auto" ColumnSpacing="14">
+                            <Border Background="{StaticResource IconBlueGradient}" Stroke="#28D7FF" StrokeThickness="1" StrokeShape="RoundRectangle 6" HeightRequest="68" WidthRequest="68" VerticalOptions="Center"><Image Source="inventory_boxes.svg" Margin="14" Aspect="AspectFit" /></Border>
+                            <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="4"><Label Text="Inventario" FontSize="20" FontAttributes="Bold" TextColor="White" /><Label Text="Revisa existencias" FontSize="14" TextColor="#C2D9F4" /></VerticalStackLayout>
+                            <Label Grid.Column="2" Text="›" FontSize="34" TextColor="#48E8FF" VerticalOptions="Center" />
+                        </Grid>
+                    </Border>
+                    <Border x:Name="ShoppingListMenu" Stroke="#09AFFF" StrokeThickness="1.5" StrokeShape="RoundRectangle 7" Padding="15" Background="{StaticResource MenuBlueGradient}" Shadow="{StaticResource MenuShadow}">
+                        <Border.GestureRecognizers><TapGestureRecognizer Tapped="OnOpenShoppingList" /></Border.GestureRecognizers>
+                        <Grid ColumnDefinitions="76,*,Auto" ColumnSpacing="14">
+                            <Border Background="{StaticResource IconBlueGradient}" Stroke="#28D7FF" StrokeThickness="1" StrokeShape="RoundRectangle 6" HeightRequest="68" WidthRequest="68" VerticalOptions="Center"><Image Source="shopping_list.svg" Margin="14" Aspect="AspectFit" /></Border>
+                            <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="4"><Label Text="Lista de compras" FontSize="20" FontAttributes="Bold" TextColor="White" /><Label Text="Prepara los artículos por surtir" FontSize="14" TextColor="#C2D9F4" /></VerticalStackLayout>
+                            <Label Grid.Column="2" Text="›" FontSize="34" TextColor="#48E8FF" VerticalOptions="Center" />
+                        </Grid>
+                    </Border>
+                    <Border x:Name="PurchaseMenu" IsVisible="False" Stroke="#09AFFF" StrokeThickness="1.5" StrokeShape="RoundRectangle 7" Padding="15" Background="{StaticResource MenuBlueGradient}" Shadow="{StaticResource MenuShadow}">
+                        <Border.GestureRecognizers><TapGestureRecognizer Tapped="OnOpenPurchases" /></Border.GestureRecognizers>
+                        <Grid ColumnDefinitions="76,*,Auto" ColumnSpacing="14">
+                            <Border Background="{StaticResource IconBlueGradient}" Stroke="#28D7FF" StrokeThickness="1" StrokeShape="RoundRectangle 6" HeightRequest="68" WidthRequest="68" VerticalOptions="Center"><Image Source="shopping_list.svg" Margin="14" Aspect="AspectFit" /></Border>
+                            <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="4"><Label Text="Recibir compra" FontSize="20" FontAttributes="Bold" TextColor="White" /><Label Text="Registra la entrega del proveedor" FontSize="14" TextColor="#C2D9F4" /></VerticalStackLayout>
+                            <Label Grid.Column="2" Text="›" FontSize="34" TextColor="#48E8FF" VerticalOptions="Center" />
+                        </Grid>
+                    </Border>
+                    <Label x:Name="PermissionHint" IsVisible="False" Text="Tu usuario no tiene permisos para estas opciones. Solicita acceso al administrador." TextColor="#F5D898" FontSize="12" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout x:Name="CheckerPanel" IsVisible="False" Spacing="12">
+                    <Button Text="‹  Menú principal" Clicked="OnBackToMenu" Style="{StaticResource SecondaryActionButton}" HorizontalOptions="Start" />
+                    <Label Text="Verificador" FontSize="23" FontAttributes="Bold" TextColor="White" />
+                    <Grid x:Name="VerifierCameraHost" HeightRequest="190">
+                        <Border Margin="24" Stroke="#2FA8FF" StrokeThickness="3" StrokeShape="RoundRectangle 6" InputTransparent="True" />
+                        <Label Text="Apunta al código de barras" TextColor="White" BackgroundColor="#B0103B59" Padding="12,7" HorizontalOptions="Center" VerticalOptions="End" Margin="0,0,0,12" />
+                        <Button x:Name="VerifierCameraButton" Text="Usar trasera" Clicked="OnSwitchCameraClicked" HorizontalOptions="End" VerticalOptions="Start" Margin="8" Padding="10,5" FontSize="12" BackgroundColor="#D90A2040" TextColor="White" IsEnabled="False" />
+                        <VerticalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="6" MaximumWidthRequest="280">
+                            <Label x:Name="VerifierCameraStatus" IsVisible="False" Text="Cámara no disponible." TextColor="White" BackgroundColor="#E60A2040" Padding="12" HorizontalTextAlignment="Center" />
+                            <Button x:Name="VerifierCameraRetryButton" Text="Reintentar cámara" Clicked="OnRetryCameraClicked" IsVisible="False" HorizontalOptions="Center" Padding="12,5" FontSize="12" />
+                            <Button x:Name="VerifierCameraSettingsButton" Text="Abrir ajustes" Clicked="OnOpenCameraSettingsClicked" IsVisible="False" HorizontalOptions="Center" Padding="12,5" FontSize="12" />
+                        </VerticalStackLayout>
+                    </Grid>
+                    <Label x:Name="VerifierCameraName" Text="Cámara frontal" TextColor="#B8C7D8" FontSize="12" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Entry x:Name="SearchEntry" Placeholder="Código o producto" ReturnType="Search" Completed="OnSearchCompleted" />
+                        <Button Grid.Column="1" Text="Buscar" Clicked="OnSearchClicked" BackgroundColor="#0878E5" TextColor="White" WidthRequest="92" />
+                    </Grid>
+                    <ActivityIndicator x:Name="LoadingIndicator" IsVisible="False" IsRunning="False" Color="#33BFFF" />
+                    <Border x:Name="ProductCard" IsVisible="False" BackgroundColor="#0C2039" Stroke="#21517A" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="17">
+                        <VerticalStackLayout Spacing="8">
+                            <HorizontalStackLayout Spacing="8"><BoxView x:Name="StockDot" WidthRequest="11" HeightRequest="11" CornerRadius="6" VerticalOptions="Center" /><Label x:Name="StockStatusLabel" FontAttributes="Bold" /></HorizontalStackLayout>
+                            <Label x:Name="ProductNameLabel" FontSize="22" FontAttributes="Bold" TextColor="White" />
+                            <Label x:Name="ProductCodeLabel" TextColor="#B8C7D8" />
+                            <BoxView HeightRequest="1" BackgroundColor="#203952" />
+                            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="14">
+                                <Label Text="Existencia" TextColor="#A9BED3" />
+                                <Label Grid.Column="1" Text="Precio venta" TextColor="#A9BED3" />
+                                <Label x:Name="StockLabel" Grid.Row="1" FontSize="24" FontAttributes="Bold" TextColor="#29D17D" />
+                                <Label x:Name="PriceLabel" Grid.Row="1" Grid.Column="1" FontSize="24" FontAttributes="Bold" TextColor="White" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="14"><Label x:Name="MinimumLabel" TextColor="#B8C7D8" /><Label x:Name="MaximumLabel" Grid.Column="1" TextColor="#B8C7D8" /></Grid>
+                        </VerticalStackLayout>
+                    </Border>
+                    <Label x:Name="EmptyLabel" Text="Escanea un producto o escribe un código para consultarlo." TextColor="#B8C7D8" HorizontalTextAlignment="Center" />
+                    <CollectionView x:Name="ResultsView" HeightRequest="260" SelectionMode="Single" SelectionChanged="OnResultSelected">
+                        <CollectionView.ItemTemplate><DataTemplate x:DataType="models:MobileProduct"><Border BackgroundColor="#0C2039" Stroke="#21517A" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="12" Margin="0,3"><Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto"><Label Text="{Binding Description}" FontAttributes="Bold" TextColor="White" /><Label Grid.Row="1" Text="{Binding Code}" FontSize="12" TextColor="#A9BED3" /><Label Grid.Column="1" Grid.RowSpan="2" Text="{Binding StockDisplay}" VerticalOptions="Center" TextColor="#29D17D" FontAttributes="Bold" /></Grid></Border></DataTemplate></CollectionView.ItemTemplate>
+                    </CollectionView>
+                </VerticalStackLayout>
+
+                <VerticalStackLayout x:Name="CountPanel" IsVisible="False" Spacing="14">
+                    <Button Text="‹  Menú principal" Clicked="OnBackToMenu" Style="{StaticResource SecondaryActionButton}" HorizontalOptions="Start" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <VerticalStackLayout Spacing="3" VerticalOptions="Center">
+                            <Label Text="Conteo de inventario" FontSize="22" FontAttributes="Bold" TextColor="White" />
+                            <Label Text="Escanea o busca cada artículo" FontSize="13" TextColor="#AFC6DC" />
+                        </VerticalStackLayout>
+                        <Button Grid.Column="1" Text="Bitácora" Clicked="OnOpenHistory" BackgroundColor="#12385A" TextColor="#CDEBFF" Padding="12,0" HeightRequest="42" />
+                    </Grid>
+                    <Border BackgroundColor="#382A13" Stroke="#A66D16" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="12">
+                        <Label Text="Recomendado: cuenta fuera del horario de ventas. Una venta durante el conteo puede generar diferencias; verifica cada cantidad antes de registrarla." TextColor="#FFE2A1" FontSize="13" LineBreakMode="WordWrap" />
+                    </Border>
+                    <Grid x:Name="CountCameraHost" HeightRequest="145">
+                        <Border Margin="24" Stroke="#2FA8FF" StrokeThickness="3" StrokeShape="RoundRectangle 6" InputTransparent="True" />
+                        <Label Text="Escanea el artículo" TextColor="White" BackgroundColor="#B0103B59" Padding="12,7" HorizontalOptions="Center" VerticalOptions="End" Margin="0,0,0,10" />
+                        <Button x:Name="CountCameraButton" Text="Usar trasera" Clicked="OnSwitchCameraClicked" HorizontalOptions="End" VerticalOptions="Start" Margin="8" Padding="10,5" FontSize="12" BackgroundColor="#D90A2040" TextColor="White" IsEnabled="False" />
+                        <VerticalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="6" MaximumWidthRequest="280">
+                            <Label x:Name="CountCameraStatus" IsVisible="False" Text="Cámara no disponible." TextColor="White" BackgroundColor="#E60A2040" Padding="12" HorizontalTextAlignment="Center" />
+                            <Button x:Name="CountCameraRetryButton" Text="Reintentar cámara" Clicked="OnRetryCameraClicked" IsVisible="False" HorizontalOptions="Center" Padding="12,5" FontSize="12" />
+                            <Button x:Name="CountCameraSettingsButton" Text="Abrir ajustes" Clicked="OnOpenCameraSettingsClicked" IsVisible="False" HorizontalOptions="Center" Padding="12,5" FontSize="12" />
+                        </VerticalStackLayout>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Entry x:Name="CountSearchEntry" Placeholder="Código de barras o nombre" ReturnType="Search" Completed="OnCountSearchCompleted" />
+                        <Button Grid.Column="1" Text="Buscar" Clicked="OnCountSearchClicked" BackgroundColor="#0878E5" TextColor="White" WidthRequest="88" />
+                    </Grid>
+                    <Label x:Name="CountCameraName" Text="Cámara frontal" TextColor="#B8C7D8" FontSize="12" />
+                    <CollectionView x:Name="CountResultsView" SelectionMode="Single" SelectionChanged="OnCountResultSelected" HeightRequest="145">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="models:MobileProduct">
+                                <Border BackgroundColor="#0C2039" Stroke="#21517A" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="11" Margin="0,3">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <VerticalStackLayout Spacing="3">
+                                            <Label Text="{Binding Description}" TextColor="White" FontAttributes="Bold" />
+                                            <Label Text="{Binding Code}" TextColor="#A9BED3" FontSize="12" />
+                                        </VerticalStackLayout>
+                                        <Label Grid.Column="1" Text="{Binding StockDisplay}" TextColor="#7CCAFF" VerticalOptions="Center" FontAttributes="Bold" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                    <Border x:Name="CountProductCard" IsVisible="False" BackgroundColor="#0C2039" Stroke="#2673A5" StrokeThickness="1.5" StrokeShape="RoundRectangle 7" Padding="16">
+                        <VerticalStackLayout Spacing="12">
+                            <Label Text="ARTÍCULO SELECCIONADO" TextColor="#65C9FF" FontSize="11" FontAttributes="Bold" />
+                            <Label x:Name="CountProductName" TextColor="White" FontSize="21" FontAttributes="Bold" LineBreakMode="WordWrap" />
+                            <Label x:Name="CountProductCode" TextColor="#A9BED3" FontSize="13" />
+                            <Border BackgroundColor="#102B46" Stroke="#244A6D" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="12,10">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <VerticalStackLayout Spacing="2">
+                                        <Label Text="Existencia en sistema" TextColor="#AFC6DC" FontSize="12" />
+                                    </VerticalStackLayout>
+                                    <Label x:Name="CountSystemStock" Grid.Column="1" TextColor="#FFFFFF" FontSize="19" FontAttributes="Bold" VerticalOptions="Center" HorizontalTextAlignment="End" />
+                                </Grid>
+                            </Border>
+                            <VerticalStackLayout Spacing="6">
+                                <Label Text="Cantidad física contada" TextColor="#E5EFFA" FontSize="15" FontAttributes="Bold" />
+                                <Label Text="Escribe el total de piezas que encontraste." TextColor="#A9BED3" FontSize="12" />
+                                <Entry x:Name="CountedStockEntry" Placeholder="Ej. 25" Keyboard="Numeric" FontSize="20" HeightRequest="54" />
+                            </VerticalStackLayout>
+                            <Button Text="Registrar conteo" Clicked="OnRegisterCount" BackgroundColor="#0878E5" TextColor="White" FontAttributes="Bold" HeightRequest="52" CornerRadius="6" />
+                        </VerticalStackLayout>
+                    </Border>
+                    <Border BackgroundColor="#0A2040" Stroke="#244A6D" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="12">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <Label x:Name="CountSummaryLabel" Text="Aún no hay artículos contados." TextColor="#C2D9F4" VerticalOptions="Center" />
+                            <Label x:Name="CountDifferenceSummary" Grid.Column="1" TextColor="#F5D898" FontAttributes="Bold" VerticalOptions="Center" HorizontalTextAlignment="End" />
+                        </Grid>
+                    </Border>
+                    <CollectionView x:Name="CountResultsLog" HeightRequest="240"><CollectionView.ItemTemplate><DataTemplate x:DataType="models:MobileCountResult"><Border BackgroundColor="#0C2039" Stroke="#21517A" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="11" Margin="0,2"><Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto"><Label Text="{Binding Description}" TextColor="White" FontAttributes="Bold" /><Label Grid.Column="1" Text="{Binding DifferenceDisplay}" TextColor="{Binding DifferenceColor}" FontAttributes="Bold" /><Label Grid.Row="1" Text="{Binding CountDisplay}" TextColor="#A9BED3" FontSize="12" /></Grid></Border></DataTemplate></CollectionView.ItemTemplate></CollectionView>
+                </VerticalStackLayout>
+
+                <VerticalStackLayout x:Name="HistoryPanel" IsVisible="False" Spacing="12">
+                    <Button Text="‹  Regresar al conteo" Clicked="OnBackToCount" Style="{StaticResource SecondaryActionButton}" HorizontalOptions="Start" />
+                    <Grid ColumnDefinitions="*,Auto"><VerticalStackLayout Spacing="2"><Label Text="Bitácora de conteos" FontSize="23" FontAttributes="Bold" TextColor="White" /><Label Text="Conteos y diferencias registrados" TextColor="#B8C7D8" /></VerticalStackLayout><Button x:Name="HistoryFilterButton" Grid.Column="1" Text="Todos" Clicked="OnToggleHistoryFilter" BackgroundColor="#12385A" TextColor="#CDEBFF" Padding="12,0" HeightRequest="40" /></Grid>
+                    <CollectionView x:Name="HistoryResultsView" HeightRequest="420"><CollectionView.ItemTemplate><DataTemplate x:DataType="models:MobileCountHistoryRow"><Border BackgroundColor="#0C2039" Stroke="#21517A" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="12" Margin="0,3"><Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto"><Label Text="{Binding Description}" TextColor="White" FontAttributes="Bold" /><Label Grid.Column="1" Text="{Binding DifferenceDisplay}" TextColor="{Binding DifferenceColor}" FontAttributes="Bold" /><Label Grid.Row="1" Text="{Binding CountDisplay}" TextColor="#B8C7D8" FontSize="12" /><Label Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding AuditDisplay}" TextColor="#8FA8C0" FontSize="11" /></Grid></Border></DataTemplate></CollectionView.ItemTemplate></CollectionView>
+                </VerticalStackLayout>
+
+                <VerticalStackLayout x:Name="InventoryPanel" IsVisible="False" Spacing="12">
+                    <Button Text="‹  Menú principal" Clicked="OnBackToMenu" Style="{StaticResource SecondaryActionButton}" HorizontalOptions="Start" />
+                    <Label Text="Inventario" FontSize="23" FontAttributes="Bold" TextColor="White" />
+                    <Grid x:Name="InventoryCameraHost" HeightRequest="150"><Border Margin="24" Stroke="#2FA8FF" StrokeThickness="3" StrokeShape="RoundRectangle 6" InputTransparent="True" /><Label Text="Escanea para consultar" TextColor="White" BackgroundColor="#B0103B59" Padding="12,7" HorizontalOptions="Center" VerticalOptions="End" Margin="0,0,0,10" /><Button x:Name="InventoryCameraButton" Text="Usar trasera" Clicked="OnSwitchCameraClicked" HorizontalOptions="End" VerticalOptions="Start" Margin="8" Padding="10,5" FontSize="12" BackgroundColor="#D90A2040" TextColor="White" IsEnabled="False" /><VerticalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="6" MaximumWidthRequest="280"><Label x:Name="InventoryCameraStatus" IsVisible="False" Text="Cámara no disponible." TextColor="White" BackgroundColor="#E60A2040" Padding="12" HorizontalTextAlignment="Center" /><Button x:Name="InventoryCameraRetryButton" Text="Reintentar cámara" Clicked="OnRetryCameraClicked" IsVisible="False" HorizontalOptions="Center" Padding="12,5" FontSize="12" /><Button x:Name="InventoryCameraSettingsButton" Text="Abrir ajustes" Clicked="OnOpenCameraSettingsClicked" IsVisible="False" HorizontalOptions="Center" Padding="12,5" FontSize="12" /></VerticalStackLayout></Grid>
+                    <Label x:Name="InventoryCameraName" Text="Cámara frontal" TextColor="#B8C7D8" FontSize="12" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"><Entry x:Name="InventorySearchEntry" Placeholder="Código o producto" ReturnType="Search" Completed="OnInventorySearchCompleted" /><Button Grid.Column="1" Text="Buscar" Clicked="OnInventorySearchClicked" BackgroundColor="#0878E5" TextColor="White" WidthRequest="92" /></Grid>
+                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="7"><Button x:Name="InventoryAllButton" Text="Todos" Clicked="OnInventoryFilterAll" BackgroundColor="#0878E5" TextColor="White" /><Button x:Name="InventoryLowButton" Grid.Column="1" Text="Bajo" Clicked="OnInventoryFilterLow" BackgroundColor="#12385A" TextColor="#CDEBFF" /><Button x:Name="InventoryOutButton" Grid.Column="2" Text="Agotado" Clicked="OnInventoryFilterOut" BackgroundColor="#12385A" TextColor="#CDEBFF" /></Grid>
+                    <Label x:Name="InventorySummaryLabel" TextColor="#B8C7D8" />
+                    <CollectionView x:Name="InventoryResultsView" HeightRequest="420" SelectionMode="Single" SelectionChanged="OnInventoryResultSelected"><CollectionView.ItemTemplate><DataTemplate x:DataType="models:MobileProduct"><Border BackgroundColor="#0C2039" Stroke="#21517A" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="12" Margin="0,3"><Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto"><Label Text="{Binding Description}" TextColor="White" FontAttributes="Bold" /><Label Grid.Column="1" Text="{Binding StockStatus}" TextColor="{Binding StockColor}" FontAttributes="Bold" /><Label Grid.Row="1" Text="{Binding Code}" TextColor="#A9BED3" FontSize="12" /><Label Grid.Row="1" Grid.Column="1" Text="{Binding StockDisplay}" TextColor="#CDEBFF" FontSize="12" /></Grid></Border></DataTemplate></CollectionView.ItemTemplate></CollectionView>
+                </VerticalStackLayout>
+
+                <VerticalStackLayout x:Name="ShoppingListPanel" IsVisible="False" Spacing="12">
+                    <Button Text="‹  Menú principal" Clicked="OnBackToMenu" Style="{StaticResource SecondaryActionButton}" HorizontalOptions="Start" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <VerticalStackLayout Spacing="3"><Label Text="Lista de compras" FontSize="23" FontAttributes="Bold" TextColor="White" /><Label Text="Artículos que necesitas surtir" TextColor="#B8C7D8" /></VerticalStackLayout>
+                        <Border Grid.Column="1" BackgroundColor="#0D2A3B" Stroke="#1A815E" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="9,7" VerticalOptions="Center"><Label x:Name="ShoppingListCountLabel" Text="0 artículos" TextColor="#D8F5E5" FontSize="12" /></Border>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Entry x:Name="ShoppingSearchEntry" Placeholder="Código o nombre del producto" ReturnType="Search" Completed="OnShoppingSearchCompleted" />
+                        <Button Grid.Column="1" Text="Buscar" Clicked="OnShoppingSearchClicked" BackgroundColor="#0878E5" TextColor="White" WidthRequest="92" />
+                    </Grid>
+                    <CollectionView x:Name="ShoppingSearchResults" IsVisible="False" HeightRequest="190" SelectionMode="Single" SelectionChanged="OnShoppingSearchResultSelected">
+                        <CollectionView.ItemTemplate><DataTemplate x:DataType="models:MobileProduct"><Border BackgroundColor="#0C2039" Stroke="#21517A" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="11" Margin="0,2"><Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto"><Label Text="{Binding Description}" TextColor="White" FontAttributes="Bold" /><Label Grid.Column="1" Text="{Binding StockDisplay}" TextColor="#CDEBFF" FontAttributes="Bold" /><Label Grid.Row="1" Text="{Binding Code}" TextColor="#A9BED3" FontSize="12" /><Label Grid.Row="1" Grid.Column="1" Text="{Binding StockStatus}" TextColor="{Binding StockColor}" FontSize="12" /></Grid></Border></DataTemplate></CollectionView.ItemTemplate>
+                    </CollectionView>
+                    <Border x:Name="ShoppingSelectedProduct" IsVisible="False" BackgroundColor="#0C2039" Stroke="#2673A5" StrokeThickness="1.5" StrokeShape="RoundRectangle 7" Padding="13">
+                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                            <VerticalStackLayout Spacing="3" VerticalOptions="Center"><Label x:Name="ShoppingSelectedName" TextColor="White" FontAttributes="Bold" LineBreakMode="WordWrap" /><Label x:Name="ShoppingSelectedCode" TextColor="#A9BED3" FontSize="12" /></VerticalStackLayout>
+                            <Entry x:Name="ShoppingQuantityEntry" Grid.Column="1" Placeholder="Cant." Keyboard="Numeric" WidthRequest="76" Text="1" VerticalOptions="Center" />
+                            <Button Grid.Column="2" Text="Agregar" Clicked="OnAddShoppingProduct" BackgroundColor="#0878E5" TextColor="White" Padding="13,0" VerticalOptions="Center" />
+                        </Grid>
+                    </Border>
+                    <Label x:Name="ShoppingSearchMessage" IsVisible="False" TextColor="#B8C7D8" FontSize="13" />
+                    <Label Text="Por surtir" TextColor="#E5EFFA" FontSize="16" FontAttributes="Bold" Margin="0,5,0,0" />
+                    <Label x:Name="ShoppingEmptyLabel" Text="Busca un producto para agregarlo a la lista." TextColor="#A9BED3" HorizontalTextAlignment="Center" Margin="0,12" />
+                    <CollectionView x:Name="ShoppingListView" HeightRequest="430">
+                        <CollectionView.ItemTemplate><DataTemplate x:DataType="models:MobileShoppingListItem">
+                            <Border BackgroundColor="#0C2039" Stroke="#21517A" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="12" Margin="0,3">
+                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                                    <VerticalStackLayout Spacing="3"><Label Text="{Binding Description}" TextColor="White" FontAttributes="Bold" LineBreakMode="WordWrap" /><Label Text="{Binding Code}" TextColor="#A9BED3" FontSize="12" /></VerticalStackLayout>
+                                    <Label Grid.Column="1" Text="{Binding QuantityDisplay}" TextColor="#7CCAFF" FontAttributes="Bold" VerticalOptions="Center" />
+                                    <HorizontalStackLayout Grid.Row="1" Spacing="7" VerticalOptions="Center">
+                                        <Button Text="−" Clicked="OnDecreaseShoppingQuantity" CommandParameter="{Binding .}" BackgroundColor="#12385A" TextColor="White" WidthRequest="42" HeightRequest="38" Padding="0" />
+                                        <Button Text="+" Clicked="OnIncreaseShoppingQuantity" CommandParameter="{Binding .}" BackgroundColor="#12385A" TextColor="White" WidthRequest="42" HeightRequest="38" Padding="0" />
+                                        <Button Text="{Binding StatusText}" Clicked="OnToggleShoppingItem" CommandParameter="{Binding .}" BackgroundColor="#174332" TextColor="#D8F5E5" HeightRequest="38" Padding="10,0" />
+                                        <Button Text="Quitar" Clicked="OnRemoveShoppingItem" CommandParameter="{Binding .}" BackgroundColor="#542B35" TextColor="#FFD7D7" HeightRequest="38" Padding="10,0" />
+                                    </HorizontalStackLayout>
+                                </Grid>
+                            </Border>
+                        </DataTemplate></CollectionView.ItemTemplate>
+                    </CollectionView>
+                </VerticalStackLayout>
+
+                <VerticalStackLayout x:Name="PurchasePanel" IsVisible="False" Spacing="12">
+                    <Button Text="‹  Menú principal" Clicked="OnBackToMenu" Style="{StaticResource SecondaryActionButton}" HorizontalOptions="Start" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"><VerticalStackLayout Spacing="3"><Label Text="Entrega del proveedor" FontSize="23" FontAttributes="Bold" TextColor="White" /><Label Text="Escanea los productos y registra lo recibido" TextColor="#B8C7D8" /></VerticalStackLayout><Border Grid.Column="1" BackgroundColor="#382A13" Stroke="#A66D16" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="9,7" VerticalOptions="Center"><Label Text="Pendiente de autorización" TextColor="#FFE2A1" FontSize="11" /></Border></Grid>
+                    <VerticalStackLayout Spacing="5"><Label Text="Proveedor" TextColor="#E5EFFA" FontAttributes="Bold" /><Picker x:Name="PurchaseSupplierPicker" Title="Selecciona proveedor" ItemDisplayBinding="{Binding Name}" TextColor="White" /></VerticalStackLayout>
+                    <Grid x:Name="PurchaseCameraHost" HeightRequest="175">
+                        <Border Margin="24" Stroke="#2FA8FF" StrokeThickness="3" StrokeShape="RoundRectangle 6" InputTransparent="True" />
+                        <Label Text="Apunta al código de barras del producto" TextColor="White" BackgroundColor="#B0103B59" Padding="12,7" HorizontalOptions="Center" VerticalOptions="End" Margin="0,0,0,12" />
+                        <Button x:Name="PurchaseCameraButton" Text="Usar trasera" Clicked="OnSwitchCameraClicked" HorizontalOptions="End" VerticalOptions="Start" Margin="8" Padding="10,5" FontSize="12" BackgroundColor="#D90A2040" TextColor="White" IsEnabled="False" />
+                        <VerticalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="6" MaximumWidthRequest="280"><Label x:Name="PurchaseCameraStatus" IsVisible="False" Text="Cámara no disponible." TextColor="White" BackgroundColor="#E60A2040" Padding="12" HorizontalTextAlignment="Center" /><Button x:Name="PurchaseCameraRetryButton" Text="Reintentar cámara" Clicked="OnRetryCameraClicked" IsVisible="False" HorizontalOptions="Center" Padding="12,5" FontSize="12" /><Button x:Name="PurchaseCameraSettingsButton" Text="Abrir ajustes" Clicked="OnOpenCameraSettingsClicked" IsVisible="False" HorizontalOptions="Center" Padding="12,5" FontSize="12" /></VerticalStackLayout>
+                    </Grid>
+                    <Label x:Name="PurchaseCameraName" Text="Cámara trasera" TextColor="#B8C7D8" FontSize="12" />
+                    <Label x:Name="PurchaseScanMessage" Text="Escanea un producto para agregarlo a la solicitud." TextColor="#B8C7D8" FontSize="13" />
+                    <Border x:Name="PurchaseScannedProductCard" IsVisible="False" BackgroundColor="#0C2039" Stroke="#2673A5" StrokeThickness="1.5" StrokeShape="RoundRectangle 7" Padding="13">
+                        <VerticalStackLayout Spacing="10"><VerticalStackLayout Spacing="3"><Label x:Name="PurchaseScannedProductName" TextColor="White" FontSize="18" FontAttributes="Bold" LineBreakMode="WordWrap" /><Label x:Name="PurchaseScannedProductCode" TextColor="#A9BED3" FontSize="12" /></VerticalStackLayout>
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="10"><VerticalStackLayout Spacing="5"><Label Text="Piezas recibidas" TextColor="#E5EFFA" FontAttributes="Bold" /><Entry x:Name="PurchaseQuantityEntry" Placeholder="Ej. 12" Keyboard="Numeric" /></VerticalStackLayout><VerticalStackLayout Grid.Column="1" Spacing="5"><Label Text="Costo por pieza" TextColor="#E5EFFA" FontAttributes="Bold" /><Entry x:Name="PurchaseUnitCostEntry" Placeholder="Ej. 8.50" Keyboard="Numeric" /></VerticalStackLayout></Grid>
+                            <Button Text="Agregar a la solicitud" Clicked="OnAddPurchaseLine" BackgroundColor="#0878E5" TextColor="White" />
+                        </VerticalStackLayout>
+                    </Border>
+                    <Label Text="Productos recibidos" TextColor="#E5EFFA" FontSize="16" FontAttributes="Bold" />
+                    <Label x:Name="PurchaseEmptyLabel" Text="Escanea el primer producto." TextColor="#A9BED3" HorizontalTextAlignment="Center" />
+                    <CollectionView x:Name="PurchaseLinesView" HeightRequest="250">
+                        <CollectionView.ItemTemplate><DataTemplate x:DataType="models:MobilePurchaseReceiptLine"><Border BackgroundColor="#0C2039" Stroke="#21517A" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="11" Margin="0,2"><Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto"><VerticalStackLayout Spacing="3"><Label Text="{Binding Description}" TextColor="White" FontAttributes="Bold" LineBreakMode="WordWrap" /><Label Text="{Binding Code}" TextColor="#A9BED3" FontSize="12" /></VerticalStackLayout><Label Grid.Column="1" Text="{Binding TotalDisplay}" TextColor="#7CCAFF" FontAttributes="Bold" VerticalOptions="Center" /><Label Grid.Row="1" Text="{Binding DetailDisplay}" TextColor="#B8C7D8" FontSize="12" /><Button Grid.Row="1" Grid.Column="1" Text="Quitar" Clicked="OnRemovePurchaseLine" CommandParameter="{Binding .}" BackgroundColor="#542B35" TextColor="#FFD7D7" HeightRequest="34" Padding="10,0" /></Grid></Border></DataTemplate></CollectionView.ItemTemplate>
+                    </CollectionView>
+                    <Border BackgroundColor="#0C2039" Stroke="#21517A" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="13"><VerticalStackLayout Spacing="9"><Grid ColumnDefinitions="*,Auto"><Label Text="Total de mercancía" TextColor="#B8C7D8" /><Label x:Name="PurchaseTotalLabel" Grid.Column="1" Text="$0.00" TextColor="White" FontSize="18" FontAttributes="Bold" /></Grid><Grid ColumnDefinitions="*,Auto" ColumnSpacing="10"><VerticalStackLayout Spacing="2"><Label Text="Proponer retiro de efectivo" TextColor="#E5EFFA" FontAttributes="Bold" /><Label Text="La caja revisará el pago antes de aplicarlo." TextColor="#A9BED3" FontSize="12" /></VerticalStackLayout><Switch x:Name="PurchaseCashSwitch" Grid.Column="1" Toggled="OnPurchaseCashToggled" OnColor="#29D17D" VerticalOptions="Center" /></Grid><VerticalStackLayout x:Name="PurchaseCashAmountPanel" IsVisible="False" Spacing="5"><Label Text="Efectivo propuesto a retirar" TextColor="#E5EFFA" FontAttributes="Bold" /><Entry x:Name="PurchaseCashAmountEntry" Placeholder="Monto" Keyboard="Numeric" /></VerticalStackLayout></VerticalStackLayout></Border>
+                    <Button x:Name="SendPurchaseRequestButton" Text="Enviar solicitud a caja" Clicked="OnSendPurchaseRequest" BackgroundColor="#148A4B" TextColor="White" FontAttributes="Bold" HeightRequest="50" />
+                    <Border x:Name="PurchaseRequestStatusCard" IsVisible="False" BackgroundColor="#0C2039" Stroke="#2673A5" StrokeThickness="1" StrokeShape="RoundRectangle 6" Padding="12"><Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"><Label x:Name="PurchaseRequestStatusLabel" TextColor="#DCEBFA" VerticalOptions="Center" LineBreakMode="WordWrap" /><Button x:Name="RefreshPurchaseRequestButton" Grid.Column="1" Text="Actualizar" Clicked="OnRefreshPurchaseRequest" BackgroundColor="#12385A" TextColor="#CDEBFF" Padding="10,0" HeightRequest="38" /></Grid></Border>
+                </VerticalStackLayout>
+
+                <ActivityIndicator IsVisible="False" IsRunning="False" Color="#33BFFF" />
+            </VerticalStackLayout>
+        </ScrollView>
+    </Grid>
+</ContentPage>

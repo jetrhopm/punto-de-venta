@@ -216,7 +216,8 @@ public sealed class SaleIntegrityIntegrationTests
             Database.PrintJobs.RemoveRange(Database.PrintJobs.Where(item => saleIds.Contains(item.SaleId)));
             Database.Payments.RemoveRange(Database.Payments.Where(item => saleIds.Contains(item.SaleId)));
             Database.InventoryMovements.RemoveRange(Database.InventoryMovements.Where(item => saleIds.Contains(item.SaleId ?? Guid.Empty)));
-            Database.SaleReversals.RemoveRange(Database.SaleReversals.Where(item => saleIds.Contains(item.SaleId)));
+            await Database.SaleReversals.Where(item => saleIds.Contains(item.SaleId)).ExecuteDeleteAsync();
+            Database.ChangeTracker.Clear();
             Database.CashMovements.RemoveRange(Database.CashMovements.Where(item => item.ShiftId == ShiftId));
             Database.SaleLines.RemoveRange(Database.SaleLines.Where(item => saleIds.Contains(item.SaleId)));
             Database.Sales.RemoveRange(Database.Sales.Where(item => saleIds.Contains(item.Id)));

@@ -31,6 +31,7 @@ public sealed class InstallerForm : Form
     private readonly bool _existingInstallation;
     private readonly string? _installedVersion;
     private readonly InstallationProfile _installationProfile;
+    private readonly InstalledLicenseInfo _installedLicense = LicenseSetupStore.ReadInstalled();
     private InstallationMode _installationMode;
     private readonly CheckBox _terms = CreateCheckBox("Acepto los términos y condiciones de JetVenta");
     private readonly CheckBox _desktopShortcut = CreateCheckBox("Crear acceso directo en el escritorio", true);
@@ -53,6 +54,9 @@ public sealed class InstallerForm : Form
     private readonly TextBox _pairingCode = CreateInput("Código de 6 dígitos");
     private readonly TextBox _registerName = CreateInput("Nombre de esta caja");
     private readonly List<Control> _additionalControls = [];
+    private readonly Label _licenseStatus = CreateLabel(string.Empty, Point.Empty, Size.Empty, 9, FontStyle.Regular, Color.FromArgb(137, 169, 195));
+    private readonly Button _selectLicense = CreateSecondaryButton("Elegir licencia .jv");
+    private string? _licenseContent;
     private bool _busy;
     private bool _completed;
 
@@ -64,7 +68,7 @@ public sealed class InstallerForm : Form
         _installationProfile = _existingInstallation ? InstallationProfileStore.ReadOrDefault() : new InstallationProfile(1, InstallationMode.Server);
         _installationMode = _installationProfile.Mode;
         Text = uninstall ? "Desinstalar JetVenta" : "Instalación de JetVenta";
-        ClientSize = new Size(1020, 760);
+        ClientSize = new Size(1020, 820);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -76,8 +80,8 @@ public sealed class InstallerForm : Form
         if (_uninstall) BuildUninstallLayout(); else BuildInstallLayout();
         _summaryControls.AddRange(Controls.Cast<Control>().Skip(summaryStart));
         _action.Text = uninstall ? "Desinstalar" : _existingInstallation ? "Actualizar" : "Instalar";
-        _action.SetBounds(804, 698, 174, 38);
-        _cancel.SetBounds(698, 698, 96, 38);
+        _action.SetBounds(804, 758, 174, 38);
+        _cancel.SetBounds(698, 758, 96, 38);
         _action.Click += OnActionClick;
         _cancel.Click += OnCancelClick;
         _activityTitle.Visible = false;
@@ -169,8 +173,15 @@ public sealed class InstallerForm : Form
         Controls.Add(new TextBox { Text = _installRoot, ReadOnly = true, TabStop = false, Location = new Point(500, 532), Size = new Size(490, 31), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.FromArgb(25, 43, 63), ForeColor = Color.FromArgb(219, 234, 247), Font = new Font("Segoe UI", 10f), Padding = new Padding(9, 4, 9, 4) });
         Controls.Add(CreateLabel("La ruta es fija para proteger las actualizaciones y la identidad de esta caja.", new Point(500, 568), new Size(490, 24), 9, FontStyle.Regular, Color.FromArgb(137, 169, 195)));
 
-        _status.SetBounds(30, 660, 960, 22);
-        _progress.SetBounds(30, 684, 960, 10);
+        Controls.Add(CreateSectionTitle("Licencia de JetVenta", new Point(500, 602)));
+        _licenseStatus.SetBounds(500, 630, 330, 43);
+        _selectLicense.SetBounds(835, 633, 155, 34);
+        _selectLicense.Click += OnSelectLicenseClick;
+        Controls.AddRange([_licenseStatus, _selectLicense]);
+        UpdateLicensePresentation();
+
+        _status.SetBounds(30, 710, 960, 22);
+        _progress.SetBounds(30, 734, 960, 10);
 
         _serverMode.Checked = _installationMode == InstallationMode.Server;
         _additionalMode.Checked = _installationMode == InstallationMode.AdditionalRegister;
@@ -273,6 +284,7 @@ public sealed class InstallerForm : Form
     private void SetInstallationMode(InstallationMode mode)
     {
         if (_existingInstallation) return;
+        if (mode == InstallationMode.AdditionalRegister) _licenseContent = null;
         _installationMode = mode;
         UpdateModePresentation();
     }
@@ -281,6 +293,8 @@ public sealed class InstallerForm : Form
     {
         var additional = _installationMode == InstallationMode.AdditionalRegister;
         foreach (var control in _additionalControls) control.Visible = additional && (!_existingInstallation || _installationProfile.PairedAtUtc is null);
+        _licenseStatus.Visible = !additional;
+        _selectLicense.Visible = !additional;
         _modeStatus.ForeColor = Color.FromArgb(137, 169, 195);
         _modeStatus.Text = _existingInstallation
             ? additional && _installationProfile.PairedAtUtc is null
@@ -289,6 +303,68 @@ public sealed class InstallerForm : Form
             : additional
                 ? "Esta computadora no instalará PostgreSQL, API, servicios ni regla de red."
                 : "Esta computadora alojará la tienda y atenderá a las cajas adicionales de la red privada.";
+        UpdateLicensePresentation();
+    }
+
+    private void UpdateLicensePresentation()
+    {
+        if (_installationMode == InstallationMode.AdditionalRegister)
+        {
+            _licenseStatus.Text = "La licencia se administra en la caja principal.";
+            _selectLicense.Enabled = false;
+            return;
+        }
+
+        if (_licenseContent is not null)
+        {
+            _licenseStatus.Text = $"Licencia válida: {LicenseSetupStore.GetEdition(_licenseContent)}.";
+            _licenseStatus.ForeColor = Color.FromArgb(127, 224, 174);
+            _selectLicense.Enabled = true;
+            return;
+        }
+
+        if (_installedLicense.IsActive && _installedLicense.IncludesMobile)
+        {
+            _licenseStatus.Text = $"{_installedLicense.StoreName}: Desktop + Móvil ya está activo.";
+            _selectLicense.Enabled = false;
+        }
+        else if (_installedLicense.IsActive)
+        {
+            _licenseStatus.Text = $"{_installedLicense.StoreName}: Desktop activo. Puedes actualizar a Desktop + Móvil.";
+            _selectLicense.Enabled = true;
+        }
+        else
+        {
+            _licenseStatus.Text = _existingInstallation
+                ? "No se detectó una licencia activa. Puedes seleccionar el archivo .jv que recibiste."
+                : "Opcional: selecciona el archivo .jv para activar JetVenta al instalar.";
+            _selectLicense.Enabled = true;
+        }
+    }
+
+    private void OnSelectLicenseClick(object? sender, EventArgs e)
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Seleccionar licencia de JetVenta",
+            Filter = "Licencia JetVenta (*.jv)|*.jv|Todos los archivos (*.*)|*.*",
+            Multiselect = false
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+
+        try
+        {
+            var content = File.ReadAllText(dialog.FileName, Encoding.UTF8);
+            _licenseContent = LicenseSetupStore.Validate(content, requireMobile: _installedLicense.IsActive && !_installedLicense.IncludesMobile);
+            _licenseStatus.Text = $"Licencia válida: {LicenseSetupStore.GetEdition(_licenseContent)} ({Path.GetFileName(dialog.FileName)}).";
+            _licenseStatus.ForeColor = Color.FromArgb(127, 224, 174);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            _licenseContent = null;
+            _licenseStatus.ForeColor = Color.FromArgb(244, 142, 142);
+            _licenseStatus.Text = exception.Message;
+        }
     }
 
     private static Image? LoadBanner()
@@ -318,6 +394,19 @@ public sealed class InstallerForm : Form
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
             return;
+        }
+
+        if (!_uninstall && _licenseContent is not null)
+        {
+            try
+            {
+                _licenseContent = LicenseSetupStore.Validate(_licenseContent, requireMobile: _installedLicense.IsActive && !_installedLicense.IncludesMobile);
+            }
+            catch (InvalidOperationException exception)
+            {
+                MessageBox.Show(this, exception.Message, "Licencia no válida", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
         }
 
         if (!_uninstall && _installationMode == InstallationMode.AdditionalRegister && (!_existingInstallation || _installationProfile.PairedAtUtc is null))
@@ -393,8 +482,8 @@ public sealed class InstallerForm : Form
         _progress.SetBounds(30, 313, 960, 20);
         _details.SetBounds(30, 361, 960, 250);
         _details.Font = new Font("Consolas", 10f);
-        _cancel.SetBounds(698, 682, 96, 38);
-        _action.SetBounds(804, 682, 174, 38);
+        _cancel.SetBounds(698, 742, 96, 38);
+        _action.SetBounds(804, 742, 174, 38);
         _activityTitle.Visible = true;
         _activityDescription.Visible = true;
         _progressValue.Visible = true;
@@ -489,6 +578,12 @@ public sealed class InstallerForm : Form
         else
         {
             SetProgress(84, "Actualizando archivos de la caja adicional; se conserva su emparejamiento.");
+        }
+        if (_installationMode == InstallationMode.Server && _licenseContent is not null)
+        {
+            SetProgress(91, "Validando y activando la licencia seleccionada...");
+            LicenseSetupStore.Save(_licenseContent);
+            Log("La licencia seleccionada se validó y protegió para este equipo.");
         }
         await GrantClientSettingsAccessAsync();
         RegisterInstallation();

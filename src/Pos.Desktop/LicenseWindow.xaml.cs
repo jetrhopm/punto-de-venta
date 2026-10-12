@@ -103,6 +103,9 @@ public partial class LicenseWindow : Window
         StatusTitleText.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active && !trial ? "#17663A" : "#744F00"));
         StatusTitleText.Text = trial ? "Modo de prueba activo" : active ? "Licencia activa" : "Licencia pendiente";
         StatusMessageText.Text = status.Message;
+        EditionText.Text = !active ? string.Empty : trial
+            ? "Modalidad de prueba: todas las funciones, incluida JetVenta Móvil."
+            : status.IncludesMobile ? "Modalidad: JetVenta Desktop + Móvil." : "Modalidad: JetVenta Desktop.";
         UpdateCountdown();
         if (trial) _countdownTimer.Start(); else _countdownTimer.Stop();
     }
@@ -174,5 +177,5 @@ public partial class LicenseWindow : Window
         catch { return null; }
     }
 
-    private sealed record LicenseStatus(bool IsActive, string State, string Message, string MachineFingerprint, string RequestCode, string? LicenseId, DateTimeOffset? ExpiresAtUtc, string? StoreName);
+    private sealed record LicenseStatus(bool IsActive, string State, string Message, string MachineFingerprint, string RequestCode, string? LicenseId, DateTimeOffset? ExpiresAtUtc, string? StoreName, bool IncludesMobile);
 }

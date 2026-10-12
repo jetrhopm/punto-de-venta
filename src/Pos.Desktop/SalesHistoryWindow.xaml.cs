@@ -4,6 +4,7 @@ using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -159,7 +160,40 @@ public partial class SalesHistoryWindow : UserControl
         catch (Exception exception) { MessageBox.Show(exception.Message, "No se pudo imprimir", MessageBoxButton.OK, MessageBoxImage.Error); }
     }
 
-    private static async Task<string> ReadMessage(HttpResponseMessage response) => (await response.Content.ReadAsStringAsync()).Replace("{\"message\":\"", string.Empty).TrimEnd('}', '"');
+    private static async Task<string> ReadMessage(HttpResponseMessage response)
+    {
+        var content = await response.Content.ReadAsStringAsync();
+        try
+        {
+            using var document = JsonDocument.Parse(content);
+            var root = document.RootElement;
+            if (root.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var name in new[] { "message", "detail" })
+                {
+                    if (root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString()))
+                        return value.GetString()!;
+                }
+
+                if (root.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Object)
+                {
+                    var messages = errors.EnumerateObject()
+                        .SelectMany(item => item.Value.ValueKind == JsonValueKind.Array
+                            ? item.Value.EnumerateArray().Where(value => value.ValueKind == JsonValueKind.String).Select(value => value.GetString())
+                            : Enumerable.Empty<string?>())
+                        .Where(message => !string.IsNullOrWhiteSpace(message));
+                    var validationMessage = string.Join(Environment.NewLine, messages);
+                    if (!string.IsNullOrWhiteSpace(validationMessage)) return validationMessage;
+                }
+
+                if (root.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(title.GetString()))
+                    return title.GetString()!;
+            }
+        }
+        catch (JsonException) { }
+
+        return string.IsNullOrWhiteSpace(content) ? "No fue posible completar la operación." : content;
+    }
     private sealed record Cashier(Guid? Id, string DisplayName);
     private static string LocalizeSaleStatus(string status) => status switch
     {

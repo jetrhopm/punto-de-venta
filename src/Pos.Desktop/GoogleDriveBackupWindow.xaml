@@ -1,0 +1,81 @@
+<Window x:Class="Pos.Desktop.GoogleDriveBackupWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks" Title="Respaldos en Google Drive" Width="820" Height="700" MinWidth="700" MinHeight="600" WindowStartupLocation="CenterOwner" Closing="OnClosing">
+  <Grid Margin="24">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+
+    <StackPanel Orientation="Horizontal">
+      <Border Width="46" Height="46" Background="#E6EEF8" CornerRadius="5"><icons:PackIconMaterial Kind="GoogleDrive" Width="27" Height="27" Foreground="#376A9A" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+      <StackPanel Margin="12,1,0,0">
+        <TextBlock Text="Respaldos en Google Drive" FontSize="22" FontWeight="Bold"/>
+        <TextBlock Text="Cada vez que cierras JetVenta, el respaldo se guarda en tu propio Google Drive. Sólo tú tienes acceso." Foreground="{StaticResource TextMutedBrush}" Margin="0,3,0,0" TextWrapping="Wrap"/>
+      </StackPanel>
+    </StackPanel>
+
+    <!-- Cuenta -->
+    <Border Grid.Row="1" Background="{StaticResource SurfaceMutedBrush}" CornerRadius="6" Padding="16" Margin="0,18,0,12">
+      <Grid>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <StackPanel>
+          <TextBlock x:Name="AccountTitle" Text="Revisando..." FontSize="17" FontWeight="SemiBold"/>
+          <TextBlock x:Name="AccountDetail" Foreground="{StaticResource TextMutedBrush}" Margin="0,5,12,0" TextWrapping="Wrap"/>
+        </StackPanel>
+        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+          <Button x:Name="ConnectButton" Content="Conectar Google Drive" Style="{StaticResource PrimaryButtonStyle}" Padding="18,9" Click="OnConnectClick"/>
+          <Button x:Name="DisconnectButton" Content="Desconectar" Background="Transparent" BorderThickness="0" Foreground="#B42318" Cursor="Hand" HorizontalAlignment="Right" Margin="0,4,0,0" Visibility="Collapsed" Click="OnDisconnectClick"/>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- Respaldo y contraseña -->
+    <Border x:Name="BackupPanel" Grid.Row="2" BorderBrush="#D5E2EA" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,0,0,12" Visibility="Collapsed">
+      <StackPanel>
+        <DockPanel>
+          <Button x:Name="UploadNowButton" Content="Subir respaldo ahora" DockPanel.Dock="Right" Padding="14,7" Click="OnUploadNowClick"/>
+          <StackPanel>
+            <TextBlock x:Name="LastUploadText" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            <TextBlock x:Name="PendingText" Foreground="{StaticResource TextMutedBrush}" Margin="0,3,0,0" TextWrapping="Wrap"/>
+          </StackPanel>
+        </DockPanel>
+        <CheckBox x:Name="PasswordCheck" Content="Proteger mis respaldos con contraseña" Margin="0,14,0,0" Click="OnPasswordCheckClick"/>
+        <StackPanel x:Name="PasswordPanel" Margin="24,8,0,0" Visibility="Collapsed">
+          <TextBlock Text="Si pierdes esta contraseña no podrás abrir tus respaldos. Nadie, ni JetVenta, puede recuperarla." Foreground="#B42318" FontWeight="SemiBold" TextWrapping="Wrap"/>
+          <WrapPanel Margin="0,8,0,0">
+            <StackPanel Margin="0,0,10,0"><TextBlock Text="Contraseña (mínimo 8)" FontSize="12"/><PasswordBox x:Name="PasswordBox" Width="200" Height="30"/></StackPanel>
+            <StackPanel Margin="0,0,10,0"><TextBlock Text="Repetir contraseña" FontSize="12"/><PasswordBox x:Name="PasswordRepeatBox" Width="200" Height="30"/></StackPanel>
+            <Button Content="Guardar contraseña" VerticalAlignment="Bottom" Padding="12,6" Click="OnSavePasswordClick"/>
+          </WrapPanel>
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <!-- Restaurar -->
+    <Border x:Name="RestorePanel" Grid.Row="3" BorderBrush="#D5E2EA" BorderThickness="1" CornerRadius="6" Padding="16" Visibility="Collapsed">
+      <Grid>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <DockPanel>
+          <Button Content="Actualizar lista" DockPanel.Dock="Right" Padding="12,6" Click="OnRefreshFilesClick"/>
+          <StackPanel>
+            <TextBlock Text="Restaurar desde Google Drive" FontSize="16" FontWeight="SemiBold"/>
+            <TextBlock Text="Descarga un respaldo a esta computadora. Después lo eliges en la lista de Respaldos y pulsas Cargar respaldo." Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,3,10,0"/>
+          </StackPanel>
+        </DockPanel>
+        <DataGrid x:Name="FilesGrid" Grid.Row="1" IsReadOnly="True" AutoGenerateColumns="False" Margin="0,12,0,10" SelectionMode="Single">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="Fecha" Binding="{Binding DateDisplay}" Width="*"/>
+            <DataGridTextColumn Header="Archivo" Binding="{Binding Name}" Width="2*"/>
+            <DataGridTextColumn Header="Tamaño" Binding="{Binding SizeDisplay}" Width="*"/>
+            <DataGridTextColumn Header="Con contraseña" Binding="{Binding ProtectedDisplay}" Width="*"/>
+          </DataGrid.Columns>
+        </DataGrid>
+        <WrapPanel Grid.Row="2">
+          <StackPanel Margin="0,0,10,0"><TextBlock Text="Contraseña (sólo si el respaldo la tiene)" FontSize="12"/><PasswordBox x:Name="RestorePasswordBox" Width="240" Height="30"/></StackPanel>
+          <Button x:Name="DownloadButton" Content="Descargar para restaurar" Style="{StaticResource PrimaryButtonStyle}" VerticalAlignment="Bottom" Padding="14,7" Click="OnDownloadClick"/>
+        </WrapPanel>
+      </Grid>
+    </Border>
+
+    <DockPanel Grid.Row="4" Margin="0,14,0,0">
+      <Button Content="Cerrar" DockPanel.Dock="Right" Padding="18,8" Click="OnCloseClick"/>
+      <TextBlock x:Name="StatusText" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
+    </DockPanel>
+  </Grid>
+</Window>

@@ -41,6 +41,11 @@ public partial class MainWindow : Window
             IssueStatusText.Text = "Selecciona la fecha de vencimiento o desmarca esa opción.";
             return;
         }
+        if (EditionComboBox.SelectedItem is not System.Windows.Controls.ComboBoxItem { Tag: string edition } || (edition != "Desktop" && edition != "Mobile"))
+        {
+            IssueStatusText.Text = "Selecciona la modalidad de la licencia.";
+            return;
+        }
 
         try
         {
@@ -48,12 +53,13 @@ public partial class MainWindow : Window
             DateTimeOffset? expiration = ExpirationCheckBox.IsChecked == true
                 ? new DateTimeOffset(ExpirationPicker.SelectedDate!.Value.Date.AddDays(1).AddTicks(-1), TimeZoneInfo.Local.GetUtcOffset(ExpirationPicker.SelectedDate!.Value.Date))
                 : null;
-            var claims = new JetVentaLicenseClaims(JetVentaLicensing.ProtocolVersion, JetVentaLicensing.Product, Guid.NewGuid().ToString(), request!.MachineFingerprint, DateTimeOffset.UtcNow, expiration, StoreNameTextBox.Text.Trim());
+            var includesMobile = edition == "Mobile";
+            var claims = new JetVentaLicenseClaims(JetVentaLicensing.ProtocolVersion, JetVentaLicensing.Product, Guid.NewGuid().ToString(), request!.MachineFingerprint, DateTimeOffset.UtcNow, expiration, StoreNameTextBox.Text.Trim(), includesMobile);
             var document = new JetVentaSignedLicense(claims, JetVentaLicensing.Sign(claims, privateKey));
             var dialog = new SaveFileDialog { Title = "Guardar licencia de JetVenta", Filter = "Licencia JetVenta (*.jv)|*.jv", FileName = "licencia.jv", AddExtension = true, DefaultExt = ".jv" };
             if (dialog.ShowDialog(this) != true) return;
             File.WriteAllText(dialog.FileName, JetVentaLicensing.Serialize(document), new UTF8Encoding(false));
-            IssueStatusText.Text = $"Licencia creada: {dialog.FileName}";
+            IssueStatusText.Text = $"Licencia {EditionComboBox.Text} creada: {dialog.FileName}";
         }
         catch (Exception exception) when (exception is CryptographicException or IOException or InvalidOperationException)
         {

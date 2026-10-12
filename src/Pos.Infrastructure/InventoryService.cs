@@ -13,7 +13,7 @@ public sealed record InventoryDepartmentChangeCommand(Guid OperationId, Guid Pro
 public sealed record InventoryLimitChangeResult(Guid ProductId, decimal PreviousMinimumStock, decimal PreviousMaximumStock, decimal MinimumStock, decimal MaximumStock);
 public sealed record InventoryCatalogRow(Guid ProductId, string Code, string Description, string Department, Guid? DepartmentId, string UnitOfMeasure, decimal Cost, decimal Price, decimal Stock, decimal MinimumStock, decimal MaximumStock, decimal CostValue, decimal SaleValue, decimal PotentialProfit, string Status);
 public sealed record InventoryCatalogPageResult(IReadOnlyList<InventoryCatalogRow> Items, int Page, int PageSize, int TotalCount, int TotalPages, decimal TotalUnits, decimal TotalCostValue, decimal TotalSaleValue, decimal TotalPotentialProfit, int LowStockCount, int OutOfStockCount);
-public sealed record InventoryMovementRow(Guid Id, string Code, string Description, decimal Quantity, decimal StockBefore, decimal StockAfter, string Reason, string UserName, DateTimeOffset CreatedAtUtc);
+public sealed record InventoryMovementRow(Guid Id, string Code, string Description, decimal Quantity, decimal StockBefore, decimal StockAfter, string MovementType, string Reason, string UserName, DateTimeOffset CreatedAtUtc);
 public sealed record InventoryMovementPageResult(IReadOnlyList<InventoryMovementRow> Items, int Page, int PageSize, int TotalCount, int TotalPages);
 
 public sealed class InventoryService(PosDbContext database)
@@ -79,7 +79,7 @@ public sealed class InventoryService(PosDbContext database)
         return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(builder.ToString())).ToArray();
     }
 
-    public async Task<InventoryMovementPageResult?> MovementsAsync(string token, string? query, int page, CancellationToken cancellationToken)
+    public async Task<InventoryMovementPageResult?> MovementsAsync(string token, string? query, string? type, DateTimeOffset? from, DateTimeOffset? to, int page, CancellationToken cancellationToken)
     {
         if (await GetAuthorizedUserAsync(token, "ViewInventory", cancellationToken) is null) return null;
         page = Math.Max(1, page);
@@ -90,9 +90,16 @@ public sealed class InventoryService(PosDbContext database)
                         select new { movement, product, user };
         var text = query?.Trim().ToUpperInvariant();
         if (!string.IsNullOrWhiteSpace(text)) movements = movements.Where(item => item.product.NormalizedCode.Contains(text) || item.product.Description.ToUpper().Contains(text) || item.movement.Reason.ToUpper().Contains(text));
+        if (from is not null) movements = movements.Where(item => item.movement.CreatedAtUtc >= from.Value);
+        if (to is not null) movements = movements.Where(item => item.movement.CreatedAtUtc < to.Value);
+        var movementType = type?.Trim().ToLowerInvariant();
+        if (movementType is "compra") movements = movements.Where(item => item.movement.Reason == "Purchase");
+        else if (movementType is "venta") movements = movements.Where(item => item.movement.Reason == "Sale" || item.movement.Reason == "KitSale");
+        else if (movementType is "devolucion") movements = movements.Where(item => item.movement.Reason == "SaleReturn" || item.movement.Reason == "KitReturn");
+        else if (movementType is "cancelacion") movements = movements.Where(item => item.movement.Reason == "SaleCancellation" || item.movement.Reason == "KitCancellation");
+        else if (movementType is "ajuste") movements = movements.Where(item => item.movement.Reason != "Purchase" && item.movement.Reason != "Sale" && item.movement.Reason != "KitSale" && item.movement.Reason != "SaleReturn" && item.movement.Reason != "KitReturn" && item.movement.Reason != "SaleCancellation" && item.movement.Reason != "KitCancellation");
         var total = await movements.CountAsync(cancellationToken);
-        var rows = await movements.OrderByDescending(item => item.movement.CreatedAtUtc).Skip((page - 1) * pageSize).Take(pageSize).Select(item => new InventoryMovementRow(item.movement.Id, item.product.Code, item.product.Description, item.movement.Quantity, item.movement.StockBefore, item.movement.StockAfter, item.movement.Reason, item.user.DisplayName, item.movement.CreatedAtUtc)).ToListAsync(cancellationToken);
-        rows = rows.Select(item => item with { Reason = LocalizeMovementReason(item.Reason) }).ToList();
+        var rows = await movements.OrderByDescending(item => item.movement.CreatedAtUtc).Skip((page - 1) * pageSize).Take(pageSize).Select(item => new InventoryMovementRow(item.movement.Id, item.product.Code, item.product.Description, item.movement.Quantity, item.movement.StockBefore, item.movement.StockAfter, MovementType(item.movement.Reason), LocalizeMovementReason(item.movement.Reason), item.user.DisplayName, item.movement.CreatedAtUtc)).ToListAsync(cancellationToken);
         return new InventoryMovementPageResult(rows, page, pageSize, total, Math.Max(1, (int)Math.Ceiling(total / (double)pageSize)));
     }
 
@@ -171,12 +178,25 @@ public sealed class InventoryService(PosDbContext database)
 
     private static string LocalizeMovementReason(string reason) => reason switch
     {
+        "Purchase" => "Compra a proveedor",
+        "InitialStock" => "Inventario inicial",
+        "Conteo móvil" => "Conteo de inventario móvil",
         "Sale" => "Venta",
         "KitSale" => "Venta de kit",
         "SaleCancellation" => "Cancelación de venta",
         "KitCancellation" => "Cancelación de kit",
         "SaleReturn" => "Devolución de venta",
         "KitReturn" => "Devolución de kit",
+        "Importacion de inventario" => "Importación de inventario",
         _ => reason
+    };
+
+    private static string MovementType(string reason) => reason switch
+    {
+        "Purchase" => "Compra",
+        "Sale" or "KitSale" => "Venta",
+        "SaleReturn" or "KitReturn" => "Devolución",
+        "SaleCancellation" or "KitCancellation" => "Cancelación",
+        _ => "Ajuste"
     };
 }

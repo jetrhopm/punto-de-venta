@@ -233,7 +233,7 @@ public partial class StartupWindow : Window
             _fallbackApiProcess = Process.Start(new ProcessStartInfo
             {
                 FileName = apiPath,
-                Arguments = $"--Pos:ConnectionFile=\"{connectionFile}\" --Pos:Urls=http://127.0.0.1:5000",
+                Arguments = $"--Pos:ConnectionFile=\"{connectionFile}\" --Pos:Urls=http://0.0.0.0:5000",
                 WorkingDirectory = Path.GetDirectoryName(apiPath)!,
                 UseShellExecute = false,
                 CreateNoWindow = true
@@ -355,7 +355,7 @@ public partial class StartupWindow : Window
 
             startInfo.Environment.Remove("POS_CONNECTION_FILE");
             startInfo.Environment.Remove("POS_CONNECTION_STRING");
-            startInfo.Environment["POS_API_URLS"] = "http://127.0.0.1:5000";
+            startInfo.Environment["POS_API_URLS"] = "http://0.0.0.0:5000";
             startInfo.Environment["POS_LICENSE_BYPASS"] = "true";
             _fallbackApiProcess = Process.Start(startInfo);
             Log($"API de desarrollo iniciada desde: {startInfo.FileName}");

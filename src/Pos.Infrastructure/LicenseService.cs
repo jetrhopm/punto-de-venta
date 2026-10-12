@@ -19,7 +19,8 @@ public sealed record LicenseStatusResult(
     string RequestCode,
     string? LicenseId,
     DateTimeOffset? ExpiresAtUtc,
-    string? StoreName);
+    string? StoreName,
+    bool IncludesMobile = false);
 
 public sealed record LicenseStartupStatusResult(
     bool IsActive,
@@ -101,7 +102,7 @@ public sealed class LicenseService(PosDbContext database, PasswordHasher<UserRec
 #if DEBUG
         if (string.Equals(Environment.GetEnvironmentVariable("POS_LICENSE_BYPASS"), "true", StringComparison.OrdinalIgnoreCase))
         {
-            return new(true, "development", "Modo de desarrollo: validación de licencia omitida.", fingerprint, request, null, null, null);
+            return new(true, "development", "Modo de desarrollo: validación de licencia omitida.", fingerprint, request, null, null, null, true);
         }
 #endif
 
@@ -140,7 +141,7 @@ public sealed class LicenseService(PosDbContext database, PasswordHasher<UserRec
             }
         }
 
-        return new(true, "active", "Licencia válida para este equipo.", fingerprint, request, claims.LicenseId, claims.ExpiresAtUtc, claims.StoreName);
+        return new(true, "active", "Licencia válida para este equipo.", fingerprint, request, claims.LicenseId, claims.ExpiresAtUtc, claims.StoreName, claims.HasMobileEntitlement);
     }
 
     private static LicenseStatusResult GetTrialStatus(string fingerprint, string request)
@@ -190,7 +191,7 @@ public sealed class LicenseService(PosDbContext database, PasswordHasher<UserRec
             return new(false, "trial_expired", "El periodo de prueba terminó. Carga una licencia válida para continuar usando JetVenta.", fingerprint, request, null, clock.ExpiresAtUtc, null);
         }
 
-        return new(true, "trial", $"No hay una licencia activada. Modo de prueba activo; te quedan {FormatTrialRemaining(clock.ExpiresAtUtc - now)}. Activa una licencia antes de que termine.", fingerprint, request, null, clock.ExpiresAtUtc, null);
+        return new(true, "trial", $"No hay una licencia activada. Modo de prueba activo; te quedan {FormatTrialRemaining(clock.ExpiresAtUtc - now)}. Activa una licencia antes de que termine.", fingerprint, request, null, clock.ExpiresAtUtc, null, true);
     }
 
     private static string FormatTrialRemaining(TimeSpan remaining)

@@ -11,6 +11,7 @@
     <Project Path="src/Pos.Integrations.LaRedMas/Pos.Integrations.LaRedMas.csproj" />
     <Project Path="src/Pos.Printing/Pos.Printing.csproj" />
     <Project Path="src/Pos.Worker/Pos.Worker.csproj" />
+    <Project Path="src/JetVenta.Mobile/JetVenta.Mobile.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Pos.DesktopTests/Pos.DesktopTests.csproj" />
